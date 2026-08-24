@@ -1,0 +1,439 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard — GBE Fleet Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --surface-2: #ffffff;
+    --plane:     #f9f9f7;
+    --ink:       #0b0b0b;
+    --ink-2:     #52514e;
+    --ink-muted: #898781;
+    --grid:      #e1e0d9;
+    --border:    rgba(11,11,11,0.12);
+    --blue:      #2a78d6;
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --surface-2: #202020; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+      --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --surface-2: #202020; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6;
+  }
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 1.5rem 1rem 4rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
+  .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
+
+  /* ---- login ---- */
+  #login-screen { max-width: 380px; margin: 4rem auto 0; }
+  #login-screen .field { margin-bottom: 1rem; }
+  #login-screen label { display: block; font-size: 0.85rem; color: var(--ink-2); margin-bottom: 0.35rem; }
+  #login-screen input {
+    width: 100%; padding: 0.7rem 0.8rem; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--ink); font-size: 0.95rem;
+  }
+  #login-error { color: var(--critical); font-size: 0.85rem; margin-top: 0.7rem; display: none; }
+
+  button { font-family: inherit; cursor: pointer; }
+  .btn {
+    padding: 0.7rem 1rem; border-radius: 9px; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink); font-size: 0.9rem; font-weight: 600;
+  }
+  .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; width: 100%; padding: 0.85rem; }
+  .btn-danger { color: var(--critical); border-color: var(--critical); }
+  .btn:disabled { opacity: 0.55; cursor: default; }
+
+  /* ---- top bar ---- */
+  #top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+
+  /* ---- stats ---- */
+  #stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 0.8rem; margin-bottom: 1.5rem; }
+  .stat-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; }
+  .stat-card .num { font-size: 1.6rem; font-weight: 700; }
+  .stat-card .label { font-size: 0.78rem; color: var(--ink-muted); margin-top: 0.2rem; }
+
+  /* ---- filters ---- */
+  #filters { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.2rem; align-items: end; }
+  #filters .field { display: flex; flex-direction: column; gap: 0.3rem; }
+  #filters label { font-size: 0.75rem; color: var(--ink-muted); }
+  #filters input, #filters select {
+    padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--ink); font-size: 0.85rem;
+  }
+
+  /* ---- table ---- */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-1); }
+  table { width: 100%; border-collapse: collapse; font-size: 0.83rem; white-space: nowrap; }
+  th, td { padding: 0.6rem 0.75rem; text-align: right; border-bottom: 1px solid var(--grid); }
+  th { color: var(--ink-muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
+  tr:last-child td { border-bottom: none; }
+  .badge { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+  .badge.start { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+  .badge.end { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); }
+  .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
+  .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
+
+  /* ---- modal ---- */
+  #edit-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
+  }
+  #edit-modal { background: var(--surface-2); border-radius: 14px; padding: 1.3rem; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
+  #edit-modal h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+  #edit-modal .field { margin-bottom: 0.8rem; }
+  #edit-modal label { display: block; font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; }
+  #edit-modal input, #edit-modal select {
+    width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--ink); font-size: 0.9rem;
+  }
+  #edit-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+  #edit-actions button { flex: 1; }
+
+  #status-msg { margin-bottom: 1rem; padding: 0.7rem 1rem; border-radius: 9px; font-size: 0.85rem; display: none; }
+  #status-msg.ok { display: block; background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+  #status-msg.err { display: block; background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+
+  a.media-link { color: var(--blue); text-decoration: none; }
+</style>
+</head>
+<body>
+
+<div id="login-screen" class="wrap">
+  <h1>تسجيل الدخول</h1>
+  <p class="sub">GBE Fleet Tracker — Dashboard</p>
+  <div class="field">
+    <label>البريد الإلكتروني</label>
+    <input type="email" id="login-email" autocomplete="username">
+  </div>
+  <div class="field">
+    <label>كلمة المرور</label>
+    <input type="password" id="login-password" autocomplete="current-password">
+  </div>
+  <button class="btn btn-primary" id="login-btn">دخول</button>
+  <div id="login-error"></div>
+</div>
+
+<div id="dashboard" class="wrap" style="display:none">
+  <div id="top-bar">
+    <div>
+      <h1>لوحة تحكم الدوام</h1>
+      <p class="sub">GBE Fleet Tracker</p>
+    </div>
+    <div>
+      <button class="btn" id="export-btn">تصدير CSV</button>
+      <button class="btn" id="logout-btn">تسجيل خروج</button>
+    </div>
+  </div>
+
+  <div id="status-msg"></div>
+
+  <div id="stats"></div>
+
+  <div id="filters">
+    <div class="field">
+      <label>بحث (اسم / هوية / لوحة)</label>
+      <input type="text" id="f-search" placeholder="اكتبي هنا...">
+    </div>
+    <div class="field">
+      <label>نوع الدوام</label>
+      <select id="f-type">
+        <option value="">الكل</option>
+        <option value="start">بداية</option>
+        <option value="end">نهاية</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>من تاريخ</label>
+      <input type="date" id="f-from">
+    </div>
+    <div class="field">
+      <label>إلى تاريخ</label>
+      <input type="date" id="f-to">
+    </div>
+    <div class="field">
+      <button class="btn" id="filter-btn">تطبيق</button>
+    </div>
+    <div class="field">
+      <button class="btn" id="reset-btn">مسح الفلاتر</button>
+    </div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>التاريخ</th>
+          <th>النوع</th>
+          <th>السائق</th>
+          <th>رقم الهوية</th>
+          <th>اللوحة</th>
+          <th>المحطة</th>
+          <th>العداد</th>
+          <th>الصور</th>
+          <th>المنطقة</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="table-body">
+        <tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="edit-backdrop">
+  <div id="edit-modal">
+    <h2>تعديل السجل</h2>
+    <div class="field"><label>اسم السائق</label><input id="e-full_name"></div>
+    <div class="field"><label>رقم الهوية</label><input id="e-identity_number"></div>
+    <div class="field"><label>لوحة المركبة</label><input id="e-vehicle_plate"></div>
+    <div class="field"><label>المحطة</label><input id="e-station_name"></div>
+    <div class="field">
+      <label>نوع الدوام</label>
+      <select id="e-shift_type"><option value="start">بداية</option><option value="end">نهاية</option></select>
+    </div>
+    <div class="field"><label>قراءة العداد</label><input type="number" id="e-odo_reading"></div>
+    <div class="field"><label>OFD</label><input type="number" id="e-ofd_count"></div>
+    <div class="field"><label>COD</label><input type="number" id="e-cod_delivered"></div>
+    <div class="field"><label>PPD</label><input type="number" id="e-ppd_delivered"></div>
+    <div class="field"><label>Picked Up</label><input type="number" id="e-picked_up"></div>
+    <div class="field"><label>الإيميل</label><input type="email" id="e-email_address"></div>
+    <div class="field"><label>المنطقة</label><input id="e-area"></div>
+    <div id="edit-actions">
+      <button class="btn" id="edit-cancel">إلغاء</button>
+      <button class="btn btn-primary" id="edit-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://icgzjqzjmzvhnezpignp.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZ3pqcXpqbXp2aG5lenBpZ25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NjMzNjMsImV4cCI6MjEwMzEzOTM2M30.S2A-lXgBKTJog2xobvUxJYz1gAjCnGkuz7aqsOfkpks";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+let allRows = [];
+let editingId = null;
+
+function setStatus(kind, text) {
+  const el = document.getElementById("status-msg");
+  el.className = kind;
+  el.textContent = text;
+  if (text) setTimeout(() => { el.className = ""; el.textContent = ""; }, 4000);
+}
+
+function showDashboard() {
+  document.getElementById("login-screen").style.display = "none";
+  document.getElementById("dashboard").style.display = "block";
+  loadData();
+}
+
+function showLogin() {
+  document.getElementById("dashboard").style.display = "none";
+  document.getElementById("login-screen").style.display = "block";
+}
+
+document.getElementById("login-btn").addEventListener("click", async () => {
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  const errEl = document.getElementById("login-error");
+  errEl.style.display = "none";
+  const { error } = await sb.auth.signInWithPassword({ email, password });
+  if (error) {
+    errEl.textContent = "فشل الدخول: " + error.message;
+    errEl.style.display = "block";
+    return;
+  }
+  showDashboard();
+});
+
+document.getElementById("logout-btn").addEventListener("click", async () => {
+  await sb.auth.signOut();
+  showLogin();
+});
+
+async function loadData() {
+  document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>';
+  let query = sb.from("shift_entries").select("*").order("created_at", { ascending: false }).limit(1000);
+
+  const type = document.getElementById("f-type").value;
+  const from = document.getElementById("f-from").value;
+  const to = document.getElementById("f-to").value;
+  const search = document.getElementById("f-search").value.trim();
+
+  if (type) query = query.eq("shift_type", type);
+  if (from) query = query.gte("created_at", `${from}T00:00:00`);
+  if (to) query = query.lte("created_at", `${to}T23:59:59`);
+  if (search) query = query.or(`full_name.ilike.%${search}%,identity_number.ilike.%${search}%,vehicle_plate.ilike.%${search}%`);
+
+  const { data, error } = await query;
+  if (error) {
+    setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
+    document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">تعذر التحميل</td></tr>';
+    return;
+  }
+  allRows = data || [];
+  renderStats(allRows);
+  renderTable(allRows);
+}
+
+function renderStats(rows) {
+  const today = new Date().toISOString().slice(0, 10);
+  const todayCount = rows.filter(r => (r.created_at || "").slice(0, 10) === today).length;
+  const startCount = rows.filter(r => r.shift_type === "start").length;
+  const endCount = rows.filter(r => r.shift_type === "end").length;
+  const drivers = new Set(rows.map(r => r.identity_number)).size;
+
+  const stats = [
+    { label: "إجمالي السجلات", num: rows.length },
+    { label: "سجلات اليوم", num: todayCount },
+    { label: "بداية دوام", num: startCount },
+    { label: "نهاية دوام", num: endCount },
+    { label: "عدد السائقين", num: drivers },
+  ];
+  document.getElementById("stats").innerHTML = stats.map(s =>
+    `<div class="stat-card"><div class="num">${s.num}</div><div class="label">${s.label}</div></div>`
+  ).join("");
+}
+
+function escapeHtml(v) {
+  if (v === null || v === undefined) return "";
+  return String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+}
+
+function renderTable(rows) {
+  const body = document.getElementById("table-body");
+  if (!rows.length) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="10">لا توجد سجلات مطابقة</td></tr>';
+    return;
+  }
+  body.innerHTML = rows.map(r => {
+    const media = [];
+    if (r.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(r.odo_photo_url)}" target="_blank">عداد</a>`);
+    if (r.condition_video_url) media.push(`<a class="media-link" href="${escapeHtml(r.condition_video_url)}" target="_blank">فيديو</a>`);
+    if (r.client_screenshot_url) media.push(`<a class="media-link" href="${escapeHtml(r.client_screenshot_url)}" target="_blank">سكرين</a>`);
+    return `<tr>
+      <td>${escapeHtml((r.created_at || "").replace("T", " ").slice(0, 16))}</td>
+      <td><span class="badge ${r.shift_type}">${r.shift_type === "start" ? "بداية" : "نهاية"}</span></td>
+      <td>${escapeHtml(r.full_name)}</td>
+      <td>${escapeHtml(r.identity_number)}</td>
+      <td>${escapeHtml(r.vehicle_plate)}</td>
+      <td>${escapeHtml(r.station_name)}</td>
+      <td>${escapeHtml(r.odo_reading)}</td>
+      <td>${media.join(" · ") || "—"}</td>
+      <td>${escapeHtml(r.area)}</td>
+      <td class="row-actions">
+        <button class="btn" data-edit="${r.id}">تعديل</button>
+        <button class="btn btn-danger" data-del="${r.id}">حذف</button>
+      </td>
+    </tr>`;
+  }).join("");
+
+  body.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => openEdit(btn.dataset.edit)));
+  body.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => deleteRow(btn.dataset.del)));
+}
+
+function openEdit(id) {
+  const row = allRows.find(r => String(r.id) === String(id));
+  if (!row) return;
+  editingId = id;
+  document.getElementById("e-full_name").value = row.full_name || "";
+  document.getElementById("e-identity_number").value = row.identity_number || "";
+  document.getElementById("e-vehicle_plate").value = row.vehicle_plate || "";
+  document.getElementById("e-station_name").value = row.station_name || "";
+  document.getElementById("e-shift_type").value = row.shift_type || "start";
+  document.getElementById("e-odo_reading").value = row.odo_reading ?? "";
+  document.getElementById("e-ofd_count").value = row.ofd_count ?? "";
+  document.getElementById("e-cod_delivered").value = row.cod_delivered ?? "";
+  document.getElementById("e-ppd_delivered").value = row.ppd_delivered ?? "";
+  document.getElementById("e-picked_up").value = row.picked_up ?? "";
+  document.getElementById("e-email_address").value = row.email_address || "";
+  document.getElementById("e-area").value = row.area || "";
+  document.getElementById("edit-backdrop").style.display = "flex";
+}
+
+document.getElementById("edit-cancel").addEventListener("click", () => {
+  document.getElementById("edit-backdrop").style.display = "none";
+  editingId = null;
+});
+
+document.getElementById("edit-save").addEventListener("click", async () => {
+  if (!editingId) return;
+  const num = v => (v === "" ? null : Number(v));
+  const payload = {
+    full_name: document.getElementById("e-full_name").value.trim(),
+    identity_number: document.getElementById("e-identity_number").value.trim(),
+    vehicle_plate: document.getElementById("e-vehicle_plate").value.trim(),
+    station_name: document.getElementById("e-station_name").value.trim() || null,
+    shift_type: document.getElementById("e-shift_type").value,
+    odo_reading: num(document.getElementById("e-odo_reading").value),
+    ofd_count: num(document.getElementById("e-ofd_count").value),
+    cod_delivered: num(document.getElementById("e-cod_delivered").value),
+    ppd_delivered: num(document.getElementById("e-ppd_delivered").value),
+    picked_up: num(document.getElementById("e-picked_up").value),
+    email_address: document.getElementById("e-email_address").value.trim() || null,
+    area: document.getElementById("e-area").value.trim() || null,
+  };
+  const { error } = await sb.from("shift_entries").update(payload).eq("id", editingId);
+  document.getElementById("edit-backdrop").style.display = "none";
+  if (error) { setStatus("err", "فشل الحفظ: " + error.message); return; }
+  setStatus("ok", "تم الحفظ بنجاح");
+  editingId = null;
+  loadData();
+});
+
+async function deleteRow(id) {
+  if (!confirm("متأكدة إنك عايزة تمسحي السجل ده؟ الإجراء ده مش قابل للتراجع.")) return;
+  const { error } = await sb.from("shift_entries").delete().eq("id", id);
+  if (error) { setStatus("err", "فشل الحذف: " + error.message); return; }
+  setStatus("ok", "تم الحذف");
+  loadData();
+}
+
+document.getElementById("filter-btn").addEventListener("click", loadData);
+document.getElementById("reset-btn").addEventListener("click", () => {
+  document.getElementById("f-search").value = "";
+  document.getElementById("f-type").value = "";
+  document.getElementById("f-from").value = "";
+  document.getElementById("f-to").value = "";
+  loadData();
+});
+
+document.getElementById("export-btn").addEventListener("click", () => {
+  if (!allRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+  const cols = ["created_at","shift_type","full_name","identity_number","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
+  const csvRows = [cols.join(",")];
+  for (const r of allRows) {
+    csvRows.push(cols.map(c => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","));
+  }
+  const blob = new Blob(["﻿" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `shift_entries_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+(async function init() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (session) showDashboard(); else showLogin();
+})();
+</script>
+</body>
+</html>
