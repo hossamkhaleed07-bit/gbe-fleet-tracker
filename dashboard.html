@@ -86,8 +86,20 @@
   .badge { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
   .badge.start { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
   .badge.end { background: color-mix(in srgb, var(--blue) 15%, transparent); color: var(--blue); }
+  .badge.complete { background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+  .badge.partial { background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
+
+  /* ---- tabs ---- */
+  .tabs { display: flex; gap: 0.4rem; margin-bottom: 1.2rem; border-bottom: 1px solid var(--border); }
+  .tab-btn {
+    padding: 0.6rem 1rem; border: none; background: none; color: var(--ink-muted); font-size: 0.9rem;
+    font-weight: 600; border-bottom: 2px solid transparent; margin-bottom: -1px;
+  }
+  .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; }
 
   /* ---- modal ---- */
   #edit-backdrop {
@@ -173,26 +185,85 @@
     </div>
   </div>
 
-  <div class="table-wrap">
-    <table>
-      <thead>
-        <tr>
-          <th>التاريخ</th>
-          <th>النوع</th>
-          <th>السائق</th>
-          <th>رقم الهوية</th>
-          <th>اللوحة</th>
-          <th>المحطة</th>
-          <th>العداد</th>
-          <th>الصور</th>
-          <th>المنطقة</th>
-          <th></th>
-        </tr>
-      </thead>
-      <tbody id="table-body">
-        <tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>
-      </tbody>
-    </table>
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="records">السجلات</button>
+    <button class="tab-btn" data-tab="compare">مقارنة السائقين</button>
+    <button class="tab-btn" data-tab="stations">تقرير المحطات</button>
+  </div>
+
+  <div id="tab-records" class="tab-panel active">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>النوع</th>
+            <th>السائق</th>
+            <th>رقم الهوية</th>
+            <th>اللوحة</th>
+            <th>المحطة</th>
+            <th>العداد</th>
+            <th>الصور</th>
+            <th>المنطقة</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="table-body">
+          <tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-compare" class="tab-panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>التاريخ</th>
+            <th>السائق</th>
+            <th>رقم الهوية</th>
+            <th>اللوحة</th>
+            <th>عداد البداية</th>
+            <th>عداد النهاية</th>
+            <th>المسافة المقطوعة</th>
+            <th>وقت البداية</th>
+            <th>وقت النهاية</th>
+            <th>OFD</th>
+            <th>COD</th>
+            <th>PPD</th>
+            <th>Picked Up</th>
+            <th>الحالة</th>
+          </tr>
+        </thead>
+        <tbody id="compare-body">
+          <tr class="empty-row"><td colspan="14">جارِ التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <div id="tab-stations" class="tab-panel">
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>المحطة</th>
+            <th>عدد السجلات</th>
+            <th>عدد السائقين</th>
+            <th>سجلات بداية</th>
+            <th>سجلات نهاية</th>
+            <th>إجمالي OFD</th>
+            <th>إجمالي COD</th>
+            <th>إجمالي PPD</th>
+            <th>إجمالي Picked Up</th>
+          </tr>
+        </thead>
+        <tbody id="stations-body">
+          <tr class="empty-row"><td colspan="9">جارِ التحميل...</td></tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 </div>
 
@@ -228,6 +299,10 @@ const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 let allRows = [];
+let currentRecordsRows = [];
+let currentCompareRows = [];
+let currentStationRows = [];
+let currentTab = "records";
 let editingId = null;
 
 function setStatus(kind, text) {
@@ -269,17 +344,15 @@ document.getElementById("logout-btn").addEventListener("click", async () => {
 
 async function loadData() {
   document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>';
-  let query = sb.from("shift_entries").select("*").order("created_at", { ascending: false }).limit(1000);
+  // بنجيب البيانات بفلتر التاريخ بس من السيرفر، وفلتر النوع/البحث بيتطبقوا محليًا
+  // عشان تقرير المقارنة وتقرير المحطات يشوفوا كل السجلات (بداية ونهاية) في نفس المدى الزمني
+  let query = sb.from("shift_entries").select("*").order("created_at", { ascending: true }).limit(2000);
 
-  const type = document.getElementById("f-type").value;
   const from = document.getElementById("f-from").value;
   const to = document.getElementById("f-to").value;
-  const search = document.getElementById("f-search").value.trim();
 
-  if (type) query = query.eq("shift_type", type);
   if (from) query = query.gte("created_at", `${from}T00:00:00`);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
-  if (search) query = query.or(`full_name.ilike.%${search}%,identity_number.ilike.%${search}%,vehicle_plate.ilike.%${search}%`);
 
   const { data, error } = await query;
   if (error) {
@@ -288,16 +361,73 @@ async function loadData() {
     return;
   }
   allRows = data || [];
-  renderStats(allRows);
-  renderTable(allRows);
+  currentCompareRows = buildDriverComparison(allRows);
+  currentStationRows = buildStationReport(allRows);
+  renderStats(allRows, currentCompareRows);
+  applyRecordsFilterAndRender();
+  renderCompareTable(currentCompareRows);
+  renderStationTable(currentStationRows);
 }
 
-function renderStats(rows) {
+function applyRecordsFilterAndRender() {
+  const type = document.getElementById("f-type").value;
+  const search = document.getElementById("f-search").value.trim().toLowerCase();
+  let rows = allRows;
+  if (type) rows = rows.filter(r => r.shift_type === type);
+  if (search) {
+    rows = rows.filter(r =>
+      (r.full_name || "").toLowerCase().includes(search) ||
+      (r.identity_number || "").toLowerCase().includes(search) ||
+      (r.vehicle_plate || "").toLowerCase().includes(search)
+    );
+  }
+  currentRecordsRows = [...rows].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
+  renderTable(currentRecordsRows);
+}
+
+function buildDriverComparison(rows) {
+  const groups = {};
+  for (const r of rows) {
+    const day = (r.created_at || "").slice(0, 10);
+    const key = `${r.identity_number}|${day}`;
+    if (!groups[key]) {
+      groups[key] = { day, identity_number: r.identity_number, full_name: r.full_name, vehicle_plate: r.vehicle_plate, start: null, end: null };
+    }
+    const g = groups[key];
+    if (r.full_name) g.full_name = r.full_name;
+    if (r.vehicle_plate) g.vehicle_plate = r.vehicle_plate;
+    if (r.shift_type === "start" && !g.start) g.start = r;
+    if (r.shift_type === "end") g.end = r;
+  }
+  return Object.values(groups).sort((a, b) => b.day.localeCompare(a.day) || (a.full_name || "").localeCompare(b.full_name || ""));
+}
+
+function buildStationReport(rows) {
+  const groups = {};
+  for (const r of rows) {
+    const key = r.station_name || "غير محدد";
+    if (!groups[key]) groups[key] = { station: key, total: 0, drivers: new Set(), startCount: 0, endCount: 0, ofd: 0, cod: 0, ppd: 0, picked: 0 };
+    const g = groups[key];
+    g.total++;
+    g.drivers.add(r.identity_number);
+    if (r.shift_type === "start") g.startCount++; else g.endCount++;
+    g.ofd += Number(r.ofd_count) || 0;
+    g.cod += Number(r.cod_delivered) || 0;
+    g.ppd += Number(r.ppd_delivered) || 0;
+    g.picked += Number(r.picked_up) || 0;
+  }
+  return Object.values(groups)
+    .map(g => ({ ...g, drivers: g.drivers.size }))
+    .sort((a, b) => b.total - a.total);
+}
+
+function renderStats(rows, compareRows) {
   const today = new Date().toISOString().slice(0, 10);
   const todayCount = rows.filter(r => (r.created_at || "").slice(0, 10) === today).length;
   const startCount = rows.filter(r => r.shift_type === "start").length;
   const endCount = rows.filter(r => r.shift_type === "end").length;
   const drivers = new Set(rows.map(r => r.identity_number)).size;
+  const completedToday = compareRows.filter(g => g.day === today && g.start && g.end).length;
 
   const stats = [
     { label: "إجمالي السجلات", num: rows.length },
@@ -305,6 +435,7 @@ function renderStats(rows) {
     { label: "بداية دوام", num: startCount },
     { label: "نهاية دوام", num: endCount },
     { label: "عدد السائقين", num: drivers },
+    { label: "مناديب أكملوا الدوام اليوم", num: completedToday },
   ];
   document.getElementById("stats").innerHTML = stats.map(s =>
     `<div class="stat-card"><div class="num">${s.num}</div><div class="label">${s.label}</div></div>`
@@ -347,6 +478,69 @@ function renderTable(rows) {
   body.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => openEdit(btn.dataset.edit)));
   body.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => deleteRow(btn.dataset.del)));
 }
+
+function renderCompareTable(groups) {
+  const body = document.getElementById("compare-body");
+  if (!groups.length) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="14">لا توجد بيانات مطابقة</td></tr>';
+    return;
+  }
+  body.innerHTML = groups.map(g => {
+    const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null)
+      ? (g.end.odo_reading - g.start.odo_reading) : "—";
+    const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
+    const status = g.start && g.end
+      ? '<span class="badge complete">مكتمل</span>'
+      : g.start
+        ? '<span class="badge partial">بداية فقط</span>'
+        : '<span class="badge partial">نهاية فقط</span>';
+    return `<tr>
+      <td>${escapeHtml(g.day)}</td>
+      <td>${escapeHtml(g.full_name)}</td>
+      <td>${escapeHtml(g.identity_number)}</td>
+      <td>${escapeHtml(g.vehicle_plate)}</td>
+      <td>${g.start?.odo_reading ?? "—"}</td>
+      <td>${g.end?.odo_reading ?? "—"}</td>
+      <td>${dist}</td>
+      <td>${timeOf(g.start)}</td>
+      <td>${timeOf(g.end)}</td>
+      <td>${g.start?.ofd_count ?? "—"}</td>
+      <td>${g.end?.cod_delivered ?? "—"}</td>
+      <td>${g.end?.ppd_delivered ?? "—"}</td>
+      <td>${g.end?.picked_up ?? "—"}</td>
+      <td>${status}</td>
+    </tr>`;
+  }).join("");
+}
+
+function renderStationTable(groups) {
+  const body = document.getElementById("stations-body");
+  if (!groups.length) {
+    body.innerHTML = '<tr class="empty-row"><td colspan="9">لا توجد بيانات مطابقة</td></tr>';
+    return;
+  }
+  body.innerHTML = groups.map(g => `<tr>
+    <td>${escapeHtml(g.station)}</td>
+    <td>${g.total}</td>
+    <td>${g.drivers}</td>
+    <td>${g.startCount}</td>
+    <td>${g.endCount}</td>
+    <td>${g.ofd}</td>
+    <td>${g.cod}</td>
+    <td>${g.ppd}</td>
+    <td>${g.picked}</td>
+  </tr>`).join("");
+}
+
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    currentTab = btn.dataset.tab;
+    document.querySelectorAll(".tab-panel").forEach(p => p.classList.remove("active"));
+    document.getElementById("tab-" + currentTab).classList.add("active");
+  });
+});
 
 function openEdit(id) {
   const row = allRows.find(r => String(r.id) === String(id));
@@ -414,20 +608,48 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   loadData();
 });
 
-document.getElementById("export-btn").addEventListener("click", () => {
-  if (!allRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-  const cols = ["created_at","shift_type","full_name","identity_number","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
-  const csvRows = [cols.join(",")];
-  for (const r of allRows) {
-    csvRows.push(cols.map(c => `"${String(r[c] ?? "").replace(/"/g, '""')}"`).join(","));
+function downloadCsv(filename, cols, rows, getVal) {
+  const csvRows = [cols.labels.join(",")];
+  for (const r of rows) {
+    csvRows.push(cols.keys.map(c => `"${String(getVal(r, c) ?? "").replace(/"/g, '""')}"`).join(","));
   }
   const blob = new Blob(["﻿" + csvRows.join("\n")], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `shift_entries_${new Date().toISOString().slice(0,10)}.csv`;
+  a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+document.getElementById("export-btn").addEventListener("click", () => {
+  const stamp = new Date().toISOString().slice(0, 10);
+  if (currentTab === "records") {
+    if (!currentRecordsRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    const keys = ["created_at","shift_type","full_name","identity_number","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
+    downloadCsv(`shift_entries_${stamp}.csv`, { labels: keys, keys }, currentRecordsRows, (r, c) => r[c]);
+  } else if (currentTab === "compare") {
+    if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    const labels = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","start_time","end_time","ofd","cod","ppd","picked_up","status"];
+    const rows = currentCompareRows.map(g => ({
+      date: g.day, full_name: g.full_name, identity_number: g.identity_number, vehicle_plate: g.vehicle_plate,
+      start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
+      distance: (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "",
+      start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
+      end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
+      ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
+      status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
+    }));
+    downloadCsv(`driver_comparison_${stamp}.csv`, { labels, keys: labels }, rows, (r, c) => r[c]);
+  } else if (currentTab === "stations") {
+    if (!currentStationRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    const labels = ["station","total_records","drivers","start_count","end_count","ofd","cod","ppd","picked_up"];
+    const rows = currentStationRows.map(g => ({
+      station: g.station, total_records: g.total, drivers: g.drivers, start_count: g.startCount, end_count: g.endCount,
+      ofd: g.ofd, cod: g.cod, ppd: g.ppd, picked_up: g.picked,
+    }));
+    downloadCsv(`station_report_${stamp}.csv`, { labels, keys: labels }, rows, (r, c) => r[c]);
+  }
 });
 
 (async function init() {
