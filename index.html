@@ -1,0 +1,305 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تسجيل دوام — GBE Fleet Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --surface-1: #fcfcfb;
+    --plane:     #f9f9f7;
+    --ink:       #0b0b0b;
+    --ink-2:     #52514e;
+    --ink-muted: #898781;
+    --grid:      #e1e0d9;
+    --border:    rgba(11,11,11,0.12);
+    --blue:      #2a78d6;
+    --good:      #0ca30c;
+    --critical:  #d03b3b;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+      --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
+    --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--plane); color: var(--ink);
+    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6;
+  }
+  .wrap { max-width: 520px; margin: 0 auto; padding: 1.75rem 1.1rem 4rem; }
+  h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
+  .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
+
+  .toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1.5rem; }
+  .toggle button {
+    padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink-2); font-size: 0.95rem; font-weight: 600; cursor: pointer;
+  }
+  .toggle button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
+
+  fieldset { border: none; padding: 0; margin: 0 0 1.5rem; }
+  label { display: block; font-size: 0.85rem; color: var(--ink-2); margin-bottom: 0.35rem; }
+  label .req { color: var(--critical); }
+  .field { margin-bottom: 1.1rem; }
+  input, select {
+    width: 100%; padding: 0.7rem 0.8rem; border-radius: 9px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--ink); font-size: 0.95rem;
+  }
+  input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  input[type="file"] { padding: 0.5rem; font-size: 0.85rem; }
+  .hint { font-size: 0.76rem; color: var(--ink-muted); margin-top: 0.3rem; }
+  .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin: 1.6rem 0 0.8rem; }
+
+  button.submit {
+    width: 100%; padding: 0.95rem; border-radius: 10px; border: none; background: var(--blue);
+    color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer;
+  }
+  button.submit:disabled { opacity: 0.55; cursor: default; }
+
+  #status {
+    margin-top: 1.1rem; padding: 0.85rem 1rem; border-radius: 10px; font-size: 0.9rem; display: none;
+  }
+  #status.ok { display: block; background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
+  #status.err { display: block; background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
+  #status.busy { display: block; background: var(--surface-1); color: var(--ink-2); border: 1px solid var(--border); }
+
+  #config-note {
+    display: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
+    padding: 1rem 1.1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--ink-2);
+  }
+  #config-note code { background: var(--grid); padding: 0.1rem 0.35rem; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>تسجيل بداية / نهاية الدوام</h1>
+  <p class="sub">GBE Logistics — Fleet Tracker</p>
+
+  <div id="config-note">
+    محتاجة تحطي <code>SUPABASE_URL</code> و <code>SUPABASE_ANON_KEY</code> في أول ملف الصفحة.
+  </div>
+
+  <form id="shift-form">
+    <div class="toggle">
+      <button type="button" data-type="start" class="active">بداية الدوام</button>
+      <button type="button" data-type="end">نهاية الدوام</button>
+    </div>
+
+    <div class="field">
+      <label>رقم الهوية أو الإقامة <span class="req">*</span></label>
+      <input type="text" id="identity_number" inputmode="numeric" required>
+    </div>
+    <div class="field">
+      <label>اسم السائق <span class="req">*</span></label>
+      <input type="text" id="full_name" required>
+    </div>
+    <div class="field">
+      <label>لوحة المركبة <span class="req">*</span></label>
+      <input type="text" id="vehicle_plate" required placeholder="GBE-FLT-XXX-0000-0">
+    </div>
+    <div class="field">
+      <label>المحطة</label>
+      <select id="station_name"><option value="">— اختياري —</option></select>
+    </div>
+
+    <div class="field">
+      <label id="odo-label">قراءة العداد <span class="req">*</span></label>
+      <input type="number" id="odo_reading" required inputmode="decimal">
+    </div>
+    <div class="field">
+      <label id="photo-label">صورة العداد <span class="req">*</span></label>
+      <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
+    </div>
+
+    <div id="start-fields">
+      <div class="field">
+        <label>فيديو حالة المركبة</label>
+        <input type="file" id="condition_video" accept="video/*" capture="environment">
+      </div>
+      <div class="field">
+        <label>الشحنات المستلمة (OFD)</label>
+        <input type="number" id="ofd_count" inputmode="numeric">
+      </div>
+    </div>
+
+    <div id="end-fields" style="display:none">
+      <div class="section-title">بيانات التوصيل</div>
+      <div class="field">
+        <label>الشحنات الموصّلة غير المدفوعة (COD)</label>
+        <input type="number" id="cod_delivered" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>الشحنات الموصّلة المدفوعة (PPD)</label>
+        <input type="number" id="ppd_delivered" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>الشحنات المستلمة (Picked Up)</label>
+        <input type="number" id="picked_up" inputmode="numeric">
+      </div>
+      <div class="field">
+        <label>صورة من تطبيق العميل</label>
+        <input type="file" id="client_screenshot" accept="image/*">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>البريد الإلكتروني</label>
+      <input type="email" id="email_address">
+    </div>
+    <div class="field">
+      <label>المنطقة</label>
+      <input type="text" id="area">
+    </div>
+
+    <button type="submit" class="submit" id="submit-btn">إرسال</button>
+    <div id="status"></div>
+  </form>
+</div>
+
+<script>
+/* ============================================================
+   حطي بيانات الاتصال بتاعتك هنا (Project Settings → API)
+   ============================================================ */
+const SUPABASE_URL = "https://icgzjqzjmzvhnezpignp.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZ3pqcXpqbXp2aG5lenBpZ25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NjMzNjMsImV4cCI6MjEwMzEzOTM2M30.S2A-lXgBKTJog2xobvUxJYz1gAjCnGkuz7aqsOfkpks";
+// رابط Google Apps Script بعد الديبلوي (ينتهي بـ /exec) — شوفي drive_upload_script.gs.txt
+const DRIVE_UPLOAD_URL = "https://script.google.com/macros/s/AKfycbxFTRSQMLI3JokeBArtrn9ZxwR6JfSPTyU6D4ru83-rCP4CUDZ1tmDaBpS4hNBBHXWoTA/exec";
+/* ============================================================ */
+
+const isConfigured = !SUPABASE_URL.includes("YOUR_") && !SUPABASE_ANON_KEY.includes("YOUR_")
+  && !DRIVE_UPLOAD_URL.includes("YOUR_");
+let shiftType = "start";
+
+function headers(extra) {
+  return Object.assign({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, extra || {});
+}
+
+async function loadStations() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/stations?select=station_name&order=station_name`, { headers: headers() });
+    const rows = await res.json();
+    const sel = document.getElementById("station_name");
+    for (const r of rows) {
+      if (!r.station_name) continue;
+      const opt = document.createElement("option");
+      opt.value = r.station_name;
+      opt.textContent = r.station_name;
+      sel.appendChild(opt);
+    }
+  } catch (e) { /* dropdown just stays optional-only if this fails */ }
+}
+
+function setStatus(kind, text) {
+  const el = document.getElementById("status");
+  el.className = kind;
+  el.textContent = text;
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(",")[1]);
+    reader.onerror = () => reject(new Error("فشل قراءة الملف"));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadFile(file, prefix) {
+  if (!file) return null;
+  const base64 = await fileToBase64(file);
+  // بدون Content-Type مقصود، عشان الطلب يفضل "simple request" ومايعملش
+  // preflight (OPTIONS) اللي Google Apps Script مبيتعاملش معاه كويس.
+  const res = await fetch(DRIVE_UPLOAD_URL, {
+    method: "POST",
+    body: JSON.stringify({
+      base64,
+      mimeType: file.type || "application/octet-stream",
+      fileName: `${prefix}_${Date.now()}_${file.name}`,
+    }),
+  });
+  const data = await res.json();
+  if (data.error) throw new Error(`رفع الملف فشل: ${data.error}`);
+  return data.url;
+}
+
+document.querySelectorAll(".toggle button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".toggle button").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    shiftType = btn.dataset.type;
+    const isStart = shiftType === "start";
+    document.getElementById("start-fields").style.display = isStart ? "block" : "none";
+    document.getElementById("end-fields").style.display = isStart ? "none" : "block";
+    document.getElementById("odo-label").innerHTML = (isStart ? "قراءة عداد البداية" : "قراءة عداد النهاية") + ' <span class="req">*</span>';
+    document.getElementById("photo-label").innerHTML = (isStart ? "صورة عداد البداية" : "صورة عداد النهاية") + ' <span class="req">*</span>';
+  });
+});
+
+document.getElementById("shift-form").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  if (!isConfigured) { document.getElementById("config-note").style.display = "block"; return; }
+
+  const btn = document.getElementById("submit-btn");
+  btn.disabled = true;
+  setStatus("busy", "بيتم رفع الصور والإرسال…");
+
+  try {
+    const odoPhotoFile = document.getElementById("odo_photo").files[0];
+    const videoFile = document.getElementById("condition_video")?.files[0];
+    const screenshotFile = document.getElementById("client_screenshot")?.files[0];
+
+    const [odoPhotoUrl, videoUrl, screenshotUrl] = await Promise.all([
+      uploadFile(odoPhotoFile, "odo"),
+      uploadFile(videoFile, "condition-video"),
+      uploadFile(screenshotFile, "client-screenshot"),
+    ]);
+
+    const payload = {
+      p_identity_number: document.getElementById("identity_number").value.trim(),
+      p_full_name: document.getElementById("full_name").value.trim(),
+      p_vehicle_plate: document.getElementById("vehicle_plate").value.trim(),
+      p_station_name: document.getElementById("station_name").value || null,
+      p_shift_type: shiftType,
+      p_odo_reading: Number(document.getElementById("odo_reading").value),
+      p_odo_photo_url: odoPhotoUrl,
+      p_condition_video_url: videoUrl,
+      p_ofd_count: document.getElementById("ofd_count")?.value ? Number(document.getElementById("ofd_count").value) : null,
+      p_cod_delivered: document.getElementById("cod_delivered")?.value ? Number(document.getElementById("cod_delivered").value) : null,
+      p_ppd_delivered: document.getElementById("ppd_delivered")?.value ? Number(document.getElementById("ppd_delivered").value) : null,
+      p_picked_up: document.getElementById("picked_up")?.value ? Number(document.getElementById("picked_up").value) : null,
+      p_client_screenshot_url: screenshotUrl,
+      p_email_address: document.getElementById("email_address").value || null,
+      p_area: document.getElementById("area").value || null,
+    };
+
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_shift_entry`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify(payload),
+    });
+    if (!res.ok) throw new Error(await res.text());
+
+    setStatus("ok", "تم تسجيل الدوام بنجاح ✓");
+    document.getElementById("shift-form").reset();
+    document.querySelector('.toggle button[data-type="start"]').click();
+  } catch (err) {
+    console.error(err);
+    setStatus("err", "حصل خطأ: " + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+loadStations();
+</script>
+</body>
+</html>
