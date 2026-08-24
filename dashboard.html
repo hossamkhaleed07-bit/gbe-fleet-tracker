@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Dashboard — GBE Fleet Tracker</title>
+<title>Dashboard — Master Fuel Report</title>
 <style>
   :root {
     --plane:     #f5f6f8;
@@ -17,12 +17,13 @@
     --good:      #0ca30c;
     --critical:  #d03b3b;
 
-    --sidebar-bg:   #14231c;
-    --sidebar-ink:  #d7ded8;
-    --sidebar-muted:#7d8b82;
-    --sidebar-active-bg: #1e3a2b;
-    --sidebar-active-ink: #ffffff;
-    --sidebar-accent: #2f8f52;
+    --sidebar-bg:   #eaf2fe;
+    --sidebar-ink:  #1c2b45;
+    --sidebar-muted:#6b83a8;
+    --sidebar-active-bg: #d3e6fd;
+    --sidebar-active-ink: #1450c9;
+    --sidebar-accent: #2f6fe0;
+    --sidebar-border: rgba(20,43,69,0.12);
 
     --c-blue-bg: #e9edfc; --c-blue-ink: #3854c9;
     --c-green-bg: #e4f7e6; --c-green-ink: #158a2c;
@@ -64,17 +65,19 @@
     width: 230px; flex: 0 0 230px; background: var(--sidebar-bg); color: var(--sidebar-ink);
     padding: 1.2rem 0.8rem; display: flex; flex-direction: column; gap: 0.3rem;
   }
-  .sidebar-brand { color: #fff; font-weight: 700; font-size: 1rem; padding: 0.4rem 0.6rem 1.2rem; }
+  .sidebar-brand { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.6rem 1.2rem; }
+  .sidebar-brand img { width: 40px; height: 40px; border-radius: 9px; object-fit: contain; background: #2b3fd6; }
+  .sidebar-brand .brand-text { color: var(--sidebar-ink); font-weight: 700; font-size: 0.95rem; }
   .sidebar-brand .sub2 { display: block; color: var(--sidebar-muted); font-weight: 400; font-size: 0.72rem; margin-top: 0.2rem; }
   .side-link {
     display: flex; align-items: center; gap: 0.6rem; text-align: right; width: 100%;
     padding: 0.65rem 0.7rem; border-radius: 9px; border: none; background: none; color: var(--sidebar-ink);
     font-size: 0.87rem; font-weight: 600;
   }
-  .side-link:hover { background: rgba(255,255,255,0.06); }
+  .side-link:hover { background: rgba(20,43,69,0.06); }
   .side-link.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-ink); }
   .side-link .ic { font-size: 1rem; }
-  #sidebar-bottom { margin-top: auto; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 0.6rem; }
+  #sidebar-bottom { margin-top: auto; border-top: 1px solid var(--sidebar-border); padding-top: 0.6rem; }
 
   #content { flex: 1; min-width: 0; padding: 1.4rem 1.6rem 4rem; }
   .content-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
@@ -160,7 +163,7 @@
 
 <div id="login-screen">
   <h1>تسجيل الدخول</h1>
-  <p class="sub">GBE Fleet Tracker — Dashboard</p>
+  <p class="sub">Master Fuel Report — Dashboard</p>
   <div class="field">
     <label>البريد الإلكتروني</label>
     <input type="email" id="login-email" autocomplete="username">
@@ -175,7 +178,10 @@
 
 <div id="app-layout" style="display:none">
   <aside id="sidebar">
-    <div class="sidebar-brand">GBE Fleet Tracker<span class="sub2">لوحة تحكم الدوام</span></div>
+    <div class="sidebar-brand">
+      <img src="logo.png" alt="GBE Logistics" onerror="this.style.display='none'">
+      <div><div class="brand-text">Master Fuel Report</div><span class="sub2">لوحة تحكم الدوام</span></div>
+    </div>
     <nav>
       <button class="side-link active" data-page="overview"><span class="ic">📊</span> نظرة عامة</button>
       <button class="side-link" data-page="records"><span class="ic">🗂️</span> السجلات</button>
