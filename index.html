@@ -116,8 +116,10 @@
       </select>
     </div>
     <div class="field">
-      <label>المحطة</label>
-      <select id="station_name"><option value="">— اختياري —</option></select>
+      <label>المحطة <span class="req">*</span></label>
+      <select id="station_name" required>
+        <option value="" disabled selected>— اختاري المحطة —</option>
+      </select>
     </div>
 
     <div class="field">
@@ -131,38 +133,38 @@
 
     <div id="start-fields">
       <div class="field">
-        <label>فيديو حالة المركبة</label>
-        <input type="file" id="condition_video" accept="video/*" capture="environment">
+        <label>فيديو حالة المركبة <span class="req">*</span></label>
+        <input type="file" id="condition_video" accept="video/*" capture="environment" required>
       </div>
       <div class="field">
-        <label>الشحنات المستلمة (OFD)</label>
-        <input type="number" id="ofd_count" inputmode="numeric">
+        <label>الشحنات المستلمة (OFD) <span class="req">*</span></label>
+        <input type="number" id="ofd_count" inputmode="numeric" required>
       </div>
     </div>
 
     <div id="end-fields" style="display:none">
       <div class="section-title">بيانات التوصيل</div>
       <div class="field">
-        <label>الشحنات الموصّلة غير المدفوعة (COD)</label>
-        <input type="number" id="cod_delivered" inputmode="numeric">
+        <label>الشحنات الموصّلة غير المدفوعة (COD) <span class="req">*</span></label>
+        <input type="number" id="cod_delivered" inputmode="numeric" required>
       </div>
       <div class="field">
-        <label>الشحنات الموصّلة المدفوعة (PPD)</label>
-        <input type="number" id="ppd_delivered" inputmode="numeric">
+        <label>الشحنات الموصّلة المدفوعة (PPD) <span class="req">*</span></label>
+        <input type="number" id="ppd_delivered" inputmode="numeric" required>
       </div>
       <div class="field">
-        <label>الشحنات المستلمة (Picked Up)</label>
-        <input type="number" id="picked_up" inputmode="numeric">
+        <label>الشحنات المستلمة (Picked Up) <span class="req">*</span></label>
+        <input type="number" id="picked_up" inputmode="numeric" required>
       </div>
       <div class="field">
-        <label>صورة من تطبيق العميل</label>
-        <input type="file" id="client_screenshot" accept="image/*">
+        <label>صورة من تطبيق العميل <span class="req">*</span></label>
+        <input type="file" id="client_screenshot" accept="image/*" required>
       </div>
     </div>
 
     <div class="field">
-      <label>المنطقة</label>
-      <input type="text" id="area">
+      <label>المنطقة <span class="req">*</span></label>
+      <input type="text" id="area" required>
     </div>
 
     <button type="submit" class="submit" id="submit-btn">إرسال</button>
