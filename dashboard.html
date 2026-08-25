@@ -40,7 +40,8 @@
   button, input, select { font-family: inherit; }
 
   /* ---- login ---- */
-  #login-screen { max-width: 380px; margin: 4rem auto 0; padding: 0 1rem; }
+  .login-banner { display: block; width: 100%; height: auto; max-height: 220px; object-fit: cover; }
+  #login-screen { max-width: 380px; margin: 2rem auto 0; padding: 0 1rem; }
   .login-logo { display: block; width: 84px; height: auto; margin: 0 0 1rem; border-radius: 10px; }
   #login-screen h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
   .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
@@ -200,6 +201,7 @@
 </head>
 <body>
 
+<img src="login-banner.jpg" alt="GBE Logistics" class="login-banner" id="login-banner-img" onerror="this.style.display='none'">
 <div id="login-screen">
   <img src="logo.png" alt="GBE Logistics" class="login-logo" onerror="this.style.display='none'">
   <h1>تسجيل الدخول</h1>
@@ -544,6 +546,7 @@ async function applyUserScope() {
 
 async function showDashboard() {
   document.getElementById("login-screen").style.display = "none";
+  document.getElementById("login-banner-img").style.display = "none";
   document.getElementById("app-layout").style.display = "flex";
   await applyUserScope();
   loadData();
@@ -552,6 +555,7 @@ async function showDashboard() {
 function showLogin() {
   document.getElementById("app-layout").style.display = "none";
   document.getElementById("login-screen").style.display = "block";
+  document.getElementById("login-banner-img").style.display = "block";
 }
 
 document.getElementById("login-btn").addEventListener("click", async () => {
