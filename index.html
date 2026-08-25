@@ -201,13 +201,13 @@ async function loadStations() {
 async function loadVehicles() {
   const sel = document.getElementById("vehicle_plate");
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=plate_number&order=plate_number`, { headers: headers() });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=vehicle_plate&order=vehicle_plate`, { headers: headers() });
     const rows = await res.json();
     for (const r of rows) {
-      if (!r.plate_number) continue;
+      if (!r.vehicle_plate) continue;
       const opt = document.createElement("option");
-      opt.value = r.plate_number;
-      opt.textContent = r.plate_number;
+      opt.value = r.vehicle_plate;
+      opt.textContent = r.vehicle_plate;
       sel.appendChild(opt);
     }
   } catch (e) { /* no vehicles loaded */ }
