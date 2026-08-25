@@ -271,11 +271,11 @@
           <thead>
             <tr>
               <th>التاريخ</th><th>السائق</th><th>رقم الهوية</th><th>اللوحة</th><th>عداد البداية</th>
-              <th>عداد النهاية</th><th>المسافة المقطوعة</th><th>وقت البداية</th><th>وقت النهاية</th>
+              <th>عداد النهاية</th><th>المسافة المقطوعة</th><th>الوقود المتوقع (لتر)</th><th>وقت البداية</th><th>وقت النهاية</th>
               <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>الحالة</th>
             </tr>
           </thead>
-          <tbody id="compare-body"><tr class="empty-row"><td colspan="14">جارِ التحميل...</td></tr></tbody>
+          <tbody id="compare-body"><tr class="empty-row"><td colspan="15">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -332,6 +332,7 @@ let currentRecordsRows = [];
 let currentCompareRows = [];
 let currentStationRows = [];
 let currentPage = "overview";
+let vehicleRates = {};
 let editingId = null;
 
 const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات" };
@@ -386,6 +387,15 @@ document.querySelectorAll(".side-link[data-page]").forEach(btn => {
   });
 });
 
+async function loadVehicleRates() {
+  const { data, error } = await sb.from("vehicles").select("vehicle_plate,avg_per_liter");
+  if (error) return;
+  vehicleRates = {};
+  for (const v of data || []) {
+    if (v.vehicle_plate && v.avg_per_liter != null) vehicleRates[v.vehicle_plate] = Number(v.avg_per_liter);
+  }
+}
+
 async function loadData() {
   document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>';
   let query = sb.from("shift_entries").select("*").order("created_at", { ascending: true }).limit(2000);
@@ -394,7 +404,7 @@ async function loadData() {
   if (from) query = query.gte("created_at", `${from}T00:00:00`);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
 
-  const { data, error } = await query;
+  const [{ data, error }] = await Promise.all([query, loadVehicleRates()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
     document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">تعذر التحميل</td></tr>';
@@ -541,18 +551,26 @@ function renderTable(rows) {
   body.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => deleteRow(btn.dataset.del)));
 }
 
+function expectedFuelLiters(vehiclePlate, distance) {
+  if (distance === "—" || distance == null) return "—";
+  const rate = vehicleRates[vehiclePlate];
+  if (!rate) return "—";
+  return (distance / rate).toFixed(1);
+}
+
 function renderCompareTable(groups) {
   const body = document.getElementById("compare-body");
-  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="14">لا توجد بيانات مطابقة</td></tr>'; return; }
+  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="15">لا توجد بيانات مطابقة</td></tr>'; return; }
   body.innerHTML = groups.map(g => {
     const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "—";
+    const fuel = expectedFuelLiters(g.vehicle_plate, dist);
     const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
     const status = g.start && g.end ? '<span class="badge complete">مكتمل</span>'
       : g.start ? '<span class="badge partial">بداية فقط</span>' : '<span class="badge partial">نهاية فقط</span>';
     return `<tr>
       <td>${escapeHtml(g.day)}</td><td>${escapeHtml(g.full_name)}</td><td>${escapeHtml(g.identity_number)}</td>
       <td>${escapeHtml(g.vehicle_plate)}</td><td>${g.start?.odo_reading ?? "—"}</td><td>${g.end?.odo_reading ?? "—"}</td>
-      <td>${dist}</td><td>${timeOf(g.start)}</td><td>${timeOf(g.end)}</td>
+      <td>${dist}</td><td>${fuel}</td><td>${timeOf(g.start)}</td><td>${timeOf(g.end)}</td>
       <td>${g.start?.ofd_count ?? "—"}</td><td>${g.end?.cod_delivered ?? "—"}</td>
       <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td><td>${status}</td>
     </tr>`;
@@ -653,16 +671,20 @@ document.getElementById("export-btn").addEventListener("click", () => {
     downloadCsv(`shift_entries_${stamp}.csv`, keys, currentRecordsRows);
   } else if (currentPage === "compare") {
     if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","start_time","end_time","ofd","cod","ppd","picked_up","status"];
-    const rows = currentCompareRows.map(g => ({
-      date: g.day, full_name: g.full_name, identity_number: g.identity_number, vehicle_plate: g.vehicle_plate,
-      start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
-      distance: (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "",
-      start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
-      end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
-      ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
-      status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
-    }));
+    const keys = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","start_time","end_time","ofd","cod","ppd","picked_up","status"];
+    const rows = currentCompareRows.map(g => {
+      const distance = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "";
+      return {
+        date: g.day, full_name: g.full_name, identity_number: g.identity_number, vehicle_plate: g.vehicle_plate,
+        start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
+        distance,
+        expected_fuel_liters: expectedFuelLiters(g.vehicle_plate, distance === "" ? null : distance),
+        start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
+        end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
+        ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
+        status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
+      };
+    });
     downloadCsv(`driver_comparison_${stamp}.csv`, keys, rows);
   } else if (currentPage === "stations") {
     if (!currentStationRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
