@@ -208,7 +208,7 @@ async function loadStations() {
 async function loadVehicles() {
   const sel = document.getElementById("vehicle_plate");
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=vehicle_plate&order=vehicle_plate`, { headers: headers() });
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=vehicle_plate&is_active=eq.true&order=vehicle_plate`, { headers: headers() });
     const rows = await res.json();
     for (const r of rows) {
       if (!r.vehicle_plate) continue;
