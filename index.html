@@ -104,7 +104,9 @@
     </div>
     <div class="field">
       <label>لوحة المركبة <span class="req">*</span></label>
-      <input type="text" id="vehicle_plate" required placeholder="GBE-FLT-XXX-0000-0">
+      <select id="vehicle_plate" required>
+        <option value="" disabled selected>— اختاري لوحة المركبة —</option>
+      </select>
     </div>
     <div class="field">
       <label>المحطة</label>
@@ -196,6 +198,21 @@ async function loadStations() {
   } catch (e) { /* dropdown just stays optional-only if this fails */ }
 }
 
+async function loadVehicles() {
+  const sel = document.getElementById("vehicle_plate");
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=plate_number&order=plate_number`, { headers: headers() });
+    const rows = await res.json();
+    for (const r of rows) {
+      if (!r.plate_number) continue;
+      const opt = document.createElement("option");
+      opt.value = r.plate_number;
+      opt.textContent = r.plate_number;
+      sel.appendChild(opt);
+    }
+  } catch (e) { /* no vehicles loaded */ }
+}
+
 function setStatus(kind, text) {
   const el = document.getElementById("status");
   el.className = kind;
@@ -284,6 +301,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
 });
 
 loadStations();
+loadVehicles();
 </script>
 </body>
 </html>
