@@ -957,11 +957,23 @@ function renderDriversTable(drivers) {
     <td>${escapeHtml(d.mobile_number)}</td>
     <td>${escapeHtml(d.project)}</td>
     <td><button class="toggle-pill ${d.is_active ? "active" : "inactive"}" data-toggle-driver="${escapeHtml(d.identity_number)}">${d.is_active ? "مفعّل" : "معطّل"}</button></td>
-    <td class="row-actions"><button class="btn" data-edit-driver="${escapeHtml(d.identity_number)}">تعديل</button></td>
+    <td class="row-actions">
+      <button class="btn" data-edit-driver="${escapeHtml(d.identity_number)}">تعديل</button>
+      <button class="btn btn-danger" data-del-driver="${escapeHtml(d.identity_number)}">حذف</button>
+    </td>
   </tr>`).join("");
 
   body.querySelectorAll("[data-toggle-driver]").forEach(btn => btn.addEventListener("click", () => toggleDriverActive(btn.dataset.toggleDriver)));
   body.querySelectorAll("[data-edit-driver]").forEach(btn => btn.addEventListener("click", () => openDriverEdit(btn.dataset.editDriver)));
+  body.querySelectorAll("[data-del-driver]").forEach(btn => btn.addEventListener("click", () => deleteDriver(btn.dataset.delDriver)));
+}
+
+async function deleteDriver(identity) {
+  if (!confirm("متأكدة إنك عايزة تمسحي السائق ده؟ الإجراء ده مش قابل للتراجع.")) return;
+  const { error } = await sb.from("drivers").delete().eq("identity_number", identity);
+  if (error) { setStatus("err", "فشل الحذف: " + error.message); return; }
+  setStatus("ok", "تم الحذف");
+  loadDriverProjects();
 }
 
 async function toggleDriverActive(identity) {
