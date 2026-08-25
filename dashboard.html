@@ -342,6 +342,22 @@
       <div style="margin-bottom: 1rem;">
         <button class="btn btn-primary" style="width:auto" id="add-vehicle-btn">+ إضافة عربية جديدة</button>
       </div>
+      <div class="local-filters">
+        <div class="field">
+          <label>لوحة المركبة</label>
+          <input type="text" id="v-search" placeholder="اكتبي هنا...">
+        </div>
+        <div class="field">
+          <label>الحالة</label>
+          <select id="v-filter-status">
+            <option value="">الكل</option>
+            <option value="active">مفعّلة</option>
+            <option value="inactive">معطّلة</option>
+          </select>
+        </div>
+        <div class="field"><button class="btn" id="fleet-filter-btn">تطبيق</button></div>
+        <div class="field"><button class="btn" id="fleet-reset-btn">مسح الفلاتر</button></div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -475,6 +491,7 @@ let driverProjects = {};
 let allDrivers = [];
 let allVehicles = [];
 let currentDriversRows = [];
+let currentFleetRows = [];
 let editingVehiclePlate = null;
 let isNewVehicle = false;
 let currentUserProject = null;
@@ -587,7 +604,18 @@ async function loadFleet() {
   const { data, error } = await sb.from("vehicles").select("*").order("vehicle_plate");
   if (error) return;
   allVehicles = data || [];
-  renderFleetTable(allVehicles);
+  applyFleetFilterAndRender();
+}
+
+function applyFleetFilterAndRender() {
+  const search = document.getElementById("v-search").value.trim().toLowerCase();
+  const status = document.getElementById("v-filter-status").value;
+  let rows = allVehicles;
+  if (status === "active") rows = rows.filter(v => v.is_active);
+  if (status === "inactive") rows = rows.filter(v => !v.is_active);
+  if (search) rows = rows.filter(v => (v.vehicle_plate || "").toLowerCase().includes(search));
+  currentFleetRows = rows;
+  renderFleetTable(currentFleetRows);
 }
 
 async function loadData() {
@@ -1052,6 +1080,12 @@ document.getElementById("drivers-reset-btn").addEventListener("click", () => {
   document.getElementById("d-filter-project").value = "";
   applyDriversFilterAndRender();
 });
+document.getElementById("fleet-filter-btn").addEventListener("click", applyFleetFilterAndRender);
+document.getElementById("fleet-reset-btn").addEventListener("click", () => {
+  document.getElementById("v-search").value = "";
+  document.getElementById("v-filter-status").value = "";
+  applyFleetFilterAndRender();
+});
 
 function downloadCsv(filename, keys, rows) {
   const csvRows = [keys.join(",")];
@@ -1098,9 +1132,9 @@ document.getElementById("export-btn").addEventListener("click", () => {
     }));
     downloadCsv(`station_report_${stamp}.csv`, keys, rows);
   } else if (currentPage === "fleet") {
-    if (!allVehicles.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    if (!currentFleetRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["vehicle_plate","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
-    downloadCsv(`fleet_${stamp}.csv`, keys, allVehicles);
+    downloadCsv(`fleet_${stamp}.csv`, keys, currentFleetRows);
   } else if (currentPage === "drivers") {
     if (!currentDriversRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["identity_number","full_name","nationality","mobile_number","project","is_active"];
