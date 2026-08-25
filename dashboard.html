@@ -971,7 +971,14 @@ function renderDriversTable(drivers) {
 async function deleteDriver(identity) {
   if (!confirm("متأكدة إنك عايزة تمسحي السائق ده؟ الإجراء ده مش قابل للتراجع.")) return;
   const { error } = await sb.from("drivers").delete().eq("identity_number", identity);
-  if (error) { setStatus("err", "فشل الحذف: " + error.message); return; }
+  if (error) {
+    if (error.message.includes("foreign key") || error.message.includes("violates")) {
+      setStatus("err", "مينفعش تمسحي السائق ده لأن عنده سجلات مرتبطة بيه في النظام. استخدمي زرار \"تعطيل\" بدل الحذف.");
+    } else {
+      setStatus("err", "فشل الحذف: " + error.message);
+    }
+    return;
+  }
   setStatus("ok", "تم الحذف");
   loadDriverProjects();
 }
