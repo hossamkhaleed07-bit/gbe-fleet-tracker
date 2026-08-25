@@ -213,6 +213,24 @@ async function loadVehicles() {
   } catch (e) { /* no vehicles loaded */ }
 }
 
+let identityLookupTimer = null;
+async function lookupDriverName(identityNumber) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/drivers?select=full_name&identity_number=eq.${encodeURIComponent(identityNumber)}&limit=1`, { headers: headers() });
+    const rows = await res.json();
+    if (rows[0]?.full_name) {
+      document.getElementById("full_name").value = rows[0].full_name;
+    }
+  } catch (e) { /* stays as manual entry if lookup fails */ }
+}
+
+document.getElementById("identity_number").addEventListener("input", (e) => {
+  clearTimeout(identityLookupTimer);
+  const val = e.target.value.trim();
+  if (val.length < 5) return;
+  identityLookupTimer = setTimeout(() => lookupDriverName(val), 400);
+});
+
 function setStatus(kind, text) {
   const el = document.getElementById("status");
   el.className = kind;
