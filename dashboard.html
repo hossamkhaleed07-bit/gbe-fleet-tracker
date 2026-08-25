@@ -320,10 +320,10 @@
             <tr>
               <th>التاريخ</th><th>السائق</th><th>رقم الهوية</th><th>اللوحة</th><th>عداد البداية</th>
               <th>عداد النهاية</th><th>المسافة المقطوعة</th><th>الوقود المتوقع (لتر)</th><th>وقت البداية</th><th>وقت النهاية</th>
-              <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>الحالة</th>
+              <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th><th>الحالة</th>
             </tr>
           </thead>
-          <tbody id="compare-body"><tr class="empty-row"><td colspan="15">جارِ التحميل...</td></tr></tbody>
+          <tbody id="compare-body"><tr class="empty-row"><td colspan="18">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -491,6 +491,7 @@ let currentCompareRows = [];
 let currentStationRows = [];
 let currentPage = "overview";
 let vehicleRates = {};
+let stationRates = {};
 let driverProjects = {};
 let allDrivers = [];
 let allVehicles = [];
@@ -600,6 +601,15 @@ async function loadVehicleRates() {
   }
 }
 
+async function loadStationRates() {
+  const { data, error } = await sb.from("stations").select("station_name,cod_rate,ppd_rate,pickup_rate");
+  if (error) return;
+  stationRates = {};
+  for (const s of data || []) {
+    if (s.station_name) stationRates[s.station_name] = { cod: Number(s.cod_rate) || 0, ppd: Number(s.ppd_rate) || 0, pickup: Number(s.pickup_rate) || 0 };
+  }
+}
+
 async function loadDriverProjects() {
   const { data, error } = await sb.from("drivers").select("*").order("identity_number");
   if (error) return;
@@ -652,7 +662,7 @@ async function loadData() {
   if (from) query = query.gte("shift_date", from);
   if (to) query = query.lte("shift_date", to);
 
-  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadDriverProjects(), loadFleet()]);
+  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadStationRates(), loadDriverProjects(), loadFleet()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
     document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">تعذر التحميل</td></tr>';
@@ -836,21 +846,37 @@ function expectedFuelLiters(vehiclePlate, distance) {
   return (distance / rate).toFixed(1);
 }
 
+function computeDeliveryMetrics(g) {
+  if (!g.end) return { delivered: "—", deliveryPct: "—", sales: "—" };
+  const cod = Number(g.end.cod_delivered) || 0;
+  const ppd = Number(g.end.ppd_delivered) || 0;
+  const pickup = Number(g.end.picked_up) || 0;
+  const delivered = cod + ppd;
+  const ofd = Number(g.start?.ofd_count);
+  const deliveryPct = ofd ? ((delivered / ofd) * 100).toFixed(1) + "%" : "—";
+  const stationName = g.end.station_name || g.start?.station_name;
+  const rate = stationRates[stationName];
+  const sales = rate ? (cod * rate.cod + ppd * rate.ppd + pickup * rate.pickup).toFixed(2) : "—";
+  return { delivered, deliveryPct, sales };
+}
+
 function renderCompareTable(groups) {
   const body = document.getElementById("compare-body");
-  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="15">لا توجد بيانات مطابقة</td></tr>'; return; }
+  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="18">لا توجد بيانات مطابقة</td></tr>'; return; }
   body.innerHTML = groups.map(g => {
     const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "—";
     const fuel = expectedFuelLiters(g.vehicle_plate, dist);
     const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
     const status = g.start && g.end ? '<span class="badge complete">مكتمل</span>'
       : g.start ? '<span class="badge partial">بداية فقط</span>' : '<span class="badge partial">نهاية فقط</span>';
+    const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
     return `<tr>
       <td>${escapeHtml(g.day)}</td><td>${escapeHtml(g.full_name)}</td><td>${escapeHtml(g.identity_number)}</td>
       <td>${escapeHtml(g.vehicle_plate)}</td><td>${g.start?.odo_reading ?? "—"}</td><td>${g.end?.odo_reading ?? "—"}</td>
       <td>${dist}</td><td>${fuel}</td><td>${timeOf(g.start)}</td><td>${timeOf(g.end)}</td>
       <td>${g.start?.ofd_count ?? "—"}</td><td>${g.end?.cod_delivered ?? "—"}</td>
-      <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td><td>${status}</td>
+      <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td>
+      <td>${delivered}</td><td>${deliveryPct}</td><td>${sales}</td><td>${status}</td>
     </tr>`;
   }).join("");
 }
@@ -1153,9 +1179,10 @@ document.getElementById("export-btn").addEventListener("click", () => {
     downloadCsv(`shift_entries_${stamp}.csv`, keys, rowsWithProject);
   } else if (currentPage === "compare") {
     if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","start_time","end_time","ofd","cod","ppd","picked_up","status"];
+    const keys = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","start_time","end_time","ofd","cod","ppd","picked_up","delivered","delivery_pct","sales","status"];
     const rows = currentCompareRows.map(g => {
       const distance = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "";
+      const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
       return {
         date: g.day, full_name: g.full_name, identity_number: g.identity_number, vehicle_plate: g.vehicle_plate,
         start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
@@ -1164,6 +1191,7 @@ document.getElementById("export-btn").addEventListener("click", () => {
         start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
         end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
         ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
+        delivered, delivery_pct: deliveryPct, sales,
         status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
       };
     });
