@@ -110,7 +110,14 @@
   .kpi-card .label { font-size: 0.78rem; margin-top: 0.25rem; opacity: 0.85; }
 
   /* ---- panels (overview) ---- */
-  .panel-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .panel-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+  .proj-row { display: flex; justify-content: space-between; align-items: center; padding: 0.6rem 0; border-bottom: 1px solid var(--grid); }
+  .proj-row:last-child { border-bottom: none; }
+  .proj-row .proj-name { font-weight: 700; font-size: 0.9rem; }
+  .proj-row .proj-nums { display: flex; gap: 1.2rem; }
+  .proj-row .proj-nums div { text-align: center; }
+  .proj-row .proj-nums .n { font-size: 1.05rem; font-weight: 700; }
+  .proj-row .proj-nums .l { font-size: 0.68rem; color: var(--ink-muted); }
   @media (max-width: 900px) { .panel-grid { grid-template-columns: 1fr; } }
   .panel { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; padding: 1.2rem; }
   .panel h3 { margin: 0 0 1rem; font-size: 0.95rem; }
@@ -233,6 +240,10 @@
           <h3>التوزيع حسب المحطة</h3>
           <div id="ov-stations-bars"></div>
         </div>
+        <div class="panel">
+          <h3>المشاريع</h3>
+          <div id="ov-projects-list"></div>
+        </div>
       </div>
     </section>
 
@@ -334,6 +345,8 @@ let currentStationRows = [];
 let currentPage = "overview";
 let vehicleRates = {};
 let driverProjects = {};
+let allDrivers = [];
+const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
 
 const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات" };
@@ -401,7 +414,8 @@ async function loadDriverProjects() {
   const { data, error } = await sb.from("drivers").select("identity_number,project");
   if (error) return;
   driverProjects = {};
-  for (const d of data || []) {
+  allDrivers = data || [];
+  for (const d of allDrivers) {
     if (d.identity_number && d.project) driverProjects[d.identity_number] = d.project;
   }
 }
@@ -425,6 +439,7 @@ async function loadData() {
   currentStationRows = buildStationReport(allRows);
   renderStats(allRows, currentCompareRows);
   renderOverviewPanels(allRows, currentCompareRows, currentStationRows);
+  renderProjectsPanel(allRows);
   applyRecordsFilterAndRender();
   renderCompareTable(currentCompareRows);
   renderStationTable(currentStationRows);
@@ -489,6 +504,7 @@ function renderStats(rows, compareRows) {
   const completedToday = compareRows.filter(g => g.day === today && g.start && g.end).length;
 
   const stats = [
+    { label: "إجمالي عدد المناديب", num: allDrivers.length },
     { label: "إجمالي السجلات", num: rows.length },
     { label: "سجلات اليوم", num: todayCount },
     { label: "بداية دوام", num: startCount },
@@ -500,6 +516,27 @@ function renderStats(rows, compareRows) {
     const c = KPI_COLORS[i % KPI_COLORS.length];
     return `<div class="kpi-card" style="background:var(--${c}-bg);color:var(--${c}-ink)">
       <div class="num">${s.num}</div><div class="label">${s.label}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderProjectsPanel(rows) {
+  const submittedByProject = {};
+  for (const r of rows) {
+    const proj = driverProjects[r.identity_number];
+    if (!proj) continue;
+    if (!submittedByProject[proj]) submittedByProject[proj] = new Set();
+    submittedByProject[proj].add(r.identity_number);
+  }
+  document.getElementById("ov-projects-list").innerHTML = PROJECT_LIST.map(p => {
+    const total = allDrivers.filter(d => d.project === p).length;
+    const submitted = submittedByProject[p] ? submittedByProject[p].size : 0;
+    return `<div class="proj-row">
+      <div class="proj-name">${escapeHtml(p)}</div>
+      <div class="proj-nums">
+        <div><div class="n">${total}</div><div class="l">إجمالي المناديب</div></div>
+        <div><div class="n">${submitted}</div><div class="l">عبّى الفورم</div></div>
+      </div>
     </div>`;
   }).join("");
 }
