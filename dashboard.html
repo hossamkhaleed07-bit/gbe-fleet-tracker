@@ -164,6 +164,23 @@
   }
   #edit-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
   #edit-actions button { flex: 1; }
+
+  #vehicle-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
+  }
+  #vehicle-modal { background: var(--surface-1); border-radius: 14px; padding: 1.3rem; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; }
+  #vehicle-modal h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+  #vehicle-modal .field { margin-bottom: 0.8rem; }
+  #vehicle-modal label { display: block; font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; }
+  #vehicle-modal input {
+    width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--plane); color: var(--ink); font-size: 0.9rem;
+  }
+  #vehicle-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+  #vehicle-actions button { flex: 1; }
+  .toggle-pill { padding: 0.25rem 0.7rem; border-radius: 999px; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+  .toggle-pill.active { background: var(--c-green-bg); color: var(--c-green-ink); }
+  .toggle-pill.inactive { background: var(--c-pink-bg); color: var(--c-pink-ink); }
 </style>
 </head>
 <body>
@@ -194,6 +211,7 @@
       <button class="side-link" data-page="records"><span class="ic">🗂️</span> السجلات</button>
       <button class="side-link" data-page="compare"><span class="ic">🔁</span> مقارنة السائقين</button>
       <button class="side-link" data-page="stations"><span class="ic">📍</span> تقرير المحطات</button>
+      <button class="side-link" data-page="fleet" id="fleet-link"><span class="ic">🚚</span> الأسطول</button>
     </nav>
     <div id="sidebar-bottom">
       <button class="side-link" id="logout-btn"><span class="ic">🚪</span> تسجيل خروج</button>
@@ -304,6 +322,23 @@
         </table>
       </div>
     </section>
+
+    <section id="page-fleet" class="page">
+      <div style="margin-bottom: 1rem;">
+        <button class="btn btn-primary" style="width:auto" id="add-vehicle-btn">+ إضافة عربية جديدة</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>اللوحة</th><th>الفيندور</th><th>نوع الوقود</th><th>الموديل</th><th>معدل الاستهلاك (كم/لتر)</th>
+              <th>الحالة</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="fleet-body"><tr class="empty-row"><td colspan="7">جارِ التحميل...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -333,6 +368,21 @@
   </div>
 </div>
 
+<div id="vehicle-backdrop">
+  <div id="vehicle-modal">
+    <h2 id="vehicle-modal-title">إضافة عربية</h2>
+    <div class="field"><label>لوحة المركبة</label><input id="v-plate"></div>
+    <div class="field"><label>الفيندور</label><input id="v-vendor"></div>
+    <div class="field"><label>نوع الوقود</label><input id="v-fuel"></div>
+    <div class="field"><label>الموديل</label><input id="v-model"></div>
+    <div class="field"><label>معدل الاستهلاك (كم/لتر)</label><input type="number" id="v-rate"></div>
+    <div id="vehicle-actions">
+      <button class="btn" id="vehicle-cancel">إلغاء</button>
+      <button class="btn btn-primary" id="vehicle-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = "https://icgzjqzjmzvhnezpignp.supabase.co";
@@ -347,12 +397,15 @@ let currentPage = "overview";
 let vehicleRates = {};
 let driverProjects = {};
 let allDrivers = [];
+let allVehicles = [];
+let editingVehiclePlate = null;
+let isNewVehicle = false;
 let currentUserProject = null;
 let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
 
-const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات" };
+const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات", fleet: "الأسطول" };
 
 function setStatus(kind, text) {
   const el = document.getElementById("status-msg");
@@ -367,6 +420,7 @@ async function applyUserScope() {
   isAdmin = !currentUserProject;
   document.getElementById("panel-projects").style.display = isAdmin ? "block" : "none";
   document.getElementById("actions-th").style.display = isAdmin ? "" : "none";
+  document.getElementById("fleet-link").style.display = isAdmin ? "" : "none";
   const brandSub = document.querySelector(".sidebar-brand .sub2");
   if (brandSub) brandSub.textContent = isAdmin ? "لوحة تحكم الدوام" : `لوحة تحكم الدوام — مشروع ${currentUserProject}`;
 }
@@ -434,6 +488,13 @@ async function loadDriverProjects() {
   }
 }
 
+async function loadFleet() {
+  const { data, error } = await sb.from("vehicles").select("*").order("vehicle_plate");
+  if (error) return;
+  allVehicles = data || [];
+  renderFleetTable(allVehicles);
+}
+
 async function loadData() {
   document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">جارِ التحميل...</td></tr>';
   let query = sb.from("shift_entries").select("*").order("created_at", { ascending: true }).limit(2000);
@@ -442,7 +503,7 @@ async function loadData() {
   if (from) query = query.gte("shift_date", from);
   if (to) query = query.lte("shift_date", to);
 
-  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadDriverProjects()]);
+  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadDriverProjects(), loadFleet()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
     document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">تعذر التحميل</td></tr>';
@@ -654,6 +715,92 @@ function renderStationTable(groups) {
   </tr>`).join("");
 }
 
+function renderFleetTable(vehicles) {
+  const body = document.getElementById("fleet-body");
+  if (!vehicles.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">لا توجد عربيات</td></tr>'; return; }
+  body.innerHTML = vehicles.map(v => `<tr>
+    <td>${escapeHtml(v.vehicle_plate)}</td>
+    <td>${escapeHtml(v.vehicle_vendor)}</td>
+    <td>${escapeHtml(v.fuel_type)}</td>
+    <td>${escapeHtml(v.model)}</td>
+    <td>${v.avg_per_liter ?? "—"}</td>
+    <td><button class="toggle-pill ${v.is_active ? "active" : "inactive"}" data-toggle="${escapeHtml(v.vehicle_plate)}">${v.is_active ? "مفعّلة" : "معطّلة"}</button></td>
+    <td class="row-actions"><button class="btn" data-edit-vehicle="${escapeHtml(v.vehicle_plate)}">تعديل</button></td>
+  </tr>`).join("");
+
+  body.querySelectorAll("[data-toggle]").forEach(btn => btn.addEventListener("click", () => toggleVehicleActive(btn.dataset.toggle)));
+  body.querySelectorAll("[data-edit-vehicle]").forEach(btn => btn.addEventListener("click", () => openVehicleEdit(btn.dataset.editVehicle)));
+}
+
+async function toggleVehicleActive(plate) {
+  const v = allVehicles.find(x => x.vehicle_plate === plate);
+  if (!v) return;
+  const { error } = await sb.from("vehicles").update({ is_active: !v.is_active }).eq("vehicle_plate", plate);
+  if (error) { setStatus("err", "فشل التحديث: " + error.message); return; }
+  setStatus("ok", "تم التحديث");
+  loadFleet();
+}
+
+function openVehicleModal() {
+  document.getElementById("vehicle-backdrop").style.display = "flex";
+}
+
+document.getElementById("add-vehicle-btn").addEventListener("click", () => {
+  isNewVehicle = true;
+  editingVehiclePlate = null;
+  document.getElementById("vehicle-modal-title").textContent = "إضافة عربية";
+  document.getElementById("v-plate").value = "";
+  document.getElementById("v-plate").disabled = false;
+  document.getElementById("v-vendor").value = "";
+  document.getElementById("v-fuel").value = "";
+  document.getElementById("v-model").value = "";
+  document.getElementById("v-rate").value = "";
+  openVehicleModal();
+});
+
+function openVehicleEdit(plate) {
+  const v = allVehicles.find(x => x.vehicle_plate === plate);
+  if (!v) return;
+  isNewVehicle = false;
+  editingVehiclePlate = plate;
+  document.getElementById("vehicle-modal-title").textContent = "تعديل عربية";
+  document.getElementById("v-plate").value = v.vehicle_plate || "";
+  document.getElementById("v-plate").disabled = true;
+  document.getElementById("v-vendor").value = v.vehicle_vendor || "";
+  document.getElementById("v-fuel").value = v.fuel_type || "";
+  document.getElementById("v-model").value = v.model || "";
+  document.getElementById("v-rate").value = v.avg_per_liter ?? "";
+  openVehicleModal();
+}
+
+document.getElementById("vehicle-cancel").addEventListener("click", () => {
+  document.getElementById("vehicle-backdrop").style.display = "none";
+});
+
+document.getElementById("vehicle-save").addEventListener("click", async () => {
+  const plate = document.getElementById("v-plate").value.trim();
+  if (!plate) { setStatus("err", "لازم تكتبي لوحة المركبة"); return; }
+  const rateVal = document.getElementById("v-rate").value;
+  const payload = {
+    vehicle_vendor: document.getElementById("v-vendor").value.trim() || null,
+    fuel_type: document.getElementById("v-fuel").value.trim() || null,
+    model: document.getElementById("v-model").value.trim() || null,
+    avg_per_liter: rateVal === "" ? null : Number(rateVal),
+  };
+  let error;
+  if (isNewVehicle) {
+    payload.vehicle_plate = plate;
+    payload.is_active = true;
+    ({ error } = await sb.from("vehicles").insert(payload));
+  } else {
+    ({ error } = await sb.from("vehicles").update(payload).eq("vehicle_plate", editingVehiclePlate));
+  }
+  document.getElementById("vehicle-backdrop").style.display = "none";
+  if (error) { setStatus("err", "فشل الحفظ: " + error.message); return; }
+  setStatus("ok", "تم الحفظ بنجاح");
+  loadFleet();
+});
+
 function openEdit(id) {
   const row = allRows.find(r => String(r.id) === String(id));
   if (!row) return;
@@ -765,6 +912,10 @@ document.getElementById("export-btn").addEventListener("click", () => {
       ofd: g.ofd, cod: g.cod, ppd: g.ppd, picked_up: g.picked,
     }));
     downloadCsv(`station_report_${stamp}.csv`, keys, rows);
+  } else if (currentPage === "fleet") {
+    if (!allVehicles.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    const keys = ["vehicle_plate","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
+    downloadCsv(`fleet_${stamp}.csv`, keys, allVehicles);
   }
 });
 
