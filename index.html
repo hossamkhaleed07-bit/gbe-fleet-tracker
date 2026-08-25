@@ -146,19 +146,19 @@
       <div class="section-title">بيانات التوصيل</div>
       <div class="field">
         <label>الشحنات الموصّلة غير المدفوعة (COD) <span class="req">*</span></label>
-        <input type="number" id="cod_delivered" inputmode="numeric" required>
+        <input type="number" id="cod_delivered" inputmode="numeric">
       </div>
       <div class="field">
         <label>الشحنات الموصّلة المدفوعة (PPD) <span class="req">*</span></label>
-        <input type="number" id="ppd_delivered" inputmode="numeric" required>
+        <input type="number" id="ppd_delivered" inputmode="numeric">
       </div>
       <div class="field">
         <label>الشحنات المستلمة (Picked Up) <span class="req">*</span></label>
-        <input type="number" id="picked_up" inputmode="numeric" required>
+        <input type="number" id="picked_up" inputmode="numeric">
       </div>
       <div class="field">
         <label>صورة من تطبيق العميل <span class="req">*</span></label>
-        <input type="file" id="client_screenshot" accept="image/*" required>
+        <input type="file" id="client_screenshot" accept="image/*">
       </div>
     </div>
 
@@ -255,6 +255,9 @@ async function uploadFile(file, prefix) {
   return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
 }
 
+const START_ONLY_FIELDS = ["condition_video", "ofd_count"];
+const END_ONLY_FIELDS = ["cod_delivered", "ppd_delivered", "picked_up", "client_screenshot"];
+
 document.querySelectorAll(".toggle button").forEach(btn => {
   btn.addEventListener("click", () => {
     document.querySelectorAll(".toggle button").forEach(b => b.classList.remove("active"));
@@ -265,6 +268,8 @@ document.querySelectorAll(".toggle button").forEach(btn => {
     document.getElementById("end-fields").style.display = isStart ? "none" : "block";
     document.getElementById("odo-label").innerHTML = (isStart ? "قراءة عداد البداية" : "قراءة عداد النهاية") + ' <span class="req">*</span>';
     document.getElementById("photo-label").innerHTML = (isStart ? "صورة عداد البداية" : "صورة عداد النهاية") + ' <span class="req">*</span>';
+    START_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isStart; });
+    END_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = !isStart; });
   });
 });
 
