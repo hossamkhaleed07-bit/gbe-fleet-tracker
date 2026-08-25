@@ -181,6 +181,20 @@
   .toggle-pill { padding: 0.25rem 0.7rem; border-radius: 999px; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
   .toggle-pill.active { background: var(--c-green-bg); color: var(--c-green-ink); }
   .toggle-pill.inactive { background: var(--c-pink-bg); color: var(--c-pink-ink); }
+
+  #driver-backdrop {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
+  }
+  #driver-modal { background: var(--surface-1); border-radius: 14px; padding: 1.3rem; max-width: 420px; width: 100%; max-height: 85vh; overflow-y: auto; }
+  #driver-modal h2 { font-size: 1.05rem; margin: 0 0 1rem; }
+  #driver-modal .field { margin-bottom: 0.8rem; }
+  #driver-modal label { display: block; font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; }
+  #driver-modal input, #driver-modal select {
+    width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--plane); color: var(--ink); font-size: 0.9rem;
+  }
+  #driver-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+  #driver-actions button { flex: 1; }
 </style>
 </head>
 <body>
@@ -212,6 +226,7 @@
       <button class="side-link" data-page="compare"><span class="ic">🔁</span> مقارنة السائقين</button>
       <button class="side-link" data-page="stations"><span class="ic">📍</span> تقرير المحطات</button>
       <button class="side-link" data-page="fleet" id="fleet-link"><span class="ic">🚚</span> الأسطول</button>
+      <button class="side-link" data-page="drivers" id="drivers-link"><span class="ic">🧑‍✈️</span> السائقين</button>
     </nav>
     <div id="sidebar-bottom">
       <button class="side-link" id="logout-btn"><span class="ic">🚪</span> تسجيل خروج</button>
@@ -339,6 +354,23 @@
         </table>
       </div>
     </section>
+
+    <section id="page-drivers" class="page">
+      <div style="margin-bottom: 1rem;">
+        <button class="btn btn-primary" style="width:auto" id="add-driver-btn">+ إضافة سائق جديد</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>رقم الهوية</th><th>الاسم</th><th>الجنسية</th><th>رقم الموبايل</th><th>المشروع</th>
+              <th>الحالة</th><th></th>
+            </tr>
+          </thead>
+          <tbody id="drivers-body"><tr class="empty-row"><td colspan="7">جارِ التحميل...</td></tr></tbody>
+        </table>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -383,6 +415,31 @@
   </div>
 </div>
 
+<div id="driver-backdrop">
+  <div id="driver-modal">
+    <h2 id="driver-modal-title">إضافة سائق</h2>
+    <div class="field"><label>رقم الهوية أو الإقامة</label><input id="d-identity"></div>
+    <div class="field"><label>الاسم</label><input id="d-name"></div>
+    <div class="field"><label>الجنسية</label><input id="d-nationality"></div>
+    <div class="field"><label>رقم الموبايل</label><input id="d-mobile"></div>
+    <div class="field">
+      <label>المشروع</label>
+      <select id="d-project">
+        <option value="">— بدون —</option>
+        <option value="FDP">FDP</option>
+        <option value="ADM">ADM</option>
+        <option value="LMS">LMS</option>
+        <option value="JDL">JDL</option>
+        <option value="SHC">SHC</option>
+      </select>
+    </div>
+    <div id="driver-actions">
+      <button class="btn" id="driver-cancel">إلغاء</button>
+      <button class="btn btn-primary" id="driver-save">حفظ</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 const SUPABASE_URL = "https://icgzjqzjmzvhnezpignp.supabase.co";
@@ -405,7 +462,7 @@ let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
 
-const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات", fleet: "الأسطول" };
+const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات", fleet: "الأسطول", drivers: "السائقين" };
 
 function setStatus(kind, text) {
   const el = document.getElementById("status-msg");
@@ -421,6 +478,7 @@ async function applyUserScope() {
   document.getElementById("panel-projects").style.display = isAdmin ? "block" : "none";
   document.getElementById("actions-th").style.display = isAdmin ? "" : "none";
   document.getElementById("fleet-link").style.display = isAdmin ? "" : "none";
+  document.getElementById("drivers-link").style.display = isAdmin ? "" : "none";
   const brandSub = document.querySelector(".sidebar-brand .sub2");
   if (brandSub) brandSub.textContent = isAdmin ? "لوحة تحكم الدوام" : `لوحة تحكم الدوام — مشروع ${currentUserProject}`;
 }
@@ -479,13 +537,14 @@ async function loadVehicleRates() {
 }
 
 async function loadDriverProjects() {
-  const { data, error } = await sb.from("drivers").select("identity_number,project");
+  const { data, error } = await sb.from("drivers").select("*").order("identity_number");
   if (error) return;
   driverProjects = {};
   allDrivers = data || [];
   for (const d of allDrivers) {
     if (d.identity_number && d.project) driverProjects[d.identity_number] = d.project;
   }
+  renderDriversTable(allDrivers);
 }
 
 async function loadFleet() {
@@ -801,6 +860,90 @@ document.getElementById("vehicle-save").addEventListener("click", async () => {
   loadFleet();
 });
 
+let editingDriverIdentity = null;
+let isNewDriver = false;
+
+function renderDriversTable(drivers) {
+  const body = document.getElementById("drivers-body");
+  if (!drivers.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">لا يوجد سائقين</td></tr>'; return; }
+  body.innerHTML = drivers.map(d => `<tr>
+    <td>${escapeHtml(d.identity_number)}</td>
+    <td>${escapeHtml(d.full_name)}</td>
+    <td>${escapeHtml(d.nationality)}</td>
+    <td>${escapeHtml(d.mobile_number)}</td>
+    <td>${escapeHtml(d.project)}</td>
+    <td><button class="toggle-pill ${d.is_active ? "active" : "inactive"}" data-toggle-driver="${escapeHtml(d.identity_number)}">${d.is_active ? "مفعّل" : "معطّل"}</button></td>
+    <td class="row-actions"><button class="btn" data-edit-driver="${escapeHtml(d.identity_number)}">تعديل</button></td>
+  </tr>`).join("");
+
+  body.querySelectorAll("[data-toggle-driver]").forEach(btn => btn.addEventListener("click", () => toggleDriverActive(btn.dataset.toggleDriver)));
+  body.querySelectorAll("[data-edit-driver]").forEach(btn => btn.addEventListener("click", () => openDriverEdit(btn.dataset.editDriver)));
+}
+
+async function toggleDriverActive(identity) {
+  const d = allDrivers.find(x => x.identity_number === identity);
+  if (!d) return;
+  const { error } = await sb.from("drivers").update({ is_active: !d.is_active }).eq("identity_number", identity);
+  if (error) { setStatus("err", "فشل التحديث: " + error.message); return; }
+  setStatus("ok", "تم التحديث");
+  loadDriverProjects();
+}
+
+document.getElementById("add-driver-btn").addEventListener("click", () => {
+  isNewDriver = true;
+  editingDriverIdentity = null;
+  document.getElementById("driver-modal-title").textContent = "إضافة سائق";
+  document.getElementById("d-identity").value = "";
+  document.getElementById("d-identity").disabled = false;
+  document.getElementById("d-name").value = "";
+  document.getElementById("d-nationality").value = "";
+  document.getElementById("d-mobile").value = "";
+  document.getElementById("d-project").value = "";
+  document.getElementById("driver-backdrop").style.display = "flex";
+});
+
+function openDriverEdit(identity) {
+  const d = allDrivers.find(x => x.identity_number === identity);
+  if (!d) return;
+  isNewDriver = false;
+  editingDriverIdentity = identity;
+  document.getElementById("driver-modal-title").textContent = "تعديل سائق";
+  document.getElementById("d-identity").value = d.identity_number || "";
+  document.getElementById("d-identity").disabled = true;
+  document.getElementById("d-name").value = d.full_name || "";
+  document.getElementById("d-nationality").value = d.nationality || "";
+  document.getElementById("d-mobile").value = d.mobile_number || "";
+  document.getElementById("d-project").value = d.project || "";
+  document.getElementById("driver-backdrop").style.display = "flex";
+}
+
+document.getElementById("driver-cancel").addEventListener("click", () => {
+  document.getElementById("driver-backdrop").style.display = "none";
+});
+
+document.getElementById("driver-save").addEventListener("click", async () => {
+  const identity = document.getElementById("d-identity").value.trim();
+  if (!identity) { setStatus("err", "لازم تكتبي رقم الهوية"); return; }
+  const payload = {
+    full_name: document.getElementById("d-name").value.trim() || null,
+    nationality: document.getElementById("d-nationality").value.trim() || null,
+    mobile_number: document.getElementById("d-mobile").value.trim() || null,
+    project: document.getElementById("d-project").value || null,
+  };
+  let error;
+  if (isNewDriver) {
+    payload.identity_number = identity;
+    payload.is_active = true;
+    ({ error } = await sb.from("drivers").insert(payload));
+  } else {
+    ({ error } = await sb.from("drivers").update(payload).eq("identity_number", editingDriverIdentity));
+  }
+  document.getElementById("driver-backdrop").style.display = "none";
+  if (error) { setStatus("err", "فشل الحفظ: " + error.message); return; }
+  setStatus("ok", "تم الحفظ بنجاح");
+  loadDriverProjects();
+});
+
 function openEdit(id) {
   const row = allRows.find(r => String(r.id) === String(id));
   if (!row) return;
@@ -916,6 +1059,10 @@ document.getElementById("export-btn").addEventListener("click", () => {
     if (!allVehicles.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["vehicle_plate","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
     downloadCsv(`fleet_${stamp}.csv`, keys, allVehicles);
+  } else if (currentPage === "drivers") {
+    if (!allDrivers.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    const keys = ["identity_number","full_name","nationality","mobile_number","project","is_active"];
+    downloadCsv(`drivers_${stamp}.csv`, keys, allDrivers);
   }
 });
 
