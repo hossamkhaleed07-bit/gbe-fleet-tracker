@@ -267,11 +267,11 @@
         <table>
           <thead>
             <tr>
-              <th>التاريخ</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
+              <th>وقت الإرسال</th><th>تاريخ الدوام</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
               <th>المحطة</th><th>العداد</th><th>الصور</th><th>المنطقة</th><th id="actions-th"></th>
             </tr>
           </thead>
-          <tbody id="table-body"><tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr></tbody>
+          <tbody id="table-body"><tr class="empty-row"><td colspan="12">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -318,6 +318,7 @@
       <label>نوع الدوام</label>
       <select id="e-shift_type"><option value="start">بداية</option><option value="end">نهاية</option></select>
     </div>
+    <div class="field"><label>تاريخ الدوام</label><input type="date" id="e-shift_date"></div>
     <div class="field"><label>قراءة العداد</label><input type="number" id="e-odo_reading"></div>
     <div class="field"><label>OFD</label><input type="number" id="e-ofd_count"></div>
     <div class="field"><label>COD</label><input type="number" id="e-cod_delivered"></div>
@@ -434,17 +435,17 @@ async function loadDriverProjects() {
 }
 
 async function loadData() {
-  document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr>';
+  document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">جارِ التحميل...</td></tr>';
   let query = sb.from("shift_entries").select("*").order("created_at", { ascending: true }).limit(2000);
   const from = document.getElementById("f-from").value;
   const to = document.getElementById("f-to").value;
-  if (from) query = query.gte("created_at", `${from}T00:00:00`);
-  if (to) query = query.lte("created_at", `${to}T23:59:59`);
+  if (from) query = query.gte("shift_date", from);
+  if (to) query = query.lte("shift_date", to);
 
   const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadDriverProjects()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
-    document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="11">تعذر التحميل</td></tr>';
+    document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">تعذر التحميل</td></tr>';
     return;
   }
   allRows = data || [];
@@ -477,7 +478,7 @@ function applyRecordsFilterAndRender() {
 function buildDriverComparison(rows) {
   const groups = {};
   for (const r of rows) {
-    const day = (r.created_at || "").slice(0, 10);
+    const day = r.shift_date || (r.created_at || "").slice(0, 10);
     const key = `${r.identity_number}|${day}`;
     if (!groups[key]) groups[key] = { day, identity_number: r.identity_number, full_name: r.full_name, vehicle_plate: r.vehicle_plate, start: null, end: null };
     const g = groups[key];
@@ -506,11 +507,16 @@ function buildStationReport(rows) {
   return Object.values(groups).map(g => ({ ...g, drivers: g.drivers.size })).sort((a, b) => b.total - a.total);
 }
 
+function localToday() {
+  const d = new Date();
+  return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
 const KPI_COLORS = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
 
 function renderStats(rows, compareRows) {
-  const today = new Date().toISOString().slice(0, 10);
-  const todayCount = rows.filter(r => (r.created_at || "").slice(0, 10) === today).length;
+  const today = localToday();
+  const todayCount = rows.filter(r => r.shift_date === today).length;
   const startCount = rows.filter(r => r.shift_type === "start").length;
   const endCount = rows.filter(r => r.shift_type === "end").length;
   const drivers = new Set(rows.map(r => r.identity_number)).size;
@@ -555,7 +561,7 @@ function renderProjectsPanel(rows) {
 }
 
 function renderOverviewPanels(rows, compareRows, stationRows) {
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localToday();
   const todayGroups = compareRows.filter(g => g.day === today);
   const started = todayGroups.filter(g => g.start).length;
   const completed = todayGroups.filter(g => g.start && g.end).length;
@@ -585,7 +591,7 @@ function escapeHtml(v) {
 
 function renderTable(rows) {
   const body = document.getElementById("table-body");
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">لا توجد سجلات مطابقة</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">لا توجد سجلات مطابقة</td></tr>'; return; }
   body.innerHTML = rows.map(r => {
     const media = [];
     if (r.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(r.odo_photo_url)}" target="_blank">عداد</a>`);
@@ -593,6 +599,7 @@ function renderTable(rows) {
     if (r.client_screenshot_url) media.push(`<a class="media-link" href="${escapeHtml(r.client_screenshot_url)}" target="_blank">سكرين</a>`);
     return `<tr>
       <td>${escapeHtml((r.created_at || "").replace("T", " ").slice(0, 16))}</td>
+      <td>${escapeHtml(r.shift_date)}</td>
       <td><span class="badge ${r.shift_type}">${r.shift_type === "start" ? "بداية" : "نهاية"}</span></td>
       <td>${escapeHtml(r.full_name)}</td>
       <td>${escapeHtml(r.identity_number)}</td>
@@ -656,6 +663,7 @@ function openEdit(id) {
   document.getElementById("e-vehicle_plate").value = row.vehicle_plate || "";
   document.getElementById("e-station_name").value = row.station_name || "";
   document.getElementById("e-shift_type").value = row.shift_type || "start";
+  document.getElementById("e-shift_date").value = row.shift_date || "";
   document.getElementById("e-odo_reading").value = row.odo_reading ?? "";
   document.getElementById("e-ofd_count").value = row.ofd_count ?? "";
   document.getElementById("e-cod_delivered").value = row.cod_delivered ?? "";
@@ -680,6 +688,7 @@ document.getElementById("edit-save").addEventListener("click", async () => {
     vehicle_plate: document.getElementById("e-vehicle_plate").value.trim(),
     station_name: document.getElementById("e-station_name").value.trim() || null,
     shift_type: document.getElementById("e-shift_type").value,
+    shift_date: document.getElementById("e-shift_date").value || localToday(),
     odo_reading: num(document.getElementById("e-odo_reading").value),
     ofd_count: num(document.getElementById("e-ofd_count").value),
     cod_delivered: num(document.getElementById("e-cod_delivered").value),
@@ -728,7 +737,7 @@ document.getElementById("export-btn").addEventListener("click", () => {
   const stamp = new Date().toISOString().slice(0, 10);
   if (currentPage === "records") {
     if (!currentRecordsRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["created_at","shift_type","full_name","identity_number","project","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
+    const keys = ["created_at","shift_date","shift_type","full_name","identity_number","project","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
     const rowsWithProject = currentRecordsRows.map(r => ({ ...r, project: driverProjects[r.identity_number] || "" }));
     downloadCsv(`shift_entries_${stamp}.csv`, keys, rowsWithProject);
   } else if (currentPage === "compare") {
