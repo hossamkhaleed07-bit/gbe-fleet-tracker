@@ -240,7 +240,7 @@
           <h3>التوزيع حسب المحطة</h3>
           <div id="ov-stations-bars"></div>
         </div>
-        <div class="panel">
+        <div class="panel" id="panel-projects">
           <h3>المشاريع</h3>
           <div id="ov-projects-list"></div>
         </div>
@@ -268,7 +268,7 @@
           <thead>
             <tr>
               <th>التاريخ</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
-              <th>المحطة</th><th>العداد</th><th>الصور</th><th>المنطقة</th><th></th>
+              <th>المحطة</th><th>العداد</th><th>الصور</th><th>المنطقة</th><th id="actions-th"></th>
             </tr>
           </thead>
           <tbody id="table-body"><tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr></tbody>
@@ -346,6 +346,8 @@ let currentPage = "overview";
 let vehicleRates = {};
 let driverProjects = {};
 let allDrivers = [];
+let currentUserProject = null;
+let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
 
@@ -358,9 +360,20 @@ function setStatus(kind, text) {
   if (text) setTimeout(() => { el.className = ""; el.textContent = ""; }, 4000);
 }
 
-function showDashboard() {
+async function applyUserScope() {
+  const { data: { user } } = await sb.auth.getUser();
+  currentUserProject = user?.user_metadata?.project || null;
+  isAdmin = !currentUserProject;
+  document.getElementById("panel-projects").style.display = isAdmin ? "block" : "none";
+  document.getElementById("actions-th").style.display = isAdmin ? "" : "none";
+  const brandSub = document.querySelector(".sidebar-brand .sub2");
+  if (brandSub) brandSub.textContent = isAdmin ? "لوحة تحكم الدوام" : `لوحة تحكم الدوام — مشروع ${currentUserProject}`;
+}
+
+async function showDashboard() {
   document.getElementById("login-screen").style.display = "none";
   document.getElementById("app-layout").style.display = "flex";
+  await applyUserScope();
   loadData();
 }
 
@@ -589,10 +602,10 @@ function renderTable(rows) {
       <td>${escapeHtml(r.odo_reading)}</td>
       <td>${media.join(" · ") || "—"}</td>
       <td>${escapeHtml(r.area)}</td>
-      <td class="row-actions">
+      ${isAdmin ? `<td class="row-actions">
         <button class="btn" data-edit="${r.id}">تعديل</button>
         <button class="btn btn-danger" data-del="${r.id}">حذف</button>
-      </td>
+      </td>` : ""}
     </tr>`;
   }).join("");
   body.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => openEdit(btn.dataset.edit)));
