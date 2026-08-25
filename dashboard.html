@@ -256,11 +256,11 @@
         <table>
           <thead>
             <tr>
-              <th>التاريخ</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>اللوحة</th>
+              <th>التاريخ</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
               <th>المحطة</th><th>العداد</th><th>الصور</th><th>المنطقة</th><th></th>
             </tr>
           </thead>
-          <tbody id="table-body"><tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr></tbody>
+          <tbody id="table-body"><tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -333,6 +333,7 @@ let currentCompareRows = [];
 let currentStationRows = [];
 let currentPage = "overview";
 let vehicleRates = {};
+let driverProjects = {};
 let editingId = null;
 
 const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات" };
@@ -396,18 +397,27 @@ async function loadVehicleRates() {
   }
 }
 
+async function loadDriverProjects() {
+  const { data, error } = await sb.from("drivers").select("identity_number,project");
+  if (error) return;
+  driverProjects = {};
+  for (const d of data || []) {
+    if (d.identity_number && d.project) driverProjects[d.identity_number] = d.project;
+  }
+}
+
 async function loadData() {
-  document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr>';
+  document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr>';
   let query = sb.from("shift_entries").select("*").order("created_at", { ascending: true }).limit(2000);
   const from = document.getElementById("f-from").value;
   const to = document.getElementById("f-to").value;
   if (from) query = query.gte("created_at", `${from}T00:00:00`);
   if (to) query = query.lte("created_at", `${to}T23:59:59`);
 
-  const [{ data, error }] = await Promise.all([query, loadVehicleRates()]);
+  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadDriverProjects()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
-    document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="10">تعذر التحميل</td></tr>';
+    document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="11">تعذر التحميل</td></tr>';
     return;
   }
   allRows = data || [];
@@ -525,7 +535,7 @@ function escapeHtml(v) {
 
 function renderTable(rows) {
   const body = document.getElementById("table-body");
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="10">لا توجد سجلات مطابقة</td></tr>'; return; }
+  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">لا توجد سجلات مطابقة</td></tr>'; return; }
   body.innerHTML = rows.map(r => {
     const media = [];
     if (r.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(r.odo_photo_url)}" target="_blank">عداد</a>`);
@@ -536,6 +546,7 @@ function renderTable(rows) {
       <td><span class="badge ${r.shift_type}">${r.shift_type === "start" ? "بداية" : "نهاية"}</span></td>
       <td>${escapeHtml(r.full_name)}</td>
       <td>${escapeHtml(r.identity_number)}</td>
+      <td>${escapeHtml(driverProjects[r.identity_number])}</td>
       <td>${escapeHtml(r.vehicle_plate)}</td>
       <td>${escapeHtml(r.station_name)}</td>
       <td>${escapeHtml(r.odo_reading)}</td>
@@ -667,8 +678,9 @@ document.getElementById("export-btn").addEventListener("click", () => {
   const stamp = new Date().toISOString().slice(0, 10);
   if (currentPage === "records") {
     if (!currentRecordsRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["created_at","shift_type","full_name","identity_number","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
-    downloadCsv(`shift_entries_${stamp}.csv`, keys, currentRecordsRows);
+    const keys = ["created_at","shift_type","full_name","identity_number","project","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
+    const rowsWithProject = currentRecordsRows.map(r => ({ ...r, project: driverProjects[r.identity_number] || "" }));
+    downloadCsv(`shift_entries_${stamp}.csv`, keys, rowsWithProject);
   } else if (currentPage === "compare") {
     if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["date","full_name","identity_number","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","start_time","end_time","ofd","cod","ppd","picked_up","status"];
