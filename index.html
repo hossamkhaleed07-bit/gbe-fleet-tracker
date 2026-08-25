@@ -95,6 +95,11 @@
     </div>
 
     <div class="field">
+      <label>تاريخ الدوام <span class="req">*</span></label>
+      <input type="date" id="shift_date" required>
+      <p class="hint">لو بتسجلي نهاية الدوام بعد نص الليل، اختاري تاريخ يوم بداية الدوام مش تاريخ اليوم الجديد.</p>
+    </div>
+    <div class="field">
       <label>رقم الهوية أو الإقامة <span class="req">*</span></label>
       <input type="text" id="identity_number" inputmode="numeric" required>
     </div>
@@ -298,6 +303,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
       p_client_screenshot_url: screenshotUrl,
       p_email_address: document.getElementById("email_address").value || null,
       p_area: document.getElementById("area").value || null,
+      p_shift_date: document.getElementById("shift_date").value,
     };
 
     const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_shift_entry`, {
@@ -310,6 +316,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
     setStatus("ok", "تم تسجيل الدوام بنجاح ✓");
     document.getElementById("shift-form").reset();
     document.querySelector('.toggle button[data-type="start"]').click();
+    setDefaultShiftDate();
   } catch (err) {
     console.error(err);
     setStatus("err", "حصل خطأ: " + err.message);
@@ -318,6 +325,13 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
   }
 });
 
+function setDefaultShiftDate() {
+  const d = new Date();
+  const localDate = new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  document.getElementById("shift_date").value = localDate;
+}
+
+setDefaultShiftDate();
 loadStations();
 loadVehicles();
 </script>
