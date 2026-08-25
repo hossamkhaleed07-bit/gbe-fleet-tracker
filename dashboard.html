@@ -544,6 +544,7 @@ document.querySelectorAll(".side-link[data-page]").forEach(btn => {
     document.getElementById("page-crumb").textContent = PAGE_LABELS[currentPage];
     document.getElementById("page-title").textContent = PAGE_LABELS[currentPage];
     document.getElementById("export-btn").style.display = currentPage === "overview" ? "none" : "inline-block";
+    document.getElementById("global-filters").style.display = ["fleet", "drivers"].includes(currentPage) ? "none" : "flex";
   });
 });
 
