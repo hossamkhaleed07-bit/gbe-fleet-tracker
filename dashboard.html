@@ -359,6 +359,25 @@
       <div style="margin-bottom: 1rem;">
         <button class="btn btn-primary" style="width:auto" id="add-driver-btn">+ إضافة سائق جديد</button>
       </div>
+      <div class="local-filters">
+        <div class="field">
+          <label>بحث (اسم / رقم الهوية)</label>
+          <input type="text" id="d-search" placeholder="اكتبي هنا...">
+        </div>
+        <div class="field">
+          <label>المشروع</label>
+          <select id="d-filter-project">
+            <option value="">الكل</option>
+            <option value="FDP">FDP</option>
+            <option value="ADM">ADM</option>
+            <option value="LMS">LMS</option>
+            <option value="JDL">JDL</option>
+            <option value="SHC">SHC</option>
+          </select>
+        </div>
+        <div class="field"><button class="btn" id="drivers-filter-btn">تطبيق</button></div>
+        <div class="field"><button class="btn" id="drivers-reset-btn">مسح الفلاتر</button></div>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
@@ -455,6 +474,7 @@ let vehicleRates = {};
 let driverProjects = {};
 let allDrivers = [];
 let allVehicles = [];
+let currentDriversRows = [];
 let editingVehiclePlate = null;
 let isNewVehicle = false;
 let currentUserProject = null;
@@ -544,7 +564,22 @@ async function loadDriverProjects() {
   for (const d of allDrivers) {
     if (d.identity_number && d.project) driverProjects[d.identity_number] = d.project;
   }
-  renderDriversTable(allDrivers);
+  applyDriversFilterAndRender();
+}
+
+function applyDriversFilterAndRender() {
+  const search = document.getElementById("d-search").value.trim().toLowerCase();
+  const project = document.getElementById("d-filter-project").value;
+  let rows = allDrivers;
+  if (project) rows = rows.filter(d => d.project === project);
+  if (search) {
+    rows = rows.filter(d =>
+      (d.full_name || "").toLowerCase().includes(search) ||
+      (d.identity_number || "").toLowerCase().includes(search)
+    );
+  }
+  currentDriversRows = rows;
+  renderDriversTable(currentDriversRows);
 }
 
 async function loadFleet() {
@@ -1010,6 +1045,12 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   loadData();
 });
 document.getElementById("local-filter-btn").addEventListener("click", applyRecordsFilterAndRender);
+document.getElementById("drivers-filter-btn").addEventListener("click", applyDriversFilterAndRender);
+document.getElementById("drivers-reset-btn").addEventListener("click", () => {
+  document.getElementById("d-search").value = "";
+  document.getElementById("d-filter-project").value = "";
+  applyDriversFilterAndRender();
+});
 
 function downloadCsv(filename, keys, rows) {
   const csvRows = [keys.join(",")];
@@ -1060,9 +1101,9 @@ document.getElementById("export-btn").addEventListener("click", () => {
     const keys = ["vehicle_plate","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
     downloadCsv(`fleet_${stamp}.csv`, keys, allVehicles);
   } else if (currentPage === "drivers") {
-    if (!allDrivers.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
+    if (!currentDriversRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["identity_number","full_name","nationality","mobile_number","project","is_active"];
-    downloadCsv(`drivers_${stamp}.csv`, keys, allDrivers);
+    downloadCsv(`drivers_${stamp}.csv`, keys, currentDriversRows);
   }
 });
 
