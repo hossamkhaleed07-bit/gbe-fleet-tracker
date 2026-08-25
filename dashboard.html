@@ -221,10 +221,10 @@
       <div><div class="brand-text">Master Fuel Report</div><span class="sub2">لوحة تحكم الدوام</span></div>
     </div>
     <nav>
-      <button class="side-link active" data-page="overview"><span class="ic">📊</span> نظرة عامة</button>
-      <button class="side-link" data-page="records"><span class="ic">🗂️</span> السجلات</button>
-      <button class="side-link" data-page="compare"><span class="ic">🔁</span> مقارنة السائقين</button>
-      <button class="side-link" data-page="stations"><span class="ic">📍</span> تقرير المحطات</button>
+      <button class="side-link active" data-page="overview" id="overview-link"><span class="ic">📊</span> نظرة عامة</button>
+      <button class="side-link" data-page="records" id="records-link"><span class="ic">🗂️</span> السجلات</button>
+      <button class="side-link" data-page="compare" id="compare-link"><span class="ic">🔁</span> مقارنة السائقين</button>
+      <button class="side-link" data-page="stations" id="stations-link"><span class="ic">📍</span> تقرير المحطات</button>
       <button class="side-link" data-page="fleet" id="fleet-link"><span class="ic">🚚</span> الأسطول</button>
       <button class="side-link" data-page="drivers" id="drivers-link"><span class="ic">🧑‍✈️</span> السائقين</button>
     </nav>
@@ -495,6 +495,7 @@ let currentFleetRows = [];
 let editingVehiclePlate = null;
 let isNewVehicle = false;
 let currentUserProject = null;
+let isFleetManager = false;
 let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
@@ -511,13 +512,35 @@ function setStatus(kind, text) {
 async function applyUserScope() {
   const { data: { user } } = await sb.auth.getUser();
   currentUserProject = user?.user_metadata?.project || null;
-  isAdmin = !currentUserProject;
+  isFleetManager = user?.user_metadata?.role === "fleet_manager";
+  isAdmin = !currentUserProject && !isFleetManager;
+  const canManageFleet = isAdmin || isFleetManager;
+
   document.getElementById("panel-projects").style.display = isAdmin ? "block" : "none";
   document.getElementById("actions-th").style.display = isAdmin ? "" : "none";
-  document.getElementById("fleet-link").style.display = isAdmin ? "" : "none";
-  document.getElementById("drivers-link").style.display = isAdmin ? "" : "none";
+  document.getElementById("fleet-link").style.display = canManageFleet ? "" : "none";
+  document.getElementById("drivers-link").style.display = canManageFleet ? "" : "none";
+  ["overview-link", "records-link", "compare-link", "stations-link"].forEach(id => {
+    document.getElementById(id).style.display = isFleetManager ? "none" : "";
+  });
+
   const brandSub = document.querySelector(".sidebar-brand .sub2");
-  if (brandSub) brandSub.textContent = isAdmin ? "لوحة تحكم الدوام" : `لوحة تحكم الدوام — مشروع ${currentUserProject}`;
+  if (brandSub) {
+    brandSub.textContent = isFleetManager ? "لوحة تحكم الدوام — إدارة الأسطول"
+      : isAdmin ? "لوحة تحكم الدوام"
+      : `لوحة تحكم الدوام — مشروع ${currentUserProject}`;
+  }
+
+  if (isFleetManager) {
+    document.querySelectorAll(".side-link[data-page]").forEach(b => b.classList.remove("active"));
+    document.getElementById("fleet-link").classList.add("active");
+    currentPage = "fleet";
+    document.querySelectorAll(".page").forEach(p => p.classList.remove("active"));
+    document.getElementById("page-fleet").classList.add("active");
+    document.getElementById("page-crumb").textContent = PAGE_LABELS.fleet;
+    document.getElementById("page-title").textContent = PAGE_LABELS.fleet;
+    document.getElementById("global-filters").style.display = "none";
+  }
 }
 
 async function showDashboard() {
