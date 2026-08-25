@@ -79,9 +79,25 @@
   .side-link:hover { background: rgba(20,43,69,0.06); }
   .side-link.active { background: var(--sidebar-active-bg); color: var(--sidebar-active-ink); }
   .side-link .ic { font-size: 1rem; }
+  .side-section-label {
+    font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--sidebar-muted); padding: 0.9rem 0.7rem 0.3rem;
+  }
+  .side-section-label:first-child { padding-top: 0.2rem; }
   #sidebar-bottom { margin-top: auto; border-top: 1px solid var(--sidebar-border); padding-top: 0.6rem; }
 
   #content { flex: 1; min-width: 0; padding: 1.4rem 1.6rem 4rem; }
+
+  @media (max-width: 860px) {
+    #app-layout { flex-direction: column; }
+    #sidebar { width: 100%; flex: 0 0 auto; flex-direction: row; align-items: center; padding: 0.6rem 0.7rem; gap: 0.5rem; }
+    .sidebar-brand { display: none; }
+    #sidebar nav { display: flex; flex-direction: row; gap: 0.3rem; overflow-x: auto; flex: 1; min-width: 0; }
+    .side-section-label { display: none; }
+    .side-link { width: auto; white-space: nowrap; flex-shrink: 0; }
+    #sidebar-bottom { margin-top: 0; border-top: none; padding-top: 0; flex-shrink: 0; }
+    #content { padding: 1rem; }
+  }
   .content-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1rem; gap: 1rem; flex-wrap: wrap; }
   .breadcrumb { font-size: 0.8rem; color: var(--ink-muted); margin-bottom: 0.3rem; }
   .breadcrumb b { color: var(--ink); }
@@ -99,7 +115,10 @@
     padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
     background: var(--plane); color: var(--ink); font-size: 0.85rem;
   }
-  .local-filters { display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1rem; align-items: end; }
+  .local-filters {
+    display: flex; gap: 0.6rem; flex-wrap: wrap; margin-bottom: 1.2rem; align-items: end;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 12px; padding: 0.9rem;
+  }
 
   /* ---- pages ---- */
   .page { display: none; }
@@ -143,6 +162,9 @@
   th, td { padding: 0.6rem 0.75rem; text-align: right; border-bottom: 1px solid var(--grid); }
   th { color: var(--ink-muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
   tr:last-child td { border-bottom: none; }
+  tbody tr:nth-child(even) { background: color-mix(in srgb, var(--plane) 55%, transparent); }
+  .group-row th { text-align: center; font-size: 0.68rem; color: var(--ink-muted); background: var(--plane); border-bottom: 1px solid var(--border); }
+  th.group-alt, td.group-alt { background: color-mix(in srgb, var(--blue) 4%, transparent); }
   .badge { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
   .badge.start { background: var(--c-green-bg); color: var(--c-green-ink); }
   .badge.end { background: var(--c-blue-bg); color: var(--c-blue-ink); }
@@ -225,10 +247,12 @@
       <div><div class="brand-text">Master Fuel Report</div><span class="sub2">لوحة تحكم الدوام</span></div>
     </div>
     <nav>
+      <div class="side-section-label">التقارير</div>
       <button class="side-link active" data-page="overview" id="overview-link"><span class="ic">📊</span> نظرة عامة</button>
       <button class="side-link" data-page="records" id="records-link"><span class="ic">🗂️</span> السجلات</button>
       <button class="side-link" data-page="compare" id="compare-link"><span class="ic">🔁</span> مقارنة السائقين</button>
       <button class="side-link" data-page="stations" id="stations-link"><span class="ic">📍</span> تقرير المحطات</button>
+      <div class="side-section-label">الإدارة</div>
       <button class="side-link" data-page="fleet" id="fleet-link"><span class="ic">🚚</span> الأسطول</button>
       <button class="side-link" data-page="drivers" id="drivers-link"><span class="ic">🧑‍✈️</span> السائقين</button>
     </nav>
@@ -317,10 +341,16 @@
       <div class="table-wrap">
         <table>
           <thead>
+            <tr class="group-row">
+              <th colspan="4">بيانات الرحلة</th>
+              <th colspan="6" class="group-alt">العداد والوقود</th>
+              <th colspan="7">التوصيل والمبيعات</th>
+              <th class="group-alt"></th>
+            </tr>
             <tr>
               <th>التاريخ</th><th>السائق</th><th>رقم الهوية</th><th>اللوحة</th><th>عداد البداية</th>
-              <th>عداد النهاية</th><th>المسافة المقطوعة</th><th>الوقود المتوقع (لتر)</th><th>وقت البداية</th><th>وقت النهاية</th>
-              <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th><th>الحالة</th>
+              <th class="group-alt">عداد النهاية</th><th class="group-alt">المسافة المقطوعة</th><th class="group-alt">الوقود المتوقع (لتر)</th><th class="group-alt">وقت البداية</th><th class="group-alt">وقت النهاية</th>
+              <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th><th class="group-alt">الحالة</th>
             </tr>
           </thead>
           <tbody id="compare-body"><tr class="empty-row"><td colspan="18">جارِ التحميل...</td></tr></tbody>
@@ -872,11 +902,11 @@ function renderCompareTable(groups) {
     const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
     return `<tr>
       <td>${escapeHtml(g.day)}</td><td>${escapeHtml(g.full_name)}</td><td>${escapeHtml(g.identity_number)}</td>
-      <td>${escapeHtml(g.vehicle_plate)}</td><td>${g.start?.odo_reading ?? "—"}</td><td>${g.end?.odo_reading ?? "—"}</td>
-      <td>${dist}</td><td>${fuel}</td><td>${timeOf(g.start)}</td><td>${timeOf(g.end)}</td>
+      <td>${escapeHtml(g.vehicle_plate)}</td><td>${g.start?.odo_reading ?? "—"}</td><td class="group-alt">${g.end?.odo_reading ?? "—"}</td>
+      <td class="group-alt">${dist}</td><td class="group-alt">${fuel}</td><td class="group-alt">${timeOf(g.start)}</td><td class="group-alt">${timeOf(g.end)}</td>
       <td>${g.start?.ofd_count ?? "—"}</td><td>${g.end?.cod_delivered ?? "—"}</td>
       <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td>
-      <td>${delivered}</td><td>${deliveryPct}</td><td>${sales}</td><td>${status}</td>
+      <td>${delivered}</td><td>${deliveryPct}</td><td>${sales}</td><td class="group-alt">${status}</td>
     </tr>`;
   }).join("");
 }
