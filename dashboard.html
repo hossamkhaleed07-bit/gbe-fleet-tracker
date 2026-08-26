@@ -1255,7 +1255,6 @@ async function toggleVehicleActive(plate) {
   if (!v) return;
   const { error } = await sb.from("vehicles").update({ is_active: !v.is_active }).eq("vehicle_plate", plate);
   if (error) { setStatus("err", "فشل التحديث: " + error.message); return; }
-  setStatus("ok", "تم التحديث");
   loadFleet();
 }
 
