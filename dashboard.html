@@ -163,8 +163,6 @@
   th { color: var(--ink-muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
   tr:last-child td { border-bottom: none; }
   tbody tr:nth-child(even) { background: color-mix(in srgb, var(--plane) 55%, transparent); }
-  .group-row th { text-align: center; font-size: 0.68rem; color: var(--ink-muted); background: var(--plane); border-bottom: 1px solid var(--border); }
-  th.group-alt, td.group-alt { background: color-mix(in srgb, var(--blue) 4%, transparent); }
   .badge { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
   .badge.start { background: var(--c-green-bg); color: var(--c-green-ink); }
   .badge.end { background: var(--c-blue-bg); color: var(--c-blue-ink); }
@@ -263,6 +261,19 @@
   .driver-card-actions button:first-child { border-inline-end: 1px solid var(--border); }
   .driver-card-actions button.danger { color: var(--critical); }
   .empty-cards { grid-column: 1 / -1; text-align: center; color: var(--ink-muted); padding: 2.5rem; }
+
+  /* ---- compare gallery ---- */
+  .compare-cards-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
+  .compare-card { background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .compare-card-header { padding: 0.9rem 1rem; display: flex; justify-content: space-between; align-items: flex-start; gap: 0.6rem; border-bottom: 1px solid var(--border); }
+  .compare-card-header .who { font-weight: 800; font-size: 0.92rem; }
+  .compare-card-header .sub { font-size: 0.76rem; color: var(--ink-muted); margin-top: 0.2rem; }
+  .compare-card-section { padding: 0.75rem 1rem; border-bottom: 1px solid var(--grid); }
+  .compare-card-section:last-child { border-bottom: none; }
+  .compare-card-section h4 { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin: 0 0 0.6rem; }
+  .compare-field-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.6rem; }
+  .compare-field-grid .f label { display: block; font-size: 0.66rem; color: var(--ink-muted); margin-bottom: 0.1rem; }
+  .compare-field-grid .f .val { font-size: 0.82rem; font-weight: 700; color: var(--ink); }
 </style>
 </head>
 <body>
@@ -382,24 +393,8 @@
     </section>
 
     <section id="page-compare" class="page">
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr class="group-row">
-              <th colspan="4">بيانات الرحلة</th>
-              <th colspan="6" class="group-alt">العداد والوقود</th>
-              <th colspan="7">التوصيل والمبيعات</th>
-              <th class="group-alt"></th>
-            </tr>
-            <tr>
-              <th>التاريخ</th><th>السائق</th><th>رقم الهوية</th><th>اللوحة</th><th>عداد البداية</th>
-              <th class="group-alt">عداد النهاية</th><th class="group-alt">المسافة المقطوعة</th><th class="group-alt">الوقود المتوقع (لتر)</th><th class="group-alt">وقت البداية</th><th class="group-alt">وقت النهاية</th>
-              <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th><th class="group-alt">الحالة</th>
-            </tr>
-          </thead>
-          <tbody id="compare-body"><tr class="empty-row"><td colspan="18">جارِ التحميل...</td></tr></tbody>
-        </table>
-      </div>
+      <div id="compare-count" class="cards-count"></div>
+      <div id="compare-grid" class="cards-grid compare-cards-grid"><div class="empty-cards">جارِ التحميل...</div></div>
     </section>
 
     <section id="page-stations" class="page">
@@ -932,23 +927,55 @@ function computeDeliveryMetrics(g) {
 }
 
 function renderCompareTable(groups) {
-  const body = document.getElementById("compare-body");
-  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="18">لا توجد بيانات مطابقة</td></tr>'; return; }
-  body.innerHTML = groups.map(g => {
+  const grid = document.getElementById("compare-grid");
+  document.getElementById("compare-count").textContent = `${groups.length} سجل`;
+  if (!groups.length) { grid.innerHTML = '<div class="empty-cards">لا توجد بيانات مطابقة</div>'; return; }
+  grid.innerHTML = groups.map(g => {
     const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "—";
     const fuel = expectedFuelLiters(g.vehicle_plate, dist);
     const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
     const status = g.start && g.end ? '<span class="badge complete">مكتمل</span>'
       : g.start ? '<span class="badge partial">بداية فقط</span>' : '<span class="badge partial">نهاية فقط</span>';
     const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
-    return `<tr>
-      <td>${escapeHtml(g.day)}</td><td>${escapeHtml(g.full_name)}</td><td>${escapeHtml(g.identity_number)}</td>
-      <td>${escapeHtml(g.vehicle_plate)}</td><td>${g.start?.odo_reading ?? "—"}</td><td class="group-alt">${g.end?.odo_reading ?? "—"}</td>
-      <td class="group-alt">${dist}</td><td class="group-alt">${fuel}</td><td class="group-alt">${timeOf(g.start)}</td><td class="group-alt">${timeOf(g.end)}</td>
-      <td>${g.start?.ofd_count ?? "—"}</td><td>${g.end?.cod_delivered ?? "—"}</td>
-      <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td>
-      <td>${delivered}</td><td>${deliveryPct}</td><td>${sales}</td><td class="group-alt">${status}</td>
-    </tr>`;
+    const field = (label, val) => `<div class="f"><label>${label}</label><div class="val">${val ?? "—"}</div></div>`;
+    return `<div class="compare-card">
+      <div class="compare-card-header">
+        <div>
+          <div class="who">${escapeHtml(g.full_name)}</div>
+          <div class="sub">${escapeHtml(g.identity_number)} · ${escapeHtml(g.day)}</div>
+        </div>
+        ${status}
+      </div>
+      <div class="compare-card-section">
+        <h4>بيانات الرحلة</h4>
+        <div class="compare-field-grid">
+          ${field("اللوحة", escapeHtml(g.vehicle_plate))}
+          ${field("وقت البداية", timeOf(g.start))}
+          ${field("وقت النهاية", timeOf(g.end))}
+        </div>
+      </div>
+      <div class="compare-card-section">
+        <h4>العداد والوقود</h4>
+        <div class="compare-field-grid">
+          ${field("عداد البداية", g.start?.odo_reading ?? "—")}
+          ${field("عداد النهاية", g.end?.odo_reading ?? "—")}
+          ${field("المسافة", dist)}
+          ${field("الوقود المتوقع (لتر)", fuel)}
+        </div>
+      </div>
+      <div class="compare-card-section">
+        <h4>التوصيل والمبيعات</h4>
+        <div class="compare-field-grid">
+          ${field("OFD", g.start?.ofd_count ?? "—")}
+          ${field("COD", g.end?.cod_delivered ?? "—")}
+          ${field("PPD", g.end?.ppd_delivered ?? "—")}
+          ${field("Picked Up", g.end?.picked_up ?? "—")}
+          ${field("Delivered", delivered)}
+          ${field("Delivery %", deliveryPct)}
+          ${field("Sales", sales)}
+        </div>
+      </div>
+    </div>`;
   }).join("");
 }
 
