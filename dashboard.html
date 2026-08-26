@@ -772,7 +772,17 @@ async function loadData() {
   if (from) query = query.gte("shift_date", from);
   if (to) query = query.lte("shift_date", to);
 
-  const [{ data, error }] = await Promise.all([query, loadVehicleRates(), loadStationRates(), loadDriverProjects(), loadFleet()]);
+  // fetched separately, unrestricted by the records date filter above, so Off Duty can always
+  // find the previous end-of-shift odometer reading for a vehicle even outside the viewed range
+  const endHistoryQuery = sb.from("shift_entries")
+    .select("vehicle_plate,shift_date,odo_reading,created_at")
+    .eq("shift_type", "end")
+    .not("vehicle_plate", "is", null)
+    .not("odo_reading", "is", null)
+    .order("shift_date", { ascending: true })
+    .limit(5000);
+
+  const [{ data, error }, { data: endHistoryData, error: endHistoryError }] = await Promise.all([query, endHistoryQuery, loadVehicleRates(), loadStationRates(), loadDriverProjects(), loadFleet()]);
   if (error) {
     setStatus("err", "حصل خطأ في تحميل البيانات: " + error.message);
     document.getElementById("table-body").innerHTML = '<tr class="empty-row"><td colspan="12">تعذر التحميل</td></tr>';
@@ -780,11 +790,9 @@ async function loadData() {
   }
   allRows = data || [];
   vehicleEndHistory = {};
-  for (const r of allRows) {
-    if (r.shift_type === "end" && r.vehicle_plate && r.odo_reading != null) {
-      const day = r.shift_date || (r.created_at || "").slice(0, 10);
-      (vehicleEndHistory[r.vehicle_plate] ||= []).push({ day, odo: Number(r.odo_reading) });
-    }
+  for (const r of (endHistoryError ? [] : (endHistoryData || []))) {
+    const day = r.shift_date || (r.created_at || "").slice(0, 10);
+    (vehicleEndHistory[r.vehicle_plate] ||= []).push({ day, odo: Number(r.odo_reading) });
   }
   for (const plate in vehicleEndHistory) vehicleEndHistory[plate].sort((a, b) => a.day.localeCompare(b.day));
   allCompareGroups = buildDriverComparison(allRows);
