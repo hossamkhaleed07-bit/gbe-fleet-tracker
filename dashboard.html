@@ -175,20 +175,6 @@
   a.media-link { color: var(--blue); text-decoration: none; }
 
   /* ---- modal ---- */
-  #edit-backdrop {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
-  }
-  #edit-modal { background: var(--surface-1); border-radius: 14px; padding: 1.3rem; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto; }
-  #edit-modal h2 { font-size: 1.05rem; margin: 0 0 1rem; }
-  #edit-modal .field { margin-bottom: 0.8rem; }
-  #edit-modal label { display: block; font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; }
-  #edit-modal input, #edit-modal select {
-    width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
-    background: var(--plane); color: var(--ink); font-size: 0.9rem;
-  }
-  #edit-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
-  #edit-actions button { flex: 1; }
-
   #vehicle-backdrop {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
   }
@@ -402,11 +388,11 @@
           <input type="text" id="f-search" placeholder="اكتبي هنا...">
         </div>
         <div class="field">
-          <label>نوع الدوام</label>
+          <label>الحالة</label>
           <select id="f-type">
             <option value="">الكل</option>
-            <option value="start">بداية</option>
-            <option value="end">نهاية</option>
+            <option value="complete">مكتمل</option>
+            <option value="partial">غير مكتمل</option>
           </select>
         </div>
         <div class="field"><button class="btn" id="local-filter-btn">تطبيق</button></div>
@@ -415,11 +401,11 @@
         <table>
           <thead>
             <tr>
-              <th>وقت الإرسال</th><th>تاريخ الدوام</th><th>النوع</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
-              <th>المحطة</th><th>العداد</th><th>الصور</th><th>المنطقة</th><th id="actions-th"></th>
+              <th>تاريخ الدوام</th><th>الحالة</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
+              <th>المحطة</th><th>العداد (بداية → نهاية)</th><th>الصور</th><th>المنطقة</th><th id="actions-th"></th>
             </tr>
           </thead>
-          <tbody id="table-body"><tr class="empty-row"><td colspan="12">جارِ التحميل...</td></tr></tbody>
+          <tbody id="table-body"><tr class="empty-row"><td colspan="11">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -547,32 +533,6 @@
   </main>
 </div>
 
-<div id="edit-backdrop">
-  <div id="edit-modal">
-    <h2>تعديل السجل</h2>
-    <div class="field"><label>اسم السائق</label><input id="e-full_name"></div>
-    <div class="field"><label>رقم الهوية</label><input id="e-identity_number"></div>
-    <div class="field"><label>لوحة المركبة</label><input id="e-vehicle_plate"></div>
-    <div class="field"><label>المحطة</label><input id="e-station_name"></div>
-    <div class="field">
-      <label>نوع الدوام</label>
-      <select id="e-shift_type"><option value="start">بداية</option><option value="end">نهاية</option></select>
-    </div>
-    <div class="field"><label>تاريخ الدوام</label><input type="date" id="e-shift_date"></div>
-    <div class="field"><label>قراءة العداد</label><input type="number" id="e-odo_reading"></div>
-    <div class="field"><label>OFD</label><input type="number" id="e-ofd_count"></div>
-    <div class="field"><label>COD</label><input type="number" id="e-cod_delivered"></div>
-    <div class="field"><label>PPD</label><input type="number" id="e-ppd_delivered"></div>
-    <div class="field"><label>Picked Up</label><input type="number" id="e-picked_up"></div>
-    <div class="field"><label>الإيميل</label><input type="email" id="e-email_address"></div>
-    <div class="field"><label>المنطقة</label><input id="e-area"></div>
-    <div id="edit-actions">
-      <button class="btn" id="edit-cancel">إلغاء</button>
-      <button class="btn btn-primary" id="edit-save">حفظ</button>
-    </div>
-  </div>
-</div>
-
 <div id="vehicle-backdrop">
   <div id="vehicle-modal">
     <h2 id="vehicle-modal-title">إضافة عربية</h2>
@@ -641,6 +601,7 @@ let allCompareGroups = [];
 let vehicleDriverMap = {};
 let vehicleEndHistory = {};
 let currentDetailIdx = null;
+let currentDetailRows = null;
 let currentFleetRows = [];
 let editingVehiclePlate = null;
 let isNewVehicle = false;
@@ -648,7 +609,6 @@ let currentUserProject = null;
 let isFleetManager = false;
 let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
-let editingId = null;
 
 const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "تقرير السائقين", stations: "تقرير المحطات", fleet: "الأسطول", drivers: "السائقين" };
 
@@ -863,19 +823,20 @@ function applyCompareFilterAndRender() {
 }
 
 function applyRecordsFilterAndRender() {
-  const type = document.getElementById("f-type").value;
+  const status = document.getElementById("f-type").value;
   const search = document.getElementById("f-search").value.trim().toLowerCase();
-  let rows = allRows;
-  if (type) rows = rows.filter(r => r.shift_type === type);
+  let rows = allCompareGroups;
+  if (status === "complete") rows = rows.filter(g => g.start && g.end);
+  if (status === "partial") rows = rows.filter(g => !(g.start && g.end));
   if (search) {
-    rows = rows.filter(r =>
-      (r.full_name || "").toLowerCase().includes(search) ||
-      (r.identity_number || "").toLowerCase().includes(search) ||
-      (r.vehicle_plate || "").toLowerCase().includes(search)
+    rows = rows.filter(g =>
+      (g.full_name || "").toLowerCase().includes(search) ||
+      (g.identity_number || "").toLowerCase().includes(search) ||
+      (g.vehicle_plate || "").toLowerCase().includes(search)
     );
   }
-  currentRecordsRows = [...rows].sort((a, b) => (b.created_at || "").localeCompare(a.created_at || ""));
-  renderTable(currentRecordsRows);
+  currentRecordsRows = [...rows].sort((a, b) => b.day.localeCompare(a.day) || (a.full_name || "").localeCompare(b.full_name || ""));
+  renderRecordsTable(currentRecordsRows);
 }
 
 function buildDriverComparison(rows) {
@@ -992,34 +953,36 @@ function escapeHtml(v) {
   return String(v).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
 
-function renderTable(rows) {
+function renderRecordsTable(groups) {
   const body = document.getElementById("table-body");
-  if (!rows.length) { body.innerHTML = '<tr class="empty-row"><td colspan="12">لا توجد سجلات مطابقة</td></tr>'; return; }
-  body.innerHTML = rows.map(r => {
+  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="11">لا توجد سجلات مطابقة</td></tr>'; return; }
+  body.innerHTML = groups.map((g, i) => {
     const media = [];
-    if (r.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(r.odo_photo_url)}" target="_blank">عداد</a>`);
-    if (r.condition_video_url) media.push(`<a class="media-link" href="${escapeHtml(r.condition_video_url)}" target="_blank">فيديو</a>`);
-    if (r.client_screenshot_url) media.push(`<a class="media-link" href="${escapeHtml(r.client_screenshot_url)}" target="_blank">سكرين</a>`);
+    if (g.start?.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(g.start.odo_photo_url)}" target="_blank">عداد بداية</a>`);
+    if (g.start?.condition_video_url) media.push(`<a class="media-link" href="${escapeHtml(g.start.condition_video_url)}" target="_blank">فيديو</a>`);
+    if (g.end?.odo_photo_url) media.push(`<a class="media-link" href="${escapeHtml(g.end.odo_photo_url)}" target="_blank">عداد نهاية</a>`);
+    if (g.end?.client_screenshot_url) media.push(`<a class="media-link" href="${escapeHtml(g.end.client_screenshot_url)}" target="_blank">سكرين</a>`);
+    const station = g.end?.station_name || g.start?.station_name;
+    const area = g.end?.area || g.start?.area;
     return `<tr>
-      <td>${escapeHtml((r.created_at || "").replace("T", " ").slice(0, 16))}</td>
-      <td>${escapeHtml(r.shift_date)}</td>
-      <td><span class="badge ${r.shift_type}">${r.shift_type === "start" ? "بداية" : "نهاية"}</span></td>
-      <td>${escapeHtml(r.full_name)}</td>
-      <td>${escapeHtml(r.identity_number)}</td>
-      <td>${escapeHtml(driverProjects[r.identity_number])}</td>
-      <td>${escapeHtml(r.vehicle_plate)}</td>
-      <td>${escapeHtml(r.station_name)}</td>
-      <td>${escapeHtml(r.odo_reading)}</td>
+      <td>${escapeHtml(g.day)}</td>
+      <td>${compareStatusBadge(g)}</td>
+      <td>${escapeHtml(g.full_name)}</td>
+      <td>${escapeHtml(g.identity_number)}</td>
+      <td>${escapeHtml(g.project)}</td>
+      <td>${escapeHtml(g.vehicle_plate)}</td>
+      <td>${escapeHtml(station)}</td>
+      <td>${escapeHtml(g.start?.odo_reading ?? "—")} → ${escapeHtml(g.end?.odo_reading ?? "—")}</td>
       <td>${media.join(" · ") || "—"}</td>
-      <td>${escapeHtml(r.area)}</td>
+      <td>${escapeHtml(area)}</td>
       ${isAdmin ? `<td class="row-actions">
-        <button class="btn" data-edit="${r.id}">تعديل</button>
-        <button class="btn btn-danger" data-del="${r.id}">حذف</button>
+        <button class="btn" data-view="${i}">عرض/تعديل</button>
+        <button class="btn btn-danger" data-del="${i}">حذف</button>
       </td>` : ""}
     </tr>`;
   }).join("");
-  body.querySelectorAll("[data-edit]").forEach(btn => btn.addEventListener("click", () => openEdit(btn.dataset.edit)));
-  body.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => deleteRow(btn.dataset.del)));
+  body.querySelectorAll("[data-view]").forEach(btn => btn.addEventListener("click", () => openCompareDetail(Number(btn.dataset.view), currentRecordsRows)));
+  body.querySelectorAll("[data-del]").forEach(btn => btn.addEventListener("click", () => deleteRecordsGroup(currentRecordsRows[Number(btn.dataset.del)])));
 }
 
 function expectedFuelLiters(vehiclePlate, distance) {
@@ -1118,6 +1081,7 @@ function compareDetailEditHtml(g) {
         <div class="sub">${escapeHtml(g.identity_number)} · ${escapeHtml(g.day)}${g.project ? " · " + escapeHtml(g.project) : ""}</div>
       </div>
     </div>
+    <div class="field"><label>التاريخ</label><input type="date" id="cmp-e-date" value="${escapeHtml(g.day) || ""}"></div>
     <div class="field"><label>اللوحة</label><input type="text" id="cmp-e-plate" value="${escapeHtml(g.vehicle_plate) || ""}"></div>
     ${g.start ? `
       <h4 style="font-size:0.7rem;color:var(--ink-muted);margin:0.8rem 0 0.4rem;">بداية الدوام</h4>
@@ -1137,16 +1101,17 @@ function compareDetailEditHtml(g) {
     </div>`;
 }
 
-function openCompareDetail(idx) {
+function openCompareDetail(idx, rows = currentCompareRows) {
   currentDetailIdx = idx;
-  const g = currentCompareRows[idx];
+  currentDetailRows = rows;
+  const g = rows[idx];
   if (!g) return;
   document.getElementById("compare-detail-content").innerHTML = compareDetailHtml(g);
   document.getElementById("compare-detail-backdrop").style.display = "flex";
   const editBtn = document.getElementById("compare-detail-edit-btn");
   if (editBtn) editBtn.addEventListener("click", () => {
     document.getElementById("compare-detail-content").innerHTML = compareDetailEditHtml(g);
-    document.getElementById("compare-detail-cancel-btn").addEventListener("click", () => openCompareDetail(currentDetailIdx));
+    document.getElementById("compare-detail-cancel-btn").addEventListener("click", () => openCompareDetail(currentDetailIdx, currentDetailRows));
     document.getElementById("compare-detail-save-btn").addEventListener("click", () => saveCompareDetailEdit(g));
   });
 }
@@ -1154,10 +1119,12 @@ function openCompareDetail(idx) {
 async function saveCompareDetailEdit(g) {
   const num = id => { const v = document.getElementById(id)?.value; return v === "" || v == null ? null : Number(v); };
   const plate = document.getElementById("cmp-e-plate").value.trim() || null;
+  const shiftDate = document.getElementById("cmp-e-date").value || null;
   const updates = [];
   if (g.start) {
     updates.push(sb.from("shift_entries").update({
       vehicle_plate: plate,
+      shift_date: shiftDate,
       odo_reading: num("cmp-e-start-odo"),
       ofd_count: num("cmp-e-ofd"),
     }).eq("id", g.start.id));
@@ -1165,6 +1132,7 @@ async function saveCompareDetailEdit(g) {
   if (g.end) {
     updates.push(sb.from("shift_entries").update({
       vehicle_plate: plate,
+      shift_date: shiftDate,
       odo_reading: num("cmp-e-end-odo"),
       cod_delivered: num("cmp-e-cod"),
       ppd_delivered: num("cmp-e-ppd"),
@@ -1460,60 +1428,11 @@ document.getElementById("driver-save").addEventListener("click", async () => {
   loadDriverProjects();
 });
 
-function openEdit(id) {
-  const row = allRows.find(r => String(r.id) === String(id));
-  if (!row) return;
-  editingId = id;
-  document.getElementById("e-full_name").value = row.full_name || "";
-  document.getElementById("e-identity_number").value = row.identity_number || "";
-  document.getElementById("e-vehicle_plate").value = row.vehicle_plate || "";
-  document.getElementById("e-station_name").value = row.station_name || "";
-  document.getElementById("e-shift_type").value = row.shift_type || "start";
-  document.getElementById("e-shift_date").value = row.shift_date || "";
-  document.getElementById("e-odo_reading").value = row.odo_reading ?? "";
-  document.getElementById("e-ofd_count").value = row.ofd_count ?? "";
-  document.getElementById("e-cod_delivered").value = row.cod_delivered ?? "";
-  document.getElementById("e-ppd_delivered").value = row.ppd_delivered ?? "";
-  document.getElementById("e-picked_up").value = row.picked_up ?? "";
-  document.getElementById("e-email_address").value = row.email_address || "";
-  document.getElementById("e-area").value = row.area || "";
-  document.getElementById("edit-backdrop").style.display = "flex";
-}
-
-document.getElementById("edit-cancel").addEventListener("click", () => {
-  document.getElementById("edit-backdrop").style.display = "none";
-  editingId = null;
-});
-
-document.getElementById("edit-save").addEventListener("click", async () => {
-  if (!editingId) return;
-  const num = v => (v === "" ? null : Number(v));
-  const payload = {
-    full_name: document.getElementById("e-full_name").value.trim(),
-    identity_number: document.getElementById("e-identity_number").value.trim(),
-    vehicle_plate: document.getElementById("e-vehicle_plate").value.trim(),
-    station_name: document.getElementById("e-station_name").value.trim() || null,
-    shift_type: document.getElementById("e-shift_type").value,
-    shift_date: document.getElementById("e-shift_date").value || localToday(),
-    odo_reading: num(document.getElementById("e-odo_reading").value),
-    ofd_count: num(document.getElementById("e-ofd_count").value),
-    cod_delivered: num(document.getElementById("e-cod_delivered").value),
-    ppd_delivered: num(document.getElementById("e-ppd_delivered").value),
-    picked_up: num(document.getElementById("e-picked_up").value),
-    email_address: document.getElementById("e-email_address").value.trim() || null,
-    area: document.getElementById("e-area").value.trim() || null,
-  };
-  const { error } = await sb.from("shift_entries").update(payload).eq("id", editingId);
-  document.getElementById("edit-backdrop").style.display = "none";
-  if (error) { setStatus("err", "فشل الحفظ: " + error.message); return; }
-  setStatus("ok", "تم الحفظ بنجاح");
-  editingId = null;
-  loadData();
-});
-
-async function deleteRow(id) {
-  if (!confirm("متأكدة إنك عايزة تمسحي السجل ده؟ الإجراء ده مش قابل للتراجع.")) return;
-  const { error } = await sb.from("shift_entries").delete().eq("id", id);
+async function deleteRecordsGroup(g) {
+  if (!g) return;
+  if (!confirm("متأكدة إنك عايزة تمسحي سجل اليوم ده بالكامل (بداية ونهاية)؟ الإجراء ده مش قابل للتراجع.")) return;
+  const ids = [g.start?.id, g.end?.id].filter(Boolean);
+  const { error } = await sb.from("shift_entries").delete().in("id", ids);
   if (error) { setStatus("err", "فشل الحذف: " + error.message); return; }
   setStatus("ok", "تم الحذف");
   loadData();
@@ -1554,33 +1473,33 @@ function downloadCsv(filename, keys, rows) {
   URL.revokeObjectURL(url);
 }
 
+const GROUP_CSV_KEYS = ["date","full_name","identity_number","project","vehicle_plate","station","start_odo","end_odo","distance","expected_fuel_liters","off_duty_km","start_time","end_time","ofd","cod","ppd","picked_up","delivered","delivery_pct","sales","status"];
+function groupToCsvRow(g) {
+  const distance = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "";
+  const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
+  return {
+    date: g.day, full_name: g.full_name, identity_number: g.identity_number, project: g.project || "", vehicle_plate: g.vehicle_plate,
+    station: g.end?.station_name || g.start?.station_name || "",
+    start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
+    distance,
+    expected_fuel_liters: expectedFuelLiters(g.vehicle_plate, distance === "" ? null : distance),
+    off_duty_km: getOffDuty(g) ?? "",
+    start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
+    end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
+    ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
+    delivered, delivery_pct: deliveryPct, sales,
+    status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
+  };
+}
+
 document.getElementById("export-btn").addEventListener("click", () => {
   const stamp = new Date().toISOString().slice(0, 10);
   if (currentPage === "records") {
     if (!currentRecordsRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["created_at","shift_date","shift_type","full_name","identity_number","project","vehicle_plate","station_name","odo_reading","ofd_count","cod_delivered","ppd_delivered","picked_up","email_address","area","odo_photo_url","condition_video_url","client_screenshot_url"];
-    const rowsWithProject = currentRecordsRows.map(r => ({ ...r, project: driverProjects[r.identity_number] || "" }));
-    downloadCsv(`shift_entries_${stamp}.csv`, keys, rowsWithProject);
+    downloadCsv(`shift_entries_${stamp}.csv`, GROUP_CSV_KEYS, currentRecordsRows.map(groupToCsvRow));
   } else if (currentPage === "compare") {
     if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["date","full_name","identity_number","project","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","off_duty_km","start_time","end_time","ofd","cod","ppd","picked_up","delivered","delivery_pct","sales","status"];
-    const rows = currentCompareRows.map(g => {
-      const distance = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "";
-      const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
-      return {
-        date: g.day, full_name: g.full_name, identity_number: g.identity_number, project: g.project || "", vehicle_plate: g.vehicle_plate,
-        start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
-        distance,
-        expected_fuel_liters: expectedFuelLiters(g.vehicle_plate, distance === "" ? null : distance),
-        off_duty_km: getOffDuty(g) ?? "",
-        start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
-        end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
-        ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
-        delivered, delivery_pct: deliveryPct, sales,
-        status: g.start && g.end ? "complete" : g.start ? "start_only" : "end_only",
-      };
-    });
-    downloadCsv(`driver_comparison_${stamp}.csv`, keys, rows);
+    downloadCsv(`driver_comparison_${stamp}.csv`, GROUP_CSV_KEYS, currentCompareRows.map(groupToCsvRow));
   } else if (currentPage === "stations") {
     if (!currentStationRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["station","total_records","drivers","start_count","end_count","ofd","cod","ppd","picked_up"];
