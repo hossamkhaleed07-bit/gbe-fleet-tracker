@@ -505,11 +505,11 @@
         <table>
           <thead>
             <tr>
-              <th>اللوحة</th><th>الفيندور</th><th>نوع الوقود</th><th>الموديل</th><th>معدل الاستهلاك (كم/لتر)</th>
+              <th>اللوحة</th><th>رقم هوية السائق</th><th>اسم السائق</th><th>الفيندور</th><th>نوع الوقود</th><th>الموديل</th><th>معدل الاستهلاك (كم/لتر)</th>
               <th>الحالة</th><th></th>
             </tr>
           </thead>
-          <tbody id="fleet-body"><tr class="empty-row"><td colspan="7">جارِ التحميل...</td></tr></tbody>
+          <tbody id="fleet-body"><tr class="empty-row"><td colspan="9">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -637,6 +637,7 @@ let allDrivers = [];
 let allVehicles = [];
 let currentDriversRows = [];
 let allCompareGroups = [];
+let vehicleDriverMap = {};
 let currentDetailIdx = null;
 let currentFleetRows = [];
 let editingVehiclePlate = null;
@@ -816,11 +817,16 @@ async function loadData() {
   allRows = data || [];
   allCompareGroups = buildDriverComparison(allRows);
   currentStationRows = buildStationReport(allRows);
+  vehicleDriverMap = {};
+  for (const r of allRows) {
+    if (r.vehicle_plate) vehicleDriverMap[r.vehicle_plate] = { identity_number: r.identity_number, full_name: r.full_name };
+  }
   renderStats(allRows, allCompareGroups);
   renderOverviewPanels(allRows, allCompareGroups, currentStationRows);
   renderProjectsPanel(allRows);
   applyRecordsFilterAndRender();
   applyCompareFilterAndRender();
+  applyFleetFilterAndRender();
   renderStationTable(currentStationRows);
 }
 
@@ -1219,16 +1225,21 @@ function renderStationTable(groups) {
 
 function renderFleetTable(vehicles) {
   const body = document.getElementById("fleet-body");
-  if (!vehicles.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">لا توجد عربيات</td></tr>'; return; }
-  body.innerHTML = vehicles.map(v => `<tr>
+  if (!vehicles.length) { body.innerHTML = '<tr class="empty-row"><td colspan="9">لا توجد عربيات</td></tr>'; return; }
+  body.innerHTML = vehicles.map(v => {
+    const drv = vehicleDriverMap[v.vehicle_plate];
+    return `<tr>
     <td>${escapeHtml(v.vehicle_plate)}</td>
+    <td>${drv ? escapeHtml(drv.identity_number) : "—"}</td>
+    <td>${drv ? escapeHtml(drv.full_name) : "—"}</td>
     <td>${escapeHtml(v.vehicle_vendor)}</td>
     <td>${escapeHtml(v.fuel_type)}</td>
     <td>${escapeHtml(v.model)}</td>
     <td>${v.avg_per_liter ?? "—"}</td>
     <td><button class="toggle-pill ${v.is_active ? "active" : "inactive"}" data-toggle="${escapeHtml(v.vehicle_plate)}">${v.is_active ? "مفعّلة" : "معطّلة"}</button></td>
     <td class="row-actions"><button class="btn" data-edit-vehicle="${escapeHtml(v.vehicle_plate)}">تعديل</button></td>
-  </tr>`).join("");
+  </tr>`;
+  }).join("");
 
   body.querySelectorAll("[data-toggle]").forEach(btn => btn.addEventListener("click", () => toggleVehicleActive(btn.dataset.toggle)));
   body.querySelectorAll("[data-edit-vehicle]").forEach(btn => btn.addEventListener("click", () => openVehicleEdit(btn.dataset.editVehicle)));
@@ -1547,8 +1558,12 @@ document.getElementById("export-btn").addEventListener("click", () => {
     downloadCsv(`station_report_${stamp}.csv`, keys, rows);
   } else if (currentPage === "fleet") {
     if (!currentFleetRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["vehicle_plate","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
-    downloadCsv(`fleet_${stamp}.csv`, keys, currentFleetRows);
+    const keys = ["vehicle_plate","driver_identity_number","driver_full_name","vehicle_vendor","fuel_type","model","avg_per_liter","is_active"];
+    const rows = currentFleetRows.map(v => {
+      const drv = vehicleDriverMap[v.vehicle_plate];
+      return { ...v, driver_identity_number: drv?.identity_number || "", driver_full_name: drv?.full_name || "" };
+    });
+    downloadCsv(`fleet_${stamp}.csv`, keys, rows);
   } else if (currentPage === "drivers") {
     if (!currentDriversRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
     const keys = ["identity_number","full_name","nationality","mobile_number","project","is_active"];
