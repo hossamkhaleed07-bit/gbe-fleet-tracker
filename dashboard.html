@@ -60,6 +60,10 @@
   }
   .btn-primary { background: var(--blue); border-color: var(--blue); color: #fff; width: 100%; padding: 0.85rem; }
   .btn-danger { color: var(--critical); border-color: var(--critical); }
+  .btn { transition: background-color 0.15s ease, border-color 0.15s ease, filter 0.15s ease; }
+  .btn:hover { background: var(--plane); border-color: var(--ink-muted); }
+  .btn-primary:hover { background: var(--blue); border-color: var(--blue); filter: brightness(0.9); }
+  .btn-danger:hover { background: color-mix(in srgb, var(--critical) 10%, transparent); border-color: var(--critical); }
 
   /* ---- layout ---- */
   #app-layout { display: flex; min-height: 100vh; }
@@ -163,6 +167,7 @@
   th { color: var(--ink-muted); font-weight: 600; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.03em; }
   tr:last-child td { border-bottom: none; }
   tbody tr:nth-child(even) { background: color-mix(in srgb, var(--plane) 55%, transparent); }
+  tbody tr:hover { background: color-mix(in srgb, var(--blue) 6%, transparent); }
   .group-row th { text-align: center; font-size: 0.68rem; color: var(--ink-muted); background: var(--plane); border-bottom: 1px solid var(--border); }
   th.group-alt, td.group-alt { background: color-mix(in srgb, var(--blue) 4%, transparent); }
   .badge { padding: 0.15rem 0.55rem; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
@@ -173,6 +178,7 @@
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
   a.media-link { color: var(--blue); text-decoration: none; }
+  a.media-link:hover { text-decoration: underline; }
 
   /* ---- modal ---- */
   #vehicle-backdrop {
@@ -188,9 +194,10 @@
   }
   #vehicle-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
   #vehicle-actions button { flex: 1; }
-  .toggle-pill { padding: 0.25rem 0.7rem; border-radius: 999px; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; }
+  .toggle-pill { padding: 0.25rem 0.7rem; border-radius: 999px; border: none; font-size: 0.75rem; font-weight: 700; cursor: pointer; transition: filter 0.15s ease; }
   .toggle-pill.active { background: var(--c-green-bg); color: var(--c-green-ink); }
   .toggle-pill.inactive { background: var(--c-pink-bg); color: var(--c-pink-ink); }
+  .toggle-pill:hover { filter: brightness(0.93); }
 
   #driver-backdrop {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
@@ -220,7 +227,10 @@
     font-size: 0.85rem; font-weight: 600; cursor: pointer;
     background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%23898781' stroke-width='1.5' fill='none'/></svg>");
     background-repeat: no-repeat; background-position: left 0.9rem center;
+    transition: border-color 0.15s ease;
   }
+  .pill-select-wrap select:hover { border-color: var(--ink-muted); }
+  .pill-search:has(input:hover), .pill-search:has(input:focus) { border-color: var(--ink-muted); }
   .pill-add-btn { border-radius: 999px; }
   .cards-count { font-size: 0.8rem; color: var(--ink-muted); margin-bottom: 0.9rem; }
 
@@ -248,6 +258,8 @@
   }
   .driver-card-actions button:first-child { border-inline-end: 1px solid var(--border); }
   .driver-card-actions button.danger { color: var(--critical); }
+  .driver-card-actions button:hover { background: color-mix(in srgb, var(--blue) 6%, transparent); }
+  .driver-card-actions button.danger:hover { background: color-mix(in srgb, var(--critical) 8%, transparent); }
   .empty-cards { grid-column: 1 / -1; text-align: center; color: var(--ink-muted); padding: 2.5rem; }
 
   /* ---- compare gallery ---- */
@@ -272,8 +284,9 @@
   .compare-card-mini .mini-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
   .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
-  .view-btn { border: none; background: var(--surface-1); padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.95rem; color: var(--ink-muted); }
+  .view-btn { border: none; background: var(--surface-1); padding: 0.5rem 0.8rem; cursor: pointer; font-size: 0.95rem; color: var(--ink-muted); transition: background-color 0.15s ease, color 0.15s ease; }
   .view-btn.active { background: var(--blue); color: #fff; }
+  .view-btn:not(.active):hover { background: color-mix(in srgb, var(--blue) 8%, transparent); color: var(--ink); }
 
   #compare-detail-backdrop {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); align-items: center; justify-content: center; padding: 1rem; z-index: 10;
@@ -292,7 +305,9 @@
   #compare-detail-close {
     position: absolute; top: 0.7rem; left: 0.7rem; width: 28px; height: 28px; border-radius: 999px; border: none;
     background: var(--plane); color: var(--ink-muted); font-size: 1.1rem; cursor: pointer; line-height: 1;
+    transition: background-color 0.15s ease;
   }
+  #compare-detail-close:hover { background: color-mix(in srgb, var(--critical) 12%, var(--plane)); color: var(--critical); }
 </style>
 </head>
 <body>
