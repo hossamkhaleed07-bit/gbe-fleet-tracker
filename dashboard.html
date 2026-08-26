@@ -294,6 +294,14 @@
   #compare-detail-modal {
     position: relative; background: var(--surface-1); border-radius: 14px; padding: 1.3rem; max-width: 460px; width: 100%; max-height: 85vh; overflow-y: auto;
   }
+  #compare-detail-modal .field { margin-bottom: 0.8rem; }
+  #compare-detail-modal .field label { display: block; font-size: 0.78rem; color: var(--ink-muted); margin-bottom: 0.25rem; }
+  #compare-detail-modal .field input {
+    width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border);
+    background: var(--plane); color: var(--ink); font-size: 0.9rem;
+  }
+  .modal-form-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
+  .modal-form-actions button { flex: 1; }
   #compare-detail-close {
     position: absolute; top: 0.7rem; left: 0.7rem; width: 28px; height: 28px; border-radius: 999px; border: none;
     background: var(--plane); color: var(--ink-muted); font-size: 1.1rem; cursor: pointer; line-height: 1;
@@ -629,6 +637,7 @@ let allDrivers = [];
 let allVehicles = [];
 let currentDriversRows = [];
 let allCompareGroups = [];
+let currentDetailIdx = null;
 let currentFleetRows = [];
 let editingVehiclePlate = null;
 let isNewVehicle = false;
@@ -1060,14 +1069,78 @@ function compareDetailHtml(g) {
         ${field("Delivery %", deliveryPct)}
         ${field("Sales", sales)}
       </div>
+    </div>
+    ${isAdmin ? '<button class="btn btn-primary" id="compare-detail-edit-btn" style="margin-top:0.5rem">تعديل البيانات</button>' : ""}`;
+}
+
+function compareDetailEditHtml(g) {
+  const inp = (id, label, val) => `<div class="field"><label>${label}</label><input type="number" id="${id}" value="${val ?? ""}"></div>`;
+  return `
+    <div class="compare-card-header" style="border:none;padding:0 0 0.9rem;">
+      <div>
+        <div class="who">${escapeHtml(g.full_name)}</div>
+        <div class="sub">${escapeHtml(g.identity_number)} · ${escapeHtml(g.day)}${g.project ? " · " + escapeHtml(g.project) : ""}</div>
+      </div>
+    </div>
+    <div class="field"><label>اللوحة</label><input type="text" id="cmp-e-plate" value="${escapeHtml(g.vehicle_plate) || ""}"></div>
+    ${g.start ? `
+      <h4 style="font-size:0.7rem;color:var(--ink-muted);margin:0.8rem 0 0.4rem;">بداية الدوام</h4>
+      ${inp("cmp-e-start-odo", "عداد البداية", g.start.odo_reading)}
+      ${inp("cmp-e-ofd", "OFD", g.start.ofd_count)}
+    ` : ""}
+    ${g.end ? `
+      <h4 style="font-size:0.7rem;color:var(--ink-muted);margin:0.8rem 0 0.4rem;">نهاية الدوام</h4>
+      ${inp("cmp-e-end-odo", "عداد النهاية", g.end.odo_reading)}
+      ${inp("cmp-e-cod", "COD", g.end.cod_delivered)}
+      ${inp("cmp-e-ppd", "PPD", g.end.ppd_delivered)}
+      ${inp("cmp-e-pickup", "Picked Up", g.end.picked_up)}
+    ` : ""}
+    <div class="modal-form-actions">
+      <button class="btn" id="compare-detail-cancel-btn">إلغاء</button>
+      <button class="btn btn-primary" id="compare-detail-save-btn">حفظ</button>
     </div>`;
 }
 
 function openCompareDetail(idx) {
+  currentDetailIdx = idx;
   const g = currentCompareRows[idx];
   if (!g) return;
   document.getElementById("compare-detail-content").innerHTML = compareDetailHtml(g);
   document.getElementById("compare-detail-backdrop").style.display = "flex";
+  const editBtn = document.getElementById("compare-detail-edit-btn");
+  if (editBtn) editBtn.addEventListener("click", () => {
+    document.getElementById("compare-detail-content").innerHTML = compareDetailEditHtml(g);
+    document.getElementById("compare-detail-cancel-btn").addEventListener("click", () => openCompareDetail(currentDetailIdx));
+    document.getElementById("compare-detail-save-btn").addEventListener("click", () => saveCompareDetailEdit(g));
+  });
+}
+
+async function saveCompareDetailEdit(g) {
+  const num = id => { const v = document.getElementById(id)?.value; return v === "" || v == null ? null : Number(v); };
+  const plate = document.getElementById("cmp-e-plate").value.trim() || null;
+  const updates = [];
+  if (g.start) {
+    updates.push(sb.from("shift_entries").update({
+      vehicle_plate: plate,
+      odo_reading: num("cmp-e-start-odo"),
+      ofd_count: num("cmp-e-ofd"),
+    }).eq("id", g.start.id));
+  }
+  if (g.end) {
+    updates.push(sb.from("shift_entries").update({
+      vehicle_plate: plate,
+      odo_reading: num("cmp-e-end-odo"),
+      cod_delivered: num("cmp-e-cod"),
+      ppd_delivered: num("cmp-e-ppd"),
+      picked_up: num("cmp-e-pickup"),
+    }).eq("id", g.end.id));
+  }
+  const results = await Promise.all(updates);
+  const err = results.find(r => r.error);
+  if (err) { setStatus("err", "فشل الحفظ: " + err.error.message); return; }
+  document.getElementById("compare-detail-backdrop").style.display = "none";
+  setStatus("ok", "تم تحديث البيانات بنجاح");
+  loadData();
 }
 
 document.getElementById("compare-detail-close").addEventListener("click", () => {
