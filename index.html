@@ -57,6 +57,7 @@
   }
   input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
   input[type="file"] { padding: 0.5rem; font-size: 0.85rem; }
+  input[readonly] { background: var(--surface-2, #eee); color: var(--ink-muted); cursor: not-allowed; }
   .hint { font-size: 0.76rem; color: var(--ink-muted); margin-top: 0.3rem; }
   .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin: 1.6rem 0 0.8rem; }
 
@@ -107,7 +108,8 @@
     </div>
     <div class="field">
       <label>اسم السائق <span class="req">*</span></label>
-      <input type="text" id="full_name" required>
+      <input type="text" id="full_name" required readonly placeholder="هيظهر تلقائيًا بعد إدخال رقم الهوية">
+      <p class="hint" id="name-lookup-hint"></p>
     </div>
     <div class="field">
       <label>لوحة المركبة <span class="req">*</span></label>
@@ -220,19 +222,31 @@ async function loadVehicles() {
 
 let identityLookupTimer = null;
 async function lookupDriverName(identityNumber) {
+  const nameField = document.getElementById("full_name");
+  const hint = document.getElementById("name-lookup-hint");
+  hint.textContent = "جاري البحث...";
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/drivers?select=full_name&identity_number=eq.${encodeURIComponent(identityNumber)}&limit=1`, { headers: headers() });
     const rows = await res.json();
     if (rows[0]?.full_name) {
-      document.getElementById("full_name").value = rows[0].full_name;
+      nameField.value = rows[0].full_name;
+      hint.textContent = "";
+    } else {
+      nameField.value = "";
+      hint.textContent = "لم يتم العثور على سائق بهذا الرقم. تأكدي من رقم الهوية أو تواصلي مع الإدارة.";
     }
-  } catch (e) { /* stays as manual entry if lookup fails */ }
+  } catch (e) {
+    nameField.value = "";
+    hint.textContent = "تعذر البحث عن السائق، حاولي تاني.";
+  }
 }
 
 document.getElementById("identity_number").addEventListener("input", (e) => {
   clearTimeout(identityLookupTimer);
+  document.getElementById("full_name").value = "";
+  const hint = document.getElementById("name-lookup-hint");
   const val = e.target.value.trim();
-  if (val.length < 5) return;
+  if (val.length < 5) { hint.textContent = ""; return; }
   identityLookupTimer = setTimeout(() => lookupDriverName(val), 400);
 });
 
