@@ -267,7 +267,8 @@
   .compare-card-mini { padding: 1rem; cursor: pointer; }
   .compare-card-mini:hover { background: color-mix(in srgb, var(--blue) 4%, transparent); }
   .compare-card-mini .who { font-weight: 800; font-size: 0.9rem; margin-bottom: 0.2rem; }
-  .compare-card-mini .sub { font-size: 0.74rem; color: var(--ink-muted); margin-bottom: 0.6rem; }
+  .compare-card-mini .sub { font-size: 0.74rem; color: var(--ink-muted); margin-bottom: 0.2rem; }
+  .compare-card-mini .plate { font-size: 0.74rem; color: var(--ink-muted); margin-bottom: 0.6rem; }
   .compare-card-mini .mini-badges { display: flex; gap: 0.4rem; flex-wrap: wrap; }
 
   .view-toggle { display: flex; border: 1px solid var(--border); border-radius: 999px; overflow: hidden; }
@@ -1169,6 +1170,7 @@ function renderCompareGallery(groups) {
     <div class="compare-card-mini" data-idx="${i}">
       <div class="who">${escapeHtml(g.full_name)}</div>
       <div class="sub">${escapeHtml(g.identity_number)} · ${escapeHtml(g.day)}</div>
+      <div class="plate">🚗 ${escapeHtml(g.vehicle_plate) || "—"}</div>
       <div class="mini-badges">
         ${g.project ? `<span class="badge start">${escapeHtml(g.project)}</span>` : ""}
         ${compareStatusBadge(g)}
