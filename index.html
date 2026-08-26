@@ -113,9 +113,8 @@
     </div>
     <div class="field">
       <label>لوحة المركبة <span class="req">*</span></label>
-      <select id="vehicle_plate" required>
-        <option value="" disabled selected>— اختاري لوحة المركبة —</option>
-      </select>
+      <input type="text" id="vehicle_plate" list="vehicle_plate_list" required autocomplete="off" placeholder="اكتبي رقم أو حروف اللوحة للبحث...">
+      <datalist id="vehicle_plate_list"></datalist>
     </div>
     <div class="field">
       <label>المحطة <span class="req">*</span></label>
@@ -205,17 +204,18 @@ async function loadStations() {
   } catch (e) { /* dropdown just stays optional-only if this fails */ }
 }
 
+let validPlates = new Set();
 async function loadVehicles() {
-  const sel = document.getElementById("vehicle_plate");
+  const list = document.getElementById("vehicle_plate_list");
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/vehicles?select=vehicle_plate&is_active=eq.true&order=vehicle_plate`, { headers: headers() });
     const rows = await res.json();
     for (const r of rows) {
       if (!r.vehicle_plate) continue;
+      validPlates.add(r.vehicle_plate);
       const opt = document.createElement("option");
       opt.value = r.vehicle_plate;
-      opt.textContent = r.vehicle_plate;
-      sel.appendChild(opt);
+      list.appendChild(opt);
     }
   } catch (e) { /* no vehicles loaded */ }
 }
@@ -290,6 +290,13 @@ document.querySelectorAll(".toggle button").forEach(btn => {
 document.getElementById("shift-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isConfigured) { document.getElementById("config-note").style.display = "block"; return; }
+
+  const plateInput = document.getElementById("vehicle_plate");
+  if (!validPlates.has(plateInput.value.trim())) {
+    setStatus("err", "لوحة المركبة دي مش موجودة في القائمة، اختاري لوحة صحيحة من الاقتراحات.");
+    plateInput.focus();
+    return;
+  }
 
   const btn = document.getElementById("submit-btn");
   btn.disabled = true;
