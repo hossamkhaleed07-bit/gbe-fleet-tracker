@@ -501,15 +501,16 @@
         <div class="field"><button class="btn" id="fleet-filter-btn">تطبيق</button></div>
         <div class="field"><button class="btn" id="fleet-reset-btn">مسح الفلاتر</button></div>
       </div>
+      <div id="fleet-count" class="cards-count"></div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
-              <th>اللوحة</th><th>رقم هوية السائق</th><th>اسم السائق</th><th>الفيندور</th><th>نوع الوقود</th><th>الموديل</th><th>معدل الاستهلاك (كم/لتر)</th>
+              <th>#</th><th>اللوحة</th><th>رقم هوية السائق</th><th>اسم السائق</th><th>الفيندور</th><th>نوع الوقود</th><th>الموديل</th><th>معدل الاستهلاك (كم/لتر)</th>
               <th>الحالة</th><th></th>
             </tr>
           </thead>
-          <tbody id="fleet-body"><tr class="empty-row"><td colspan="9">جارِ التحميل...</td></tr></tbody>
+          <tbody id="fleet-body"><tr class="empty-row"><td colspan="10">جارِ التحميل...</td></tr></tbody>
         </table>
       </div>
     </section>
@@ -1230,10 +1231,12 @@ function renderStationTable(groups) {
 
 function renderFleetTable(vehicles) {
   const body = document.getElementById("fleet-body");
-  if (!vehicles.length) { body.innerHTML = '<tr class="empty-row"><td colspan="9">لا توجد عربيات</td></tr>'; return; }
-  body.innerHTML = vehicles.map(v => {
+  document.getElementById("fleet-count").textContent = `${vehicles.length} عربية`;
+  if (!vehicles.length) { body.innerHTML = '<tr class="empty-row"><td colspan="10">لا توجد عربيات</td></tr>'; return; }
+  body.innerHTML = vehicles.map((v, i) => {
     const drv = vehicleDriverMap[v.vehicle_plate];
     return `<tr>
+    <td>${i + 1}</td>
     <td>${escapeHtml(v.vehicle_plate)}</td>
     <td>${drv ? escapeHtml(drv.identity_number) : "—"}</td>
     <td>${drv ? escapeHtml(drv.full_name) : "—"}</td>
