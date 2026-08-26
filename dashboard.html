@@ -453,12 +453,12 @@
           <thead>
             <tr class="group-row">
               <th colspan="5">بيانات الرحلة</th>
-              <th colspan="6" class="group-alt">العداد والوقود</th>
+              <th colspan="7" class="group-alt">العداد والوقود</th>
               <th colspan="7">التوصيل والمبيعات</th>
             </tr>
             <tr>
               <th>التاريخ</th><th>السائق</th><th>رقم الهوية</th><th>المشروع</th><th>اللوحة</th>
-              <th class="group-alt">عداد البداية</th><th class="group-alt">عداد النهاية</th><th class="group-alt">المسافة المقطوعة</th><th class="group-alt">الوقود المتوقع (لتر)</th><th class="group-alt">وقت البداية</th><th class="group-alt">وقت النهاية</th>
+              <th class="group-alt">عداد البداية</th><th class="group-alt">عداد النهاية</th><th class="group-alt">المسافة المقطوعة</th><th class="group-alt">الوقود المتوقع (لتر)</th><th class="group-alt">Off Duty</th><th class="group-alt">وقت البداية</th><th class="group-alt">وقت النهاية</th>
               <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th>
             </tr>
           </thead>
@@ -639,6 +639,7 @@ let allVehicles = [];
 let currentDriversRows = [];
 let allCompareGroups = [];
 let vehicleDriverMap = {};
+let vehicleEndHistory = {};
 let currentDetailIdx = null;
 let currentFleetRows = [];
 let editingVehiclePlate = null;
@@ -818,6 +819,14 @@ async function loadData() {
     return;
   }
   allRows = data || [];
+  vehicleEndHistory = {};
+  for (const r of allRows) {
+    if (r.shift_type === "end" && r.vehicle_plate && r.odo_reading != null) {
+      const day = r.shift_date || (r.created_at || "").slice(0, 10);
+      (vehicleEndHistory[r.vehicle_plate] ||= []).push({ day, odo: Number(r.odo_reading) });
+    }
+  }
+  for (const plate in vehicleEndHistory) vehicleEndHistory[plate].sort((a, b) => a.day.localeCompare(b.day));
   allCompareGroups = buildDriverComparison(allRows);
   currentStationRows = buildStationReport(allRows);
   // vehicleDriverMap already seeded from drivers.assigned_vehicle_plate (loadDriverProjects);
@@ -1020,6 +1029,19 @@ function expectedFuelLiters(vehiclePlate, distance) {
   return (distance / rate).toFixed(1);
 }
 
+function getOffDuty(g) {
+  if (!g.start || g.start.odo_reading == null || !g.vehicle_plate) return null;
+  const history = vehicleEndHistory[g.vehicle_plate];
+  if (!history) return null;
+  let prevEnd = null;
+  for (const entry of history) {
+    if (entry.day < g.day) prevEnd = entry;
+    else break;
+  }
+  if (!prevEnd) return null;
+  return g.start.odo_reading - prevEnd.odo;
+}
+
 function computeDeliveryMetrics(g) {
   if (!g.end) return { delivered: "—", deliveryPct: "—", sales: "—" };
   const cod = Number(g.end.cod_delivered) || 0;
@@ -1044,6 +1066,7 @@ function compareDetailHtml(g) {
   const fuel = expectedFuelLiters(g.vehicle_plate, dist);
   const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
   const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
+  const offDuty = getOffDuty(g);
   const field = (label, val) => `<div class="f"><label>${label}</label><div class="val">${val ?? "—"}</div></div>`;
   return `
     <div class="compare-card-header" style="border:none;padding:0 0 0.9rem;">
@@ -1068,6 +1091,7 @@ function compareDetailHtml(g) {
         ${field("عداد النهاية", g.end?.odo_reading ?? "—")}
         ${field("المسافة", dist)}
         ${field("الوقود المتوقع (لتر)", fuel)}
+        ${field("Off Duty", offDuty ?? "—")}
       </div>
     </div>
     <div class="compare-card-section" style="padding:0.75rem 0; border-bottom:none;">
@@ -1180,18 +1204,19 @@ function renderCompareGallery(groups) {
 
 function renderCompareTableRows(groups) {
   const body = document.getElementById("compare-table-body");
-  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="18">لا توجد بيانات مطابقة</td></tr>'; return; }
+  if (!groups.length) { body.innerHTML = '<tr class="empty-row"><td colspan="19">لا توجد بيانات مطابقة</td></tr>'; return; }
   body.innerHTML = groups.map(g => {
     const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "—";
     const fuel = expectedFuelLiters(g.vehicle_plate, dist);
     const timeOf = r => r ? escapeHtml((r.created_at || "").replace("T", " ").slice(11, 16)) : "—";
     const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
+    const offDuty = getOffDuty(g);
     return `<tr>
       <td>${escapeHtml(g.day)}</td><td>${escapeHtml(g.full_name)}</td><td>${escapeHtml(g.identity_number)}</td>
       <td>${g.project ? `<span class="badge start">${escapeHtml(g.project)}</span>` : "—"}</td>
       <td>${escapeHtml(g.vehicle_plate)}</td>
       <td class="group-alt">${g.start?.odo_reading ?? "—"}</td><td class="group-alt">${g.end?.odo_reading ?? "—"}</td>
-      <td class="group-alt">${dist}</td><td class="group-alt">${fuel}</td><td class="group-alt">${timeOf(g.start)}</td><td class="group-alt">${timeOf(g.end)}</td>
+      <td class="group-alt">${dist}</td><td class="group-alt">${fuel}</td><td class="group-alt">${offDuty ?? "—"}</td><td class="group-alt">${timeOf(g.start)}</td><td class="group-alt">${timeOf(g.end)}</td>
       <td>${g.start?.ofd_count ?? "—"}</td><td>${g.end?.cod_delivered ?? "—"}</td>
       <td>${g.end?.ppd_delivered ?? "—"}</td><td>${g.end?.picked_up ?? "—"}</td>
       <td>${delivered}</td><td>${deliveryPct}</td><td>${sales}</td>
@@ -1538,7 +1563,7 @@ document.getElementById("export-btn").addEventListener("click", () => {
     downloadCsv(`shift_entries_${stamp}.csv`, keys, rowsWithProject);
   } else if (currentPage === "compare") {
     if (!currentCompareRows.length) { setStatus("err", "مفيش بيانات للتصدير"); return; }
-    const keys = ["date","full_name","identity_number","project","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","start_time","end_time","ofd","cod","ppd","picked_up","delivered","delivery_pct","sales","status"];
+    const keys = ["date","full_name","identity_number","project","vehicle_plate","start_odo","end_odo","distance","expected_fuel_liters","off_duty_km","start_time","end_time","ofd","cod","ppd","picked_up","delivered","delivery_pct","sales","status"];
     const rows = currentCompareRows.map(g => {
       const distance = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : "";
       const { delivered, deliveryPct, sales } = computeDeliveryMetrics(g);
@@ -1547,6 +1572,7 @@ document.getElementById("export-btn").addEventListener("click", () => {
         start_odo: g.start?.odo_reading ?? "", end_odo: g.end?.odo_reading ?? "",
         distance,
         expected_fuel_liters: expectedFuelLiters(g.vehicle_plate, distance === "" ? null : distance),
+        off_duty_km: getOffDuty(g) ?? "",
         start_time: g.start ? (g.start.created_at || "").slice(11, 16) : "",
         end_time: g.end ? (g.end.created_at || "").slice(11, 16) : "",
         ofd: g.start?.ofd_count ?? "", cod: g.end?.cod_delivered ?? "", ppd: g.end?.ppd_delivered ?? "", picked_up: g.end?.picked_up ?? "",
