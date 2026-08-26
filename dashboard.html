@@ -337,7 +337,7 @@
       <div class="side-section-label">التقارير</div>
       <button class="side-link active" data-page="overview" id="overview-link"><span class="ic">📊</span> نظرة عامة</button>
       <button class="side-link" data-page="records" id="records-link"><span class="ic">🗂️</span> السجلات</button>
-      <button class="side-link" data-page="compare" id="compare-link"><span class="ic">🔁</span> مقارنة السائقين</button>
+      <button class="side-link" data-page="compare" id="compare-link"><span class="ic">🔁</span> تقرير السائقين</button>
       <button class="side-link" data-page="stations" id="stations-link"><span class="ic">📍</span> تقرير المحطات</button>
       <div class="side-section-label">الإدارة</div>
       <button class="side-link" data-page="fleet" id="fleet-link"><span class="ic">🚚</span> الأسطول</button>
@@ -647,7 +647,7 @@ let isAdmin = true;
 const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "SHC"];
 let editingId = null;
 
-const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "مقارنة السائقين", stations: "تقرير المحطات", fleet: "الأسطول", drivers: "السائقين" };
+const PAGE_LABELS = { overview: "نظرة عامة", records: "السجلات", compare: "تقرير السائقين", stations: "تقرير المحطات", fleet: "الأسطول", drivers: "السائقين" };
 
 function setStatus(kind, text) {
   const el = document.getElementById("status-msg");
