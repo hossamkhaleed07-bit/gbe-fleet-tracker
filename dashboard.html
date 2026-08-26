@@ -757,9 +757,11 @@ async function loadDriverProjects() {
   const { data, error } = await sb.from("drivers").select("*").order("identity_number");
   if (error) return;
   driverProjects = {};
+  vehicleDriverMap = {};
   allDrivers = data || [];
   for (const d of allDrivers) {
     if (d.identity_number && d.project) driverProjects[d.identity_number] = d.project;
+    if (d.assigned_vehicle_plate) vehicleDriverMap[d.assigned_vehicle_plate] = { identity_number: d.identity_number, full_name: d.full_name };
   }
   applyDriversFilterAndRender();
 }
@@ -817,9 +819,12 @@ async function loadData() {
   allRows = data || [];
   allCompareGroups = buildDriverComparison(allRows);
   currentStationRows = buildStationReport(allRows);
-  vehicleDriverMap = {};
+  // vehicleDriverMap already seeded from drivers.assigned_vehicle_plate (loadDriverProjects);
+  // only fill in vehicles with no roster assignment using their most recent shift check-in
   for (const r of allRows) {
-    if (r.vehicle_plate) vehicleDriverMap[r.vehicle_plate] = { identity_number: r.identity_number, full_name: r.full_name };
+    if (r.vehicle_plate && !vehicleDriverMap[r.vehicle_plate]) {
+      vehicleDriverMap[r.vehicle_plate] = { identity_number: r.identity_number, full_name: r.full_name };
+    }
   }
   renderStats(allRows, allCompareGroups);
   renderOverviewPanels(allRows, allCompareGroups, currentStationRows);
