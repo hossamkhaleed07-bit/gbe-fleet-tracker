@@ -219,6 +219,50 @@
   }
   #driver-actions { display: flex; gap: 0.6rem; margin-top: 1rem; }
   #driver-actions button { flex: 1; }
+
+  /* ---- pill filter bar (Drivers gallery) ---- */
+  .pill-bar { display: flex; gap: 0.6rem; flex-wrap: wrap; align-items: center; margin-bottom: 1rem; }
+  .pill-search {
+    display: flex; align-items: center; gap: 0.5rem; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 999px; padding: 0.55rem 1rem; flex: 1; min-width: 200px;
+  }
+  .pill-search-ic { font-size: 0.85rem; opacity: 0.55; }
+  .pill-search input { border: none; background: none; outline: none; font-size: 0.85rem; width: 100%; color: var(--ink); }
+  .pill-select-wrap select {
+    appearance: none; -webkit-appearance: none; padding: 0.55rem 2rem 0.55rem 1rem; border-radius: 999px;
+    border: 1px solid var(--border); background-color: var(--surface-1); color: var(--ink-2);
+    font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M1 1l4 4 4-4' stroke='%23898781' stroke-width='1.5' fill='none'/></svg>");
+    background-repeat: no-repeat; background-position: left 0.9rem center;
+  }
+  .pill-add-btn { border-radius: 999px; }
+  .cards-count { font-size: 0.8rem; color: var(--ink-muted); margin-bottom: 0.9rem; }
+
+  /* ---- card gallery ---- */
+  .cards-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 1rem; }
+  .driver-card {
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: 14px;
+    overflow: hidden; display: flex; flex-direction: column;
+  }
+  .driver-card-avatar {
+    height: 110px; display: flex; align-items: center; justify-content: center; font-size: 2.6rem;
+  }
+  .driver-card-body { padding: 0.9rem 1rem; flex: 1; }
+  .driver-card-id {
+    font-weight: 800; font-size: 1rem; margin-bottom: 0.8rem; padding-inline-start: 0.6rem;
+    border-inline-start: 3px solid var(--blue);
+  }
+  .driver-card-field { margin-bottom: 0.55rem; }
+  .driver-card-field label { display: block; font-size: 0.7rem; color: var(--ink-muted); margin-bottom: 0.1rem; }
+  .driver-card-field .val { font-size: 0.85rem; color: var(--ink); font-weight: 600; }
+  .driver-card-actions { display: flex; border-top: 1px solid var(--border); }
+  .driver-card-actions button {
+    flex: 1; padding: 0.6rem; border: none; background: none; font-size: 0.8rem; font-weight: 700;
+    cursor: pointer; color: var(--ink-2);
+  }
+  .driver-card-actions button:first-child { border-inline-end: 1px solid var(--border); }
+  .driver-card-actions button.danger { color: var(--critical); }
+  .empty-cards { grid-column: 1 / -1; text-align: center; color: var(--ink-muted); padding: 2.5rem; }
 </style>
 </head>
 <body>
@@ -406,18 +450,14 @@
     </section>
 
     <section id="page-drivers" class="page">
-      <div style="margin-bottom: 1rem;">
-        <button class="btn btn-primary" style="width:auto" id="add-driver-btn">+ إضافة سائق جديد</button>
-      </div>
-      <div class="local-filters">
-        <div class="field">
-          <label>بحث (اسم / رقم الهوية)</label>
-          <input type="text" id="d-search" placeholder="اكتبي هنا...">
+      <div class="pill-bar">
+        <div class="pill-search">
+          <span class="pill-search-ic">🔍</span>
+          <input type="text" id="d-search" placeholder="بحث بالاسم أو رقم الهوية...">
         </div>
-        <div class="field">
-          <label>المشروع</label>
+        <div class="pill-select-wrap">
           <select id="d-filter-project">
-            <option value="">الكل</option>
+            <option value="">كل المشاريع</option>
             <option value="FDP">FDP</option>
             <option value="ADM">ADM</option>
             <option value="LMS">LMS</option>
@@ -425,20 +465,18 @@
             <option value="SHC">SHC</option>
           </select>
         </div>
-        <div class="field"><button class="btn" id="drivers-filter-btn">تطبيق</button></div>
-        <div class="field"><button class="btn" id="drivers-reset-btn">مسح الفلاتر</button></div>
+        <div class="pill-select-wrap">
+          <select id="d-filter-status">
+            <option value="">كل الحالات</option>
+            <option value="active">مفعّل</option>
+            <option value="inactive">معطّل</option>
+          </select>
+        </div>
+        <button class="btn" id="drivers-reset-btn">مسح الفلاتر</button>
+        <button class="btn btn-primary pill-add-btn" id="add-driver-btn">+ سائق جديد</button>
       </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>رقم الهوية</th><th>الاسم</th><th>الجنسية</th><th>رقم الموبايل</th><th>المشروع</th>
-              <th>الحالة</th><th></th>
-            </tr>
-          </thead>
-          <tbody id="drivers-body"><tr class="empty-row"><td colspan="7">جارِ التحميل...</td></tr></tbody>
-        </table>
-      </div>
+      <div id="drivers-count" class="cards-count"></div>
+      <div id="drivers-grid" class="cards-grid"><div class="empty-cards">جارِ التحميل...</div></div>
     </section>
   </main>
 </div>
@@ -654,8 +692,11 @@ async function loadDriverProjects() {
 function applyDriversFilterAndRender() {
   const search = document.getElementById("d-search").value.trim().toLowerCase();
   const project = document.getElementById("d-filter-project").value;
+  const status = document.getElementById("d-filter-status").value;
   let rows = allDrivers;
   if (project) rows = rows.filter(d => d.project === project);
+  if (status === "active") rows = rows.filter(d => d.is_active);
+  if (status === "inactive") rows = rows.filter(d => !d.is_active);
   if (search) {
     rows = rows.filter(d =>
       (d.full_name || "").toLowerCase().includes(search) ||
@@ -1009,25 +1050,36 @@ document.getElementById("vehicle-save").addEventListener("click", async () => {
 let editingDriverIdentity = null;
 let isNewDriver = false;
 
-function renderDriversTable(drivers) {
-  const body = document.getElementById("drivers-body");
-  if (!drivers.length) { body.innerHTML = '<tr class="empty-row"><td colspan="7">لا يوجد سائقين</td></tr>'; return; }
-  body.innerHTML = drivers.map(d => `<tr>
-    <td>${escapeHtml(d.identity_number)}</td>
-    <td>${escapeHtml(d.full_name)}</td>
-    <td>${escapeHtml(d.nationality)}</td>
-    <td>${escapeHtml(d.mobile_number)}</td>
-    <td>${escapeHtml(d.project)}</td>
-    <td><button class="toggle-pill ${d.is_active ? "active" : "inactive"}" data-toggle-driver="${escapeHtml(d.identity_number)}">${d.is_active ? "مفعّل" : "معطّل"}</button></td>
-    <td class="row-actions">
-      <button class="btn" data-edit-driver="${escapeHtml(d.identity_number)}">تعديل</button>
-      <button class="btn btn-danger" data-del-driver="${escapeHtml(d.identity_number)}">حذف</button>
-    </td>
-  </tr>`).join("");
+const AVATAR_BG = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
 
-  body.querySelectorAll("[data-toggle-driver]").forEach(btn => btn.addEventListener("click", () => toggleDriverActive(btn.dataset.toggleDriver)));
-  body.querySelectorAll("[data-edit-driver]").forEach(btn => btn.addEventListener("click", () => openDriverEdit(btn.dataset.editDriver)));
-  body.querySelectorAll("[data-del-driver]").forEach(btn => btn.addEventListener("click", () => deleteDriver(btn.dataset.delDriver)));
+function renderDriversTable(drivers) {
+  const grid = document.getElementById("drivers-grid");
+  document.getElementById("drivers-count").textContent = `${drivers.length} سائق`;
+  if (!drivers.length) { grid.innerHTML = '<div class="empty-cards">لا يوجد سائقين مطابقين</div>'; return; }
+  grid.innerHTML = drivers.map((d, i) => {
+    const c = AVATAR_BG[i % AVATAR_BG.length];
+    const statusBadge = `<span class="badge ${d.is_active ? "complete" : "partial"}">${d.is_active ? "مفعّل" : "معطّل"}</span>`;
+    return `<div class="driver-card">
+      <div class="driver-card-avatar" style="background:var(--${c}-bg);color:var(--${c}-ink)">🧑</div>
+      <div class="driver-card-body">
+        <div class="driver-card-id">${escapeHtml(d.identity_number)}</div>
+        <div class="driver-card-field"><label>الاسم</label><div class="val">${escapeHtml(d.full_name) || "—"}</div></div>
+        <div class="driver-card-field"><label>الجنسية</label><div class="val">${escapeHtml(d.nationality) || "—"}</div></div>
+        <div class="driver-card-field"><label>رقم الموبايل</label><div class="val">${escapeHtml(d.mobile_number) || "—"}</div></div>
+        <div class="driver-card-field"><label>المشروع</label><div class="val">${d.project ? `<span class="badge start">${escapeHtml(d.project)}</span>` : "—"}</div></div>
+        <div class="driver-card-field"><label>الحالة</label><div class="val">${statusBadge}</div></div>
+      </div>
+      <div class="driver-card-actions">
+        <button data-toggle-driver="${escapeHtml(d.identity_number)}">${d.is_active ? "تعطيل" : "تفعيل"}</button>
+        <button data-edit-driver="${escapeHtml(d.identity_number)}">تعديل</button>
+        <button class="danger" data-del-driver="${escapeHtml(d.identity_number)}">حذف</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  grid.querySelectorAll("[data-toggle-driver]").forEach(btn => btn.addEventListener("click", () => toggleDriverActive(btn.dataset.toggleDriver)));
+  grid.querySelectorAll("[data-edit-driver]").forEach(btn => btn.addEventListener("click", () => openDriverEdit(btn.dataset.editDriver)));
+  grid.querySelectorAll("[data-del-driver]").forEach(btn => btn.addEventListener("click", () => deleteDriver(btn.dataset.delDriver)));
 }
 
 async function deleteDriver(identity) {
@@ -1175,10 +1227,13 @@ document.getElementById("reset-btn").addEventListener("click", () => {
   loadData();
 });
 document.getElementById("local-filter-btn").addEventListener("click", applyRecordsFilterAndRender);
-document.getElementById("drivers-filter-btn").addEventListener("click", applyDriversFilterAndRender);
+document.getElementById("d-search").addEventListener("input", applyDriversFilterAndRender);
+document.getElementById("d-filter-project").addEventListener("change", applyDriversFilterAndRender);
+document.getElementById("d-filter-status").addEventListener("change", applyDriversFilterAndRender);
 document.getElementById("drivers-reset-btn").addEventListener("click", () => {
   document.getElementById("d-search").value = "";
   document.getElementById("d-filter-project").value = "";
+  document.getElementById("d-filter-status").value = "";
   applyDriversFilterAndRender();
 });
 document.getElementById("fleet-filter-btn").addEventListener("click", applyFleetFilterAndRender);
