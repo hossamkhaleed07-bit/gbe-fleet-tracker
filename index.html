@@ -40,10 +40,10 @@
   h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
   .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
 
-  .toggle { display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 1.5rem; }
+  .toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.5rem; }
   .toggle button {
-    padding: 0.85rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
-    color: var(--ink-2); font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    padding: 0.85rem 0.4rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink-2); font-size: 0.85rem; font-weight: 600; cursor: pointer;
   }
   .toggle button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
 
@@ -95,6 +95,7 @@
     <div class="toggle">
       <button type="button" data-type="start" class="active">بداية الدوام</button>
       <button type="button" data-type="end">نهاية الدوام</button>
+      <button type="button" data-type="reinforcement">طلب تعزيز</button>
     </div>
 
     <div class="field">
@@ -163,9 +164,13 @@
       </div>
     </div>
 
-    <div class="field">
+    <div class="field" id="area-field">
       <label>المنطقة <span class="req">*</span></label>
       <input type="text" id="area" required>
+    </div>
+    <div class="field" id="amount-field" style="display:none">
+      <label>المبلغ <span class="req">*</span></label>
+      <input type="number" id="amount" inputmode="decimal">
     </div>
 
     <button type="submit" class="submit" id="submit-btn">إرسال</button>
@@ -278,12 +283,23 @@ document.querySelectorAll(".toggle button").forEach(btn => {
     btn.classList.add("active");
     shiftType = btn.dataset.type;
     const isStart = shiftType === "start";
+    const isEnd = shiftType === "end";
+    const isReinforcement = shiftType === "reinforcement";
     document.getElementById("start-fields").style.display = isStart ? "block" : "none";
-    document.getElementById("end-fields").style.display = isStart ? "none" : "block";
-    document.getElementById("odo-label").innerHTML = (isStart ? "قراءة عداد البداية" : "قراءة عداد النهاية") + ' <span class="req">*</span>';
-    document.getElementById("photo-label").innerHTML = (isStart ? "صورة عداد البداية" : "صورة عداد النهاية") + ' <span class="req">*</span>';
+    document.getElementById("end-fields").style.display = isEnd ? "block" : "none";
+    document.getElementById("area-field").style.display = isReinforcement ? "none" : "block";
+    document.getElementById("amount-field").style.display = isReinforcement ? "block" : "none";
+    document.getElementById("area").required = !isReinforcement;
+    document.getElementById("amount").required = isReinforcement;
+    if (isStart || isEnd) {
+      document.getElementById("odo-label").innerHTML = (isStart ? "قراءة عداد البداية" : "قراءة عداد النهاية") + ' <span class="req">*</span>';
+      document.getElementById("photo-label").innerHTML = (isStart ? "صورة عداد البداية" : "صورة عداد النهاية") + ' <span class="req">*</span>';
+    } else {
+      document.getElementById("odo-label").innerHTML = 'قراءة العداد <span class="req">*</span>';
+      document.getElementById("photo-label").innerHTML = 'صورة العداد <span class="req">*</span>';
+    }
     START_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isStart; });
-    END_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = !isStart; });
+    END_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isEnd; });
   });
 });
 
@@ -304,41 +320,63 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
 
   try {
     const odoPhotoFile = document.getElementById("odo_photo").files[0];
-    const videoFile = document.getElementById("condition_video")?.files[0];
-    const screenshotFile = document.getElementById("client_screenshot")?.files[0];
 
-    const [odoPhotoUrl, videoUrl, screenshotUrl] = await Promise.all([
-      uploadFile(odoPhotoFile, "odo"),
-      uploadFile(videoFile, "condition-video"),
-      uploadFile(screenshotFile, "client-screenshot"),
-    ]);
+    if (shiftType === "reinforcement") {
+      const odoPhotoUrl = await uploadFile(odoPhotoFile, "reinforcement-odo");
+      const payload = {
+        p_identity_number: document.getElementById("identity_number").value.trim(),
+        p_full_name: document.getElementById("full_name").value.trim(),
+        p_vehicle_plate: document.getElementById("vehicle_plate").value.trim(),
+        p_station_name: document.getElementById("station_name").value || null,
+        p_odo_reading: Number(document.getElementById("odo_reading").value),
+        p_odo_photo_url: odoPhotoUrl,
+        p_amount: Number(document.getElementById("amount").value),
+        p_shift_date: document.getElementById("shift_date").value,
+      };
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_reinforcement_request`, {
+        method: "POST",
+        headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setStatus("ok", "تم إرسال طلب التعزيز بنجاح ✓");
+    } else {
+      const videoFile = document.getElementById("condition_video")?.files[0];
+      const screenshotFile = document.getElementById("client_screenshot")?.files[0];
 
-    const payload = {
-      p_identity_number: document.getElementById("identity_number").value.trim(),
-      p_full_name: document.getElementById("full_name").value.trim(),
-      p_vehicle_plate: document.getElementById("vehicle_plate").value.trim(),
-      p_station_name: document.getElementById("station_name").value || null,
-      p_shift_type: shiftType,
-      p_odo_reading: Number(document.getElementById("odo_reading").value),
-      p_odo_photo_url: odoPhotoUrl,
-      p_condition_video_url: videoUrl,
-      p_ofd_count: document.getElementById("ofd_count")?.value ? Number(document.getElementById("ofd_count").value) : null,
-      p_cod_delivered: document.getElementById("cod_delivered")?.value ? Number(document.getElementById("cod_delivered").value) : null,
-      p_ppd_delivered: document.getElementById("ppd_delivered")?.value ? Number(document.getElementById("ppd_delivered").value) : null,
-      p_picked_up: document.getElementById("picked_up")?.value ? Number(document.getElementById("picked_up").value) : null,
-      p_client_screenshot_url: screenshotUrl,
-      p_area: document.getElementById("area").value || null,
-      p_shift_date: document.getElementById("shift_date").value,
-    };
+      const [odoPhotoUrl, videoUrl, screenshotUrl] = await Promise.all([
+        uploadFile(odoPhotoFile, "odo"),
+        uploadFile(videoFile, "condition-video"),
+        uploadFile(screenshotFile, "client-screenshot"),
+      ]);
 
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_shift_entry`, {
-      method: "POST",
-      headers: headers({ "Content-Type": "application/json" }),
-      body: JSON.stringify(payload),
-    });
-    if (!res.ok) throw new Error(await res.text());
+      const payload = {
+        p_identity_number: document.getElementById("identity_number").value.trim(),
+        p_full_name: document.getElementById("full_name").value.trim(),
+        p_vehicle_plate: document.getElementById("vehicle_plate").value.trim(),
+        p_station_name: document.getElementById("station_name").value || null,
+        p_shift_type: shiftType,
+        p_odo_reading: Number(document.getElementById("odo_reading").value),
+        p_odo_photo_url: odoPhotoUrl,
+        p_condition_video_url: videoUrl,
+        p_ofd_count: document.getElementById("ofd_count")?.value ? Number(document.getElementById("ofd_count").value) : null,
+        p_cod_delivered: document.getElementById("cod_delivered")?.value ? Number(document.getElementById("cod_delivered").value) : null,
+        p_ppd_delivered: document.getElementById("ppd_delivered")?.value ? Number(document.getElementById("ppd_delivered").value) : null,
+        p_picked_up: document.getElementById("picked_up")?.value ? Number(document.getElementById("picked_up").value) : null,
+        p_client_screenshot_url: screenshotUrl,
+        p_area: document.getElementById("area").value || null,
+        p_shift_date: document.getElementById("shift_date").value,
+      };
 
-    setStatus("ok", "تم تسجيل الدوام بنجاح ✓");
+      const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/submit_shift_entry`, {
+        method: "POST",
+        headers: headers({ "Content-Type": "application/json" }),
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      setStatus("ok", "تم تسجيل الدوام بنجاح ✓");
+    }
+
     document.getElementById("shift-form").reset();
     document.querySelector('.toggle button[data-type="start"]').click();
     setDefaultShiftDate();
