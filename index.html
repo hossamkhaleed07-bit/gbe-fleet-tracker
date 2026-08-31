@@ -40,11 +40,20 @@
   h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
   .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
 
+  .lang-switch { display: flex; gap: 0.4rem; justify-content: flex-end; margin-bottom: 1rem; }
+  .lang-switch button {
+    padding: 0.35rem 0.75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink-muted); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+  }
+  .lang-switch button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
+
+  .choose-hint { font-size: 0.85rem; color: var(--ink-2); margin: 0 0 0.75rem; font-weight: 600; }
   .toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.5rem; }
   .toggle button {
-    padding: 0.85rem 0.4rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
-    color: var(--ink-2); font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    padding: 1rem 0.4rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
+    color: var(--ink-2); font-size: 0.85rem; font-weight: 600; cursor: pointer; text-align: center;
   }
+  .toggle button .icon { display: block; font-size: 1.5rem; margin-bottom: 0.35rem; line-height: 1; }
   .toggle button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
 
   fieldset { border: none; padding: 0; margin: 0 0 1.5rem; }
@@ -79,103 +88,126 @@
     padding: 1rem 1.1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--ink-2);
   }
   #config-note code { background: var(--grid); padding: 0.1rem 0.35rem; border-radius: 4px; }
+
+  #screen-success { text-align: center; padding-top: 1.5rem; }
+  .success-icon {
+    width: 64px; height: 64px; border-radius: 50%; background: var(--good); color: #fff;
+    display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1.25rem;
+  }
+  #screen-success h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+  .success-message { color: var(--ink-2); font-size: 0.92rem; margin: 0 0 1.75rem; }
+  #screen-success .submit { width: auto; padding: 0.85rem 2rem; }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <img src="logo.png" alt="GBE Logistics" class="brand-logo" onerror="this.style.display='none'">
-  <h1>تسجيل بداية / نهاية الدوام</h1>
-  <p class="sub">GBE Logistics — Fleet Tracker</p>
-
-  <div id="config-note">
-    محتاجة تحطي <code>SUPABASE_URL</code> و <code>SUPABASE_ANON_KEY</code> في أول ملف الصفحة.
+  <div class="lang-switch" id="lang-switch">
+    <button type="button" data-lang="ar">عربي</button>
+    <button type="button" data-lang="en">English</button>
+    <button type="button" data-lang="ur">اردو</button>
   </div>
 
-  <form id="shift-form">
-    <div class="toggle">
-      <button type="button" data-type="start" class="active">بداية الدوام</button>
-      <button type="button" data-type="end">نهاية الدوام</button>
-      <button type="button" data-type="reinforcement">طلب تعزيز</button>
+  <img src="logo.png" alt="GBE Logistics" class="brand-logo" onerror="this.style.display='none'">
+  <h1 data-i18n="heading"></h1>
+  <p class="sub" data-i18n="subtitle"></p>
+
+  <div id="config-note" data-i18n="configNote"></div>
+
+  <div id="screen-form">
+    <p class="choose-hint" data-i18n="chooseTypeTitle"></p>
+    <div class="toggle" id="type-toggle">
+      <button type="button" data-type="start"><span class="icon">▶️</span><span data-i18n="typeStart"></span></button>
+      <button type="button" data-type="end"><span class="icon">⏹️</span><span data-i18n="typeEnd"></span></button>
+      <button type="button" data-type="reinforcement"><span class="icon">💵</span><span data-i18n="typeReinforcement"></span></button>
     </div>
 
-    <div class="field">
-      <label>تاريخ الدوام <span class="req">*</span></label>
-      <input type="date" id="shift_date" required>
-      <p class="hint">لو بتسجلي نهاية الدوام بعد نص الليل، اختاري تاريخ يوم بداية الدوام مش تاريخ اليوم الجديد.</p>
-    </div>
-    <div class="field">
-      <label>رقم الهوية أو الإقامة <span class="req">*</span></label>
-      <input type="text" id="identity_number" inputmode="numeric" required>
-    </div>
-    <div class="field">
-      <label>اسم السائق <span class="req">*</span></label>
-      <input type="text" id="full_name" required readonly placeholder="هيظهر تلقائيًا بعد إدخال رقم الهوية">
-      <p class="hint" id="name-lookup-hint"></p>
-    </div>
-    <div class="field">
-      <label>لوحة المركبة <span class="req">*</span></label>
-      <input type="text" id="vehicle_plate" list="vehicle_plate_list" required autocomplete="off" placeholder="اكتبي رقم أو حروف اللوحة للبحث...">
-      <datalist id="vehicle_plate_list"></datalist>
-    </div>
-    <div class="field">
-      <label>المحطة <span class="req">*</span></label>
-      <select id="station_name" required>
-        <option value="" disabled selected>— اختاري المحطة —</option>
-      </select>
-    </div>
+    <form id="shift-form" style="display:none">
+      <div class="field">
+        <label><span data-i18n="labelShiftDate"></span> <span class="req">*</span></label>
+        <input type="date" id="shift_date" required>
+        <p class="hint" data-i18n="hintShiftDate"></p>
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelIdentity"></span> <span class="req">*</span></label>
+        <input type="text" id="identity_number" inputmode="numeric" required>
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelFullName"></span> <span class="req">*</span></label>
+        <input type="text" id="full_name" required readonly data-i18n-placeholder="placeholderFullName">
+        <p class="hint" id="name-lookup-hint"></p>
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelVehiclePlate"></span> <span class="req">*</span></label>
+        <input type="text" id="vehicle_plate" list="vehicle_plate_list" required autocomplete="off" data-i18n-placeholder="placeholderVehiclePlate">
+        <datalist id="vehicle_plate_list"></datalist>
+      </div>
+      <div class="field">
+        <label><span data-i18n="labelStation"></span> <span class="req">*</span></label>
+        <select id="station_name" required>
+          <option value="" disabled selected data-i18n="optionStation"></option>
+        </select>
+      </div>
 
-    <div class="field">
-      <label id="odo-label">قراءة العداد <span class="req">*</span></label>
-      <input type="number" id="odo_reading" required inputmode="decimal">
-    </div>
-    <div class="field">
-      <label id="photo-label">صورة العداد <span class="req">*</span></label>
-      <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
-    </div>
+      <div class="field">
+        <label id="odo-label"></label>
+        <input type="number" id="odo_reading" required inputmode="decimal">
+      </div>
+      <div class="field">
+        <label id="photo-label"></label>
+        <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
+      </div>
 
-    <div id="start-fields">
-      <div class="field">
-        <label>فيديو حالة المركبة <span class="req">*</span></label>
-        <input type="file" id="condition_video" accept="video/*" capture="environment" required>
+      <div id="start-fields">
+        <div class="field">
+          <label><span data-i18n="labelConditionVideo"></span> <span class="req">*</span></label>
+          <input type="file" id="condition_video" accept="video/*" capture="environment" required>
+        </div>
+        <div class="field">
+          <label><span data-i18n="labelOfd"></span> <span class="req">*</span></label>
+          <input type="number" id="ofd_count" inputmode="numeric" required>
+        </div>
       </div>
-      <div class="field">
-        <label>الشحنات المستلمة (OFD) <span class="req">*</span></label>
-        <input type="number" id="ofd_count" inputmode="numeric" required>
-      </div>
-    </div>
 
-    <div id="end-fields" style="display:none">
-      <div class="section-title">بيانات التوصيل</div>
-      <div class="field">
-        <label>الشحنات الموصّلة غير المدفوعة (COD) <span class="req">*</span></label>
-        <input type="number" id="cod_delivered" inputmode="numeric">
+      <div id="end-fields" style="display:none">
+        <div class="section-title" data-i18n="sectionDelivery"></div>
+        <div class="field">
+          <label><span data-i18n="labelCod"></span> <span class="req">*</span></label>
+          <input type="number" id="cod_delivered" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label><span data-i18n="labelPpd"></span> <span class="req">*</span></label>
+          <input type="number" id="ppd_delivered" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label><span data-i18n="labelPickedUp"></span> <span class="req">*</span></label>
+          <input type="number" id="picked_up" inputmode="numeric">
+        </div>
+        <div class="field">
+          <label><span data-i18n="labelClientScreenshot"></span> <span class="req">*</span></label>
+          <input type="file" id="client_screenshot" accept="image/*">
+        </div>
       </div>
-      <div class="field">
-        <label>الشحنات الموصّلة المدفوعة (PPD) <span class="req">*</span></label>
-        <input type="number" id="ppd_delivered" inputmode="numeric">
-      </div>
-      <div class="field">
-        <label>الشحنات المستلمة (Picked Up) <span class="req">*</span></label>
-        <input type="number" id="picked_up" inputmode="numeric">
-      </div>
-      <div class="field">
-        <label>صورة من تطبيق العميل <span class="req">*</span></label>
-        <input type="file" id="client_screenshot" accept="image/*">
-      </div>
-    </div>
 
-    <div class="field" id="area-field">
-      <label>المنطقة <span class="req">*</span></label>
-      <input type="text" id="area" required>
-    </div>
-    <div class="field" id="amount-field" style="display:none">
-      <label>المبلغ <span class="req">*</span></label>
-      <input type="number" id="amount" inputmode="decimal">
-    </div>
+      <div class="field" id="area-field" style="display:none">
+        <label><span data-i18n="labelArea"></span> <span class="req">*</span></label>
+        <input type="text" id="area">
+      </div>
+      <div class="field" id="amount-field" style="display:none">
+        <label><span data-i18n="labelAmount"></span> <span class="req">*</span></label>
+        <input type="number" id="amount" inputmode="decimal">
+      </div>
 
-    <button type="submit" class="submit" id="submit-btn">إرسال</button>
-    <div id="status"></div>
-  </form>
+      <button type="submit" class="submit" id="submit-btn" data-i18n="submit"></button>
+      <div id="status"></div>
+    </form>
+  </div>
+
+  <div id="screen-success" style="display:none">
+    <div class="success-icon">✓</div>
+    <h2 data-i18n="successTitle"></h2>
+    <p class="success-message" data-i18n="successMessage"></p>
+    <button type="button" class="submit" id="new-entry-btn" data-i18n="newEntryBtn"></button>
+  </div>
 </div>
 
 <script>
@@ -188,7 +220,186 @@ const STORAGE_BUCKET = "shift-media";
 /* ============================================================ */
 
 const isConfigured = !SUPABASE_URL.includes("YOUR_") && !SUPABASE_ANON_KEY.includes("YOUR_");
-let shiftType = "start";
+let shiftType = null;
+
+/* ============================================================
+   الترجمة — عربي / إنجليزي / أوردو
+   ============================================================ */
+const translations = {
+  ar: {
+    dir: "rtl",
+    pageTitle: "تسجيل دوام — GBE Fleet Tracker",
+    heading: "تسجيل بداية / نهاية الدوام",
+    subtitle: "GBE Logistics — Fleet Tracker",
+    configNote: 'محتاجة تحطي SUPABASE_URL و SUPABASE_ANON_KEY في أول ملف الصفحة.',
+    chooseTypeTitle: "اختاري نوع العملية",
+    typeStart: "بداية الدوام",
+    typeEnd: "نهاية الدوام",
+    typeReinforcement: "طلب تعزيز",
+    labelShiftDate: "تاريخ الدوام",
+    hintShiftDate: "لو بتسجلي نهاية الدوام بعد نص الليل، اختاري تاريخ يوم بداية الدوام مش تاريخ اليوم الجديد.",
+    labelIdentity: "رقم الهوية أو الإقامة",
+    labelFullName: "اسم السائق",
+    placeholderFullName: "هيظهر تلقائيًا بعد إدخال رقم الهوية",
+    lookupSearching: "جاري البحث...",
+    lookupNotFound: "لم يتم العثور على سائق بهذا الرقم. تأكدي من رقم الهوية أو تواصلي مع الإدارة.",
+    lookupError: "تعذر البحث عن السائق، حاولي تاني.",
+    labelVehiclePlate: "لوحة المركبة",
+    placeholderVehiclePlate: "اكتبي رقم أو حروف اللوحة للبحث...",
+    labelStation: "المحطة",
+    optionStation: "— اختاري المحطة —",
+    labelOdoStart: "قراءة عداد البداية",
+    labelOdoEnd: "قراءة عداد النهاية",
+    labelOdoGeneric: "قراءة العداد",
+    labelPhotoStart: "صورة عداد البداية",
+    labelPhotoEnd: "صورة عداد النهاية",
+    labelPhotoGeneric: "صورة العداد",
+    labelConditionVideo: "فيديو حالة المركبة",
+    labelOfd: "الشحنات المستلمة (OFD)",
+    sectionDelivery: "بيانات التوصيل",
+    labelCod: "الشحنات الموصّلة غير المدفوعة (COD)",
+    labelPpd: "الشحنات الموصّلة المدفوعة (PPD)",
+    labelPickedUp: "الشحنات المستلمة (Picked Up)",
+    labelClientScreenshot: "صورة من تطبيق العميل",
+    labelArea: "المنطقة",
+    labelAmount: "المبلغ",
+    submit: "إرسال",
+    submitBusy: "بيتم رفع الصور والإرسال…",
+    errNoPlate: "لوحة المركبة دي مش موجودة في القائمة، اختاري لوحة صحيحة من الاقتراحات.",
+    errGeneric: "حصل خطأ: ",
+    successTitle: "تم استلام بياناتك بنجاح ✓",
+    successMessage: "شكرًا لك! تسجيلك الدقيق والمنتظم لبيانات الدوام هو أساس نجاح فريق GBE Logistics. استمري بهذا الالتزام، فهو يساعدنا نقدّم خدمة أفضل ونحافظ على حقك بشكل عادل ودقيق.",
+    newEntryBtn: "تسجيل عملية جديدة"
+  },
+  en: {
+    dir: "ltr",
+    pageTitle: "Shift Log — GBE Fleet Tracker",
+    heading: "Start / End Shift Registration",
+    subtitle: "GBE Logistics — Fleet Tracker",
+    configNote: "Please add SUPABASE_URL and SUPABASE_ANON_KEY at the top of this file.",
+    chooseTypeTitle: "Choose an action",
+    typeStart: "Start Shift",
+    typeEnd: "End Shift",
+    typeReinforcement: "Reinforcement Request",
+    labelShiftDate: "Shift Date",
+    hintShiftDate: "If you are logging the end of a shift after midnight, pick the date the shift started, not the new day.",
+    labelIdentity: "ID / Iqama Number",
+    labelFullName: "Driver Name",
+    placeholderFullName: "Will appear automatically after entering the ID number",
+    lookupSearching: "Searching...",
+    lookupNotFound: "No driver found with this number. Please check the ID number or contact management.",
+    lookupError: "Could not look up the driver, please try again.",
+    labelVehiclePlate: "Vehicle Plate",
+    placeholderVehiclePlate: "Type the plate number or letters to search...",
+    labelStation: "Station",
+    optionStation: "— Select station —",
+    labelOdoStart: "Start Odometer Reading",
+    labelOdoEnd: "End Odometer Reading",
+    labelOdoGeneric: "Odometer Reading",
+    labelPhotoStart: "Start Odometer Photo",
+    labelPhotoEnd: "End Odometer Photo",
+    labelPhotoGeneric: "Odometer Photo",
+    labelConditionVideo: "Vehicle Condition Video",
+    labelOfd: "Shipments Received (OFD)",
+    sectionDelivery: "Delivery Data",
+    labelCod: "Delivered Unpaid Shipments (COD)",
+    labelPpd: "Delivered Paid Shipments (PPD)",
+    labelPickedUp: "Shipments Received (Picked Up)",
+    labelClientScreenshot: "Client App Screenshot",
+    labelArea: "Area",
+    labelAmount: "Amount",
+    submit: "Submit",
+    submitBusy: "Uploading photos and submitting…",
+    errNoPlate: "This vehicle plate isn't in the list, please pick a valid plate from the suggestions.",
+    errGeneric: "An error occurred: ",
+    successTitle: "Your data was received successfully ✓",
+    successMessage: "Thank you! Your accurate and consistent shift logging is the backbone of GBE Logistics' success. Keep up this commitment — it helps us deliver better service and keep your record fair and precise.",
+    newEntryBtn: "Log a new entry"
+  },
+  ur: {
+    dir: "rtl",
+    pageTitle: "شفٹ اندراج — GBE فلیٹ ٹریکر",
+    heading: "شفٹ کے آغاز / اختتام کا اندراج",
+    subtitle: "GBE Logistics — فلیٹ ٹریکر",
+    configNote: "براہ کرم فائل کے شروع میں SUPABASE_URL اور SUPABASE_ANON_KEY درج کریں۔",
+    chooseTypeTitle: "کارروائی کی قسم منتخب کریں",
+    typeStart: "شفٹ کا آغاز",
+    typeEnd: "شفٹ کا اختتام",
+    typeReinforcement: "امدادی رقم کی درخواست",
+    labelShiftDate: "شفٹ کی تاریخ",
+    hintShiftDate: "اگر آپ رات کے بارہ بجے کے بعد شفٹ کا اختتام درج کر رہے ہیں تو شفٹ شروع ہونے کے دن کی تاریخ منتخب کریں، نئے دن کی تاریخ نہیں۔",
+    labelIdentity: "شناختی کارڈ یا اقامہ نمبر",
+    labelFullName: "ڈرائیور کا نام",
+    placeholderFullName: "شناختی نمبر درج کرنے کے بعد خود بخود ظاہر ہوگا",
+    lookupSearching: "تلاش کی جا رہی ہے...",
+    lookupNotFound: "اس نمبر سے کوئی ڈرائیور نہیں ملا۔ براہ کرم شناختی نمبر چیک کریں یا انتظامیہ سے رابطہ کریں۔",
+    lookupError: "ڈرائیور کی تلاش ممکن نہیں ہوئی، دوبارہ کوشش کریں۔",
+    labelVehiclePlate: "گاڑی کی نمبر پلیٹ",
+    placeholderVehiclePlate: "تلاش کے لیے نمبر پلیٹ لکھیں...",
+    labelStation: "پیٹرول اسٹیشن",
+    optionStation: "— اسٹیشن منتخب کریں —",
+    labelOdoStart: "آغاز کی اوڈومیٹر ریڈنگ",
+    labelOdoEnd: "اختتام کی اوڈومیٹر ریڈنگ",
+    labelOdoGeneric: "اوڈومیٹر ریڈنگ",
+    labelPhotoStart: "آغاز کے اوڈومیٹر کی تصویر",
+    labelPhotoEnd: "اختتام کے اوڈومیٹر کی تصویر",
+    labelPhotoGeneric: "اوڈومیٹر کی تصویر",
+    labelConditionVideo: "گاڑی کی حالت کی ویڈیو",
+    labelOfd: "موصول شدہ شپمنٹس (OFD)",
+    sectionDelivery: "ڈیلیوری کی تفصیلات",
+    labelCod: "ڈیلیور شدہ غیر ادا شدہ شپمنٹس (COD)",
+    labelPpd: "ڈیلیور شدہ ادا شدہ شپمنٹس (PPD)",
+    labelPickedUp: "موصول شدہ شپمنٹس (Picked Up)",
+    labelClientScreenshot: "کلائنٹ ایپ کا اسکرین شاٹ",
+    labelArea: "علاقہ",
+    labelAmount: "رقم",
+    submit: "جمع کروائیں",
+    submitBusy: "تصاویر اپلوڈ اور ڈیٹا بھیجا جا رہا ہے…",
+    errNoPlate: "یہ نمبر پلیٹ فہرست میں موجود نہیں، براہ کرم تجاویز میں سے درست پلیٹ منتخب کریں۔",
+    errGeneric: "ایک خرابی پیش آگئی: ",
+    successTitle: "آپ کا ڈیٹا کامیابی سے موصول ہوگیا ✓",
+    successMessage: "شکریہ! آپ کی درست اور مستقل رپورٹنگ GBE Logistics کی کامیابی کی بنیاد ہے۔ اسی ذمہ داری کو جاری رکھیں — یہ ہمیں بہتر خدمات دینے اور آپ کے ریکارڈ کو منصفانہ اور درست رکھنے میں مدد دیتا ہے۔",
+    newEntryBtn: "نئی کارروائی درج کریں"
+  }
+};
+
+let currentLang = localStorage.getItem("gbe_form_lang") || "ar";
+if (!translations[currentLang]) currentLang = "ar";
+
+function t(key) {
+  return (translations[currentLang] && translations[currentLang][key]) || translations.ar[key] || key;
+}
+
+function updateDynamicLabels() {
+  const odoLabel = document.getElementById("odo-label");
+  const photoLabel = document.getElementById("photo-label");
+  let odoText, photoText;
+  if (shiftType === "start") { odoText = t("labelOdoStart"); photoText = t("labelPhotoStart"); }
+  else if (shiftType === "end") { odoText = t("labelOdoEnd"); photoText = t("labelPhotoEnd"); }
+  else { odoText = t("labelOdoGeneric"); photoText = t("labelPhotoGeneric"); }
+  odoLabel.innerHTML = odoText + ' <span class="req">*</span>';
+  photoLabel.innerHTML = photoText + ' <span class="req">*</span>';
+}
+
+function applyTranslations() {
+  document.title = t("pageTitle");
+  document.documentElement.lang = currentLang;
+  document.documentElement.dir = translations[currentLang].dir;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-placeholder]").forEach(el => { el.placeholder = t(el.dataset.i18nPlaceholder); });
+  document.querySelectorAll("#lang-switch button").forEach(b => {
+    b.classList.toggle("active", b.dataset.lang === currentLang);
+  });
+  updateDynamicLabels();
+}
+
+document.querySelectorAll("#lang-switch button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    currentLang = btn.dataset.lang;
+    localStorage.setItem("gbe_form_lang", currentLang);
+    applyTranslations();
+  });
+});
 
 function headers(extra) {
   return Object.assign({ apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${SUPABASE_ANON_KEY}` }, extra || {});
@@ -229,7 +440,7 @@ let identityLookupTimer = null;
 async function lookupDriverName(identityNumber) {
   const nameField = document.getElementById("full_name");
   const hint = document.getElementById("name-lookup-hint");
-  hint.textContent = "جاري البحث...";
+  hint.textContent = t("lookupSearching");
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/drivers?select=full_name&identity_number=eq.${encodeURIComponent(identityNumber)}&limit=1`, { headers: headers() });
     const rows = await res.json();
@@ -238,11 +449,11 @@ async function lookupDriverName(identityNumber) {
       hint.textContent = "";
     } else {
       nameField.value = "";
-      hint.textContent = "لم يتم العثور على سائق بهذا الرقم. تأكدي من رقم الهوية أو تواصلي مع الإدارة.";
+      hint.textContent = t("lookupNotFound");
     }
   } catch (e) {
     nameField.value = "";
-    hint.textContent = "تعذر البحث عن السائق، حاولي تاني.";
+    hint.textContent = t("lookupError");
   }
 }
 
@@ -285,23 +496,39 @@ document.querySelectorAll(".toggle button").forEach(btn => {
     const isStart = shiftType === "start";
     const isEnd = shiftType === "end";
     const isReinforcement = shiftType === "reinforcement";
+
+    document.getElementById("shift-form").style.display = "block";
     document.getElementById("start-fields").style.display = isStart ? "block" : "none";
     document.getElementById("end-fields").style.display = isEnd ? "block" : "none";
-    document.getElementById("area-field").style.display = isReinforcement ? "none" : "block";
+    document.getElementById("area-field").style.display = isStart ? "block" : "none";
     document.getElementById("amount-field").style.display = isReinforcement ? "block" : "none";
-    document.getElementById("area").required = !isReinforcement;
+    document.getElementById("area").required = isStart;
     document.getElementById("amount").required = isReinforcement;
-    if (isStart || isEnd) {
-      document.getElementById("odo-label").innerHTML = (isStart ? "قراءة عداد البداية" : "قراءة عداد النهاية") + ' <span class="req">*</span>';
-      document.getElementById("photo-label").innerHTML = (isStart ? "صورة عداد البداية" : "صورة عداد النهاية") + ' <span class="req">*</span>';
-    } else {
-      document.getElementById("odo-label").innerHTML = 'قراءة العداد <span class="req">*</span>';
-      document.getElementById("photo-label").innerHTML = 'صورة العداد <span class="req">*</span>';
-    }
+
+    updateDynamicLabels();
     START_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isStart; });
     END_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isEnd; });
   });
 });
+
+function showScreen(name) {
+  document.getElementById("screen-form").style.display = name === "form" ? "block" : "none";
+  document.getElementById("screen-success").style.display = name === "success" ? "block" : "none";
+}
+
+function resetToStart() {
+  document.getElementById("shift-form").reset();
+  document.getElementById("shift-form").style.display = "none";
+  document.querySelectorAll(".toggle button").forEach(b => b.classList.remove("active"));
+  shiftType = null;
+  document.getElementById("name-lookup-hint").textContent = "";
+  setStatus("", "");
+  document.getElementById("status").className = "";
+  setDefaultShiftDate();
+  showScreen("form");
+}
+
+document.getElementById("new-entry-btn").addEventListener("click", resetToStart);
 
 document.getElementById("shift-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -309,14 +536,14 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
 
   const plateInput = document.getElementById("vehicle_plate");
   if (!validPlates.has(plateInput.value.trim())) {
-    setStatus("err", "لوحة المركبة دي مش موجودة في القائمة، اختاري لوحة صحيحة من الاقتراحات.");
+    setStatus("err", t("errNoPlate"));
     plateInput.focus();
     return;
   }
 
   const btn = document.getElementById("submit-btn");
   btn.disabled = true;
-  setStatus("busy", "بيتم رفع الصور والإرسال…");
+  setStatus("busy", t("submitBusy"));
 
   try {
     const odoPhotoFile = document.getElementById("odo_photo").files[0];
@@ -339,7 +566,6 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await res.text());
-      setStatus("ok", "تم إرسال طلب التعزيز بنجاح ✓");
     } else {
       const videoFile = document.getElementById("condition_video")?.files[0];
       const screenshotFile = document.getElementById("client_screenshot")?.files[0];
@@ -374,15 +600,12 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
         body: JSON.stringify(payload),
       });
       if (!res.ok) throw new Error(await res.text());
-      setStatus("ok", "تم تسجيل الدوام بنجاح ✓");
     }
 
-    document.getElementById("shift-form").reset();
-    document.querySelector('.toggle button[data-type="start"]').click();
-    setDefaultShiftDate();
+    showScreen("success");
   } catch (err) {
     console.error(err);
-    setStatus("err", "حصل خطأ: " + err.message);
+    setStatus("err", t("errGeneric") + err.message);
   } finally {
     btn.disabled = false;
   }
@@ -394,6 +617,7 @@ function setDefaultShiftDate() {
   document.getElementById("shift_date").value = localDate;
 }
 
+applyTranslations();
 setDefaultShiftDate();
 loadStations();
 loadVehicles();
