@@ -4,103 +4,292 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>تسجيل دوام — GBE Fleet Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root {
-    color-scheme: light;
-    --surface-1: #fcfcfb;
-    --plane:     #f9f9f7;
-    --ink:       #0b0b0b;
-    --ink-2:     #52514e;
-    --ink-muted: #898781;
-    --grid:      #e1e0d9;
-    --border:    rgba(11,11,11,0.12);
-    --blue:      #2a78d6;
-    --good:      #0ca30c;
-    --critical:  #d03b3b;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root:not([data-theme="light"]) {
-      color-scheme: dark;
-      --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
-      --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
-    }
-  }
-  :root[data-theme="dark"] {
-    color-scheme: dark;
-    --surface-1: #1a1a19; --plane: #0d0d0d; --ink: #ffffff; --ink-2: #c3c2b7;
-    --ink-muted: #898781; --grid: #2c2c2a; --border: rgba(255,255,255,0.14); --blue: #3987e5;
+    font-family: "Inter", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+    color: #f5f7ff;
+    background: #050913;
+    font-synthesis: none;
   }
   * { box-sizing: border-box; }
-  body {
-    margin: 0; background: var(--plane); color: var(--ink);
-    font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif; line-height: 1.6;
-  }
-  .wrap { max-width: 520px; margin: 0 auto; padding: 1.75rem 1.1rem 4rem; }
-  .brand-logo { display: block; width: 84px; height: auto; margin: 0 0 1rem; border-radius: 10px; }
-  h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
-  .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
+  body { margin: 0; min-width: 320px; background: #050913; }
+  button, input, select { font: inherit; }
 
-  .lang-switch { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
+  .page-shell {
+    min-height: 100vh; position: relative; overflow: hidden; padding: 22px 14px 36px;
+    background:
+      radial-gradient(circle at 75% 5%, rgba(50,78,190,.17), transparent 30%),
+      radial-gradient(circle at 20% 45%, rgba(76,34,150,.10), transparent 34%),
+      linear-gradient(145deg, #040812 0%, #071021 52%, #050913 100%);
+  }
+
+  .ambient { position: fixed; width: 380px; height: 380px; border-radius: 50%; filter: blur(110px); pointer-events: none; opacity: .18; }
+  .ambient-one { background: #304cff; top: -220px; inset-inline-end: 5%; }
+  .ambient-two { background: #722cff; bottom: -240px; inset-inline-start: -120px; }
+
+  .lang-switch { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; max-width: min(100%, 1060px); margin: 0 auto 10px; position: relative; z-index: 1; }
   .lang-switch button {
-    padding: 0.35rem 0.75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
-    color: var(--ink-muted); font-size: 0.78rem; font-weight: 600; cursor: pointer;
+    padding: 0.35rem 0.75rem; border-radius: 999px; border: 1px solid rgba(105,124,161,.32); background: rgba(13,25,48,.82);
+    color: #8795b1; font-size: 0.78rem; font-weight: 600; cursor: pointer;
   }
-  .lang-switch button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
+  .lang-switch button.active { border-color: #5975ff; color: #edf1fa; background: rgba(76,102,255,.18); }
 
-  .choose-hint { font-size: 0.85rem; color: var(--ink-2); margin: 0 0 0.75rem; font-weight: 600; }
-  .toggle { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.5rem; margin-bottom: 1.5rem; }
-  .toggle button {
-    padding: 1rem 0.4rem; border-radius: 10px; border: 1px solid var(--border); background: var(--surface-1);
-    color: var(--ink-2); font-size: 0.85rem; font-weight: 600; cursor: pointer; text-align: center;
+  .container {
+    width: min(100%, 1060px); margin: auto; position: relative; z-index: 1;
+    border: 1px solid rgba(104,129,190,.22); border-radius: 22px; padding: 15px;
+    background: rgba(5,11,25,.66); box-shadow: 0 25px 80px rgba(0,0,0,.38); backdrop-filter: blur(18px);
   }
-  .toggle button .icon { display: block; font-size: 1.5rem; margin-bottom: 0.35rem; line-height: 1; }
-  .toggle button.active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 10%, var(--surface-1)); }
 
-  fieldset { border: none; padding: 0; margin: 0 0 1.5rem; }
-  label { display: block; font-size: 0.85rem; color: var(--ink-2); margin-bottom: 0.35rem; }
-  label .req { color: var(--critical); }
-  .field { margin-bottom: 1.1rem; }
-  input, select {
-    width: 100%; padding: 0.7rem 0.8rem; border-radius: 9px; border: 1px solid var(--border);
-    background: var(--surface-1); color: var(--ink); font-size: 0.95rem;
+  .hero {
+    min-height: 190px; position: relative; display: flex; align-items: center; padding: 30px 34px;
+    overflow: hidden; border-radius: 18px;
+    background-image: url('hero.jpg');
+    background-size: cover;
+    background-position: center;
+    background-repeat: no-repeat;
+    border: 1px solid rgba(92,118,177,.18);
   }
-  input:focus, select:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
-  input[type="file"] { padding: 0.5rem; font-size: 0.85rem; }
-  input[readonly] { cursor: not-allowed; }
-  .hint { font-size: 0.76rem; color: var(--ink-muted); margin-top: 0.3rem; }
-  .section-title { font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); margin: 1.6rem 0 0.8rem; }
 
-  button.submit {
-    width: 100%; padding: 0.95rem; border-radius: 10px; border: none; background: var(--blue);
-    color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer;
+  .brand { flex: 0 0 auto; }
+  .logo {
+    width: 116px; height: 116px; border-radius: 17px; display: flex; flex-direction: column; justify-content: center;
+    align-items: center; position: relative; background: linear-gradient(145deg, #344aff, #2638d6);
+    box-shadow: 0 15px 40px rgba(44,63,255,.26);
   }
-  button.submit:disabled { opacity: 0.55; cursor: default; }
+  .logo span { font-size: 29px; font-weight: 800; letter-spacing: -1px; }
+  .logo small { font-size: 8px; margin-top: -2px; opacity: .9; }
+  .logo i { width: 31px; height: 4px; border-radius: 8px; background: #e9f12d; transform: skewX(-28deg); margin-top: 3px; }
+  :root[dir="rtl"] .logo i { transform: skewX(28deg); }
 
-  #status {
-    margin-top: 1.1rem; padding: 0.85rem 1rem; border-radius: 10px; font-size: 0.9rem; display: none;
+  .hero-copy { margin-inline-start: 28px; position: relative; z-index: 2; }
+  .eyebrow { color: #cdd8ff; font-size: 11px; font-weight: 700; letter-spacing: 1.6px; margin-bottom: 10px; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  .hero h1 { margin: 0; font-size: clamp(27px, 4vw, 41px); line-height: 1.08; letter-spacing: -1.5px; text-shadow: 0 2px 14px rgba(0,0,0,.7); }
+  .hero p { color: #dfe4f5; margin: 13px 0 0; font-size: 16px; text-shadow: 0 2px 10px rgba(0,0,0,.6); }
+  .hero p span { color: #9fb0ff; }
+
+  .truck-art { position: absolute; inset-inline-end: 10px; bottom: -12px; width: 390px; height: 170px; opacity: .88; }
+  .truck-icon { position: absolute; inset-inline-end: 66px; bottom: 23px; width: 130px; height: 78px; color: #7d9eff; filter: drop-shadow(0 8px 20px rgba(70,104,255,.30)); }
+  .pin-icon { position: absolute; inset-inline-end: 18px; top: 15px; width: 38px; height: 38px; color: #929eff; filter: drop-shadow(0 0 12px rgba(128,121,255,.55)); }
+  .route-line { position: absolute; width: 290px; height: 85px; inset-inline-end: 0; bottom: 18px; border-bottom: 2px dashed rgba(173,190,255,.68); border-radius: 0 0 70% 40%; transform: rotate(-7deg); }
+  :root[dir="rtl"] .route-line { transform: rotate(7deg) scaleX(-1); }
+  .city { position: absolute; bottom: 22px; background: linear-gradient(to top, rgba(46,70,130,.38), transparent); }
+  .city-a { inset-inline-end: 280px; width: 35px; height: 72px; }
+  .city-b { inset-inline-end: 245px; width: 50px; height: 100px; }
+  .city-c { inset-inline-end: 205px; width: 30px; height: 58px; }
+
+  .panel {
+    margin-top: 15px; padding: 27px 31px 31px; border-radius: 18px; border: 1px solid rgba(89,116,177,.20);
+    background: linear-gradient(145deg, rgba(10,20,42,.82), rgba(8,16,34,.72));
   }
-  #status.ok { display: block; background: color-mix(in srgb, var(--good) 15%, transparent); color: var(--good); }
-  #status.err { display: block; background: color-mix(in srgb, var(--critical) 15%, transparent); color: var(--critical); }
-  #status.busy { display: block; background: var(--surface-1); color: var(--ink-2); border: 1px solid var(--border); }
+
+  .section-title { display: flex; align-items: center; gap: 14px; margin-bottom: 23px; }
+  .step {
+    width: 43px; height: 43px; display: grid; place-items: center; border-radius: 13px; color: #91a1ff;
+    font-size: 19px; font-weight: 700; background: linear-gradient(145deg, #1c2c72, #15235b);
+    border: 1px solid rgba(96,119,255,.35); flex: 0 0 auto;
+  }
+  .section-title h2 { margin: 0; font-size: 22px; }
+  .section-title p { margin: 4px 0 0; color: #71809f; font-size: 12px; }
+
+  .action-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .action-card {
+    min-height: 190px; cursor: pointer; color: #f5f7ff; position: relative; border-radius: 15px;
+    border: 1px solid rgba(104,123,162,.25); background: rgba(18,29,52,.55); display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 10px; transition: .22s ease; text-align: center; padding: 0 12px;
+  }
+  .action-card:hover { transform: translateY(-3px); border-color: #4f6eff; background: rgba(27,42,78,.68); }
+  .action-card.active { border-color: #5c7aff; box-shadow: 0 0 0 1px rgba(77,104,255,.4), 0 18px 35px rgba(30,61,255,.15); }
+  .action-card.green.active { border-color: #28b47b; box-shadow: 0 0 0 1px rgba(40,180,123,.35); }
+
+  .action-icon { width: 65px; height: 65px; display: grid; place-items: center; border-radius: 50%; color: white; background: linear-gradient(145deg, #345cff, #263bd4); }
+  .action-icon svg { width: 28px; height: 28px; }
+  .action-card:nth-child(2) .action-icon { background: linear-gradient(145deg, #7445ed, #4b2ac6); }
+  .action-card.green .action-icon { color: #b8ffd8; background: rgba(26,166,101,.28); }
+  .action-card strong { font-size: 17px; }
+  .action-card small { color: #8592ac; font-size: 13px; }
+
+  .selected { position: absolute; top: 13px; inset-inline-end: 13px; width: 29px; height: 29px; display: none; place-items: center; border-radius: 50%; background: #526fff; color: #fff; }
+  .selected svg { width: 17px; height: 17px; }
+  .action-card.active .selected { display: grid; }
+
+  .fields { display: grid; grid-template-columns: 1fr 1fr; gap: 22px 25px; }
+  .field.full { grid-column: 1 / -1; }
+
+  .field label { display: block; color: #cbd4e6; font-size: 13px; font-weight: 600; margin: 0 0 9px; }
+  .field label b { color: #ff5d67; }
+
+  .input-wrap {
+    min-height: 53px; display: flex; align-items: center; gap: 12px; padding: 0 15px;
+    border: 1px solid rgba(105,124,161,.32); border-radius: 11px; background: rgba(13,25,48,.82);
+    color: #8795b1; transition: .2s;
+  }
+  .input-wrap:focus-within { border-color: #5975ff; box-shadow: 0 0 0 3px rgba(76,102,255,.11); }
+  .input-wrap svg { flex: 0 0 auto; width: 19px; height: 19px; }
+  .input-wrap input, .input-wrap select { width: 100%; border: 0; outline: 0; background: transparent; color: #edf1fa; font-size: 14px; }
+  .input-wrap input::placeholder { color: #65738e; }
+  .input-wrap input[type="date"] { color-scheme: dark; }
+  .input-wrap input[type="file"] { font-size: 12.5px; color: #8795b1; }
+  .input-wrap select { appearance: none; cursor: pointer; }
+  .input-wrap select option { background: #0b1426; }
+  .select-wrap > svg:last-child { margin-inline-start: auto; }
+  .disabled { background: rgba(15,24,43,.5); }
+  .success-icon { color: #36d995; flex: 0 0 auto; }
+
+  .hint { margin-top: 9px; color: #73819c; font-size: 11px; line-height: 1.5; }
+  .hint span { color: #8da1c6; margin-inline-end: 4px; }
+
+  .benefits {
+    margin-top: 15px; padding: 22px 27px; display: grid; grid-template-columns: repeat(4, 1fr);
+    border-radius: 18px; border: 1px solid rgba(112,78,255,.42);
+    background: linear-gradient(100deg, rgba(49,25,111,.48), rgba(13,30,73,.62));
+  }
+  .benefit { display: flex; gap: 13px; align-items: center; padding: 0 20px; border-inline-end: 1px solid rgba(145,159,205,.17); }
+  .benefit:first-child { padding-inline-start: 0; }
+  .benefit:last-child { border: 0; }
+  .benefit-icon { color: #9b88ff; flex: 0 0 auto; }
+  .benefit-icon svg { width: 34px; height: 34px; stroke-width: 1.7; }
+  .benefit strong { font-size: 12px; display: block; }
+  .benefit p { color: #7f8ca7; font-size: 10px; line-height: 1.5; margin: 5px 0 0; }
+
+  .actions-footer {
+    margin-top: 15px; padding: 22px 26px; display: flex; justify-content: center; gap: 26px;
+    border: 1px solid rgba(91,112,158,.20); border-radius: 18px; background: rgba(9,19,39,.72);
+  }
+  .btn {
+    width: min(100%, 280px); min-height: 54px; border-radius: 11px; cursor: pointer; display: flex;
+    justify-content: center; align-items: center; gap: 10px; font-weight: 600; transition: .2s; border: 0;
+  }
+  .btn:hover { transform: translateY(-2px); }
+  .btn:disabled { opacity: .55; cursor: default; transform: none; }
+  .btn svg { width: 19px; height: 19px; }
+  .btn-secondary { color: #dce2ee; background: transparent; border: 1px solid #3a527c; }
+  .btn-primary { color: white; background: linear-gradient(100deg, #2856ef, #6534ed); box-shadow: 0 12px 28px rgba(62,61,235,.25); }
+
+  #status { margin-top: 15px; padding: 0.9rem 1.1rem; border-radius: 12px; font-size: 0.88rem; display: none; text-align: center; }
+  #status.ok { display: block; background: rgba(34,197,94,.14); color: #4ade80; }
+  #status.err { display: block; background: rgba(239,68,68,.14); color: #f87171; }
+  #status.busy { display: block; background: rgba(13,25,48,.82); color: #8795b1; border: 1px solid rgba(105,124,161,.32); }
 
   #config-note {
-    display: none; background: var(--surface-1); border: 1px solid var(--border); border-radius: 10px;
-    padding: 1rem 1.1rem; margin-bottom: 1.5rem; font-size: 0.85rem; color: var(--ink-2);
+    display: none; background: rgba(13,25,48,.82); border: 1px solid rgba(105,124,161,.32); border-radius: 12px;
+    padding: 1rem 1.1rem; margin-top: 15px; font-size: 0.85rem; color: #8795b1;
   }
-  #config-note code { background: var(--grid); padding: 0.1rem 0.35rem; border-radius: 4px; }
+  #config-note code { background: rgba(255,255,255,0.08); padding: 0.1rem 0.35rem; border-radius: 4px; }
 
-  #screen-success { text-align: center; padding-top: 1.5rem; }
-  .success-icon {
-    width: 64px; height: 64px; border-radius: 50%; background: var(--good); color: #fff;
-    display: flex; align-items: center; justify-content: center; font-size: 2rem; margin: 0 auto 1.25rem;
+  #screen-success .success-badge {
+    width: 74px; height: 74px; border-radius: 50%; background: linear-gradient(145deg, #22c55e, #16a34a);
+    color: #fff; display: flex; align-items: center; justify-content: center; margin: 6px auto 18px;
+    box-shadow: 0 15px 40px rgba(34,197,94,.3);
   }
-  #screen-success h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
-  .success-message { color: var(--ink-2); font-size: 0.92rem; margin: 0 0 1.75rem; }
-  #screen-success .submit { width: auto; padding: 0.85rem 2rem; }
+  #screen-success .success-badge svg { width: 34px; height: 34px; }
+  #screen-success h2 { text-align: center; margin: 0 0 10px; font-size: 22px; }
+  #screen-success .success-message { text-align: center; color: #9ba9c5; font-size: 14px; line-height: 1.6; margin: 0 0 22px; max-width: 480px; margin-inline: auto; }
+  #screen-success .actions-footer { justify-content: center; }
+  .success-summary { max-width: 420px; margin: 0 auto 26px; border: 1px solid rgba(105,124,161,.32); border-radius: 12px; background: rgba(13,25,48,.7); padding: 4px 20px; }
+  .success-summary-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid rgba(105,124,161,.18); font-size: 13px; }
+  .success-summary-row:last-child { border-bottom: 0; }
+  .success-summary-row span { color: #8795b1; }
+  .success-summary-row strong { color: #edf1fa; font-size: 14px; }
+
+  footer.page-footer { text-align: center; color: #53617b; font-size: 10px; padding: 18px 0 3px; }
+
+  @media (max-width: 820px) {
+    .hero { padding: 25px; }
+    .truck-art { opacity: .32; inset-inline-end: -80px; }
+    .action-grid { grid-template-columns: 1fr; }
+    .action-card { min-height: 145px; }
+    .benefits { grid-template-columns: 1fr 1fr; gap: 22px; }
+    .benefit:nth-child(2) { border-inline-end: 0; }
+    .benefit:nth-child(3), .benefit:nth-child(4) { padding-top: 15px; }
+  }
+
+  @media (max-width: 620px) {
+    .page-shell { padding: 8px; }
+    .container { padding: 8px; border-radius: 16px; }
+    .hero { min-height: 250px; align-items: flex-start; }
+    .logo { width: 82px; height: 82px; }
+    .logo span { font-size: 23px; }
+    .hero-copy { margin-inline-start: 15px; }
+    .hero h1 { font-size: 24px; }
+    .hero p { font-size: 13px; }
+    .eyebrow { font-size: 9px; }
+    .panel { padding: 21px 17px; }
+    .fields { grid-template-columns: 1fr; gap: 18px; }
+    .field.full { grid-column: auto; }
+    .benefits { grid-template-columns: 1fr; padding: 20px; }
+    .benefit, .benefit:first-child { padding: 0; border-inline-end: 0; }
+    .benefit:nth-child(3), .benefit:nth-child(4) { padding-top: 0; }
+    .actions-footer { flex-direction: column; gap: 12px; padding: 17px; }
+    .btn { width: 100%; }
+  }
 </style>
 </head>
 <body>
-<div class="wrap">
+<svg style="display:none" aria-hidden="true">
+  <symbol id="icon-play" viewBox="0 0 24 24" fill="currentColor" stroke="none"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="icon-square" viewBox="0 0 24 24" fill="currentColor" stroke="none"><rect width="18" height="18" x="3" y="3" rx="2"/></symbol>
+  <symbol id="icon-walletcards" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 12V8a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h6"/><path d="M3 10h18"/><rect x="12" y="13" width="9" height="6" rx="1.3"/>
+  </symbol>
+  <symbol id="icon-calendar" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3.5" y="5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17"/><path d="M8 3v4M16 3v4"/>
+  </symbol>
+  <symbol id="icon-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/>
+  </symbol>
+  <symbol id="icon-car" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 16.5V11l2.2-5h11.6l2.2 5v5.5"/><path d="M4 16.5h16"/><circle cx="7.5" cy="16.5" r="1.6"/><circle cx="16.5" cy="16.5" r="1.6"/>
+  </symbol>
+  <symbol id="icon-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 22s7-6.7 7-12.3A7 7 0 0 0 5 9.7C5 15.3 12 22 12 22Z"/><circle cx="12" cy="9.6" r="2.4"/>
+  </symbol>
+  <symbol id="icon-gauge" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M3.34 19a10 10 0 1 1 17.32 0"/><path d="m12 14 4-4"/>
+  </symbol>
+  <symbol id="icon-chevrondown" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></symbol>
+  <symbol id="icon-shield" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6Z"/><path d="M9 12l2 2 4-4"/>
+  </symbol>
+  <symbol id="icon-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.2 2"/>
+  </symbol>
+  <symbol id="icon-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 20V10"/><path d="M12 20V4"/><path d="M20 20v-7"/>
+  </symbol>
+  <symbol id="icon-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M6 10a6 6 0 1 1 12 0c0 4 1.5 5.5 1.5 5.5H4.5S6 14 6 10Z"/><path d="M10 19a2 2 0 0 0 4 0"/>
+  </symbol>
+  <symbol id="icon-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></symbol>
+  <symbol id="icon-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m22 2-7 20-4-9-9-4Z"/><path d="M22 2 11 13"/></symbol>
+  <symbol id="icon-truck" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/>
+    <path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"/>
+    <circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/>
+  </symbol>
+  <symbol id="icon-checkcircle" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21.8 10A10 10 0 1 1 17 3.34"/><path d="m9 11 3 3L22 4"/>
+  </symbol>
+  <symbol id="icon-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M4 8h3l2-2h6l2 2h3v11H4Z"/><circle cx="12" cy="13.5" r="3.3"/>
+  </symbol>
+  <symbol id="icon-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="6" width="12" height="12" rx="2"/><path d="M15 10l6-3v10l-6-3Z"/>
+  </symbol>
+  <symbol id="icon-package" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M21 8 12 3 3 8v8l9 5 9-5Z"/><path d="M3 8l9 5 9-5"/><path d="M12 13v8"/>
+  </symbol>
+  <symbol id="icon-banknote" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6.5 9h.01M17.5 15h.01"/>
+  </symbol>
+</svg>
+
+<main class="page-shell">
+  <div class="ambient ambient-one"></div>
+  <div class="ambient ambient-two"></div>
+
   <div class="lang-switch" id="lang-switch">
     <button type="button" data-lang="ar">عربي</button>
     <button type="button" data-lang="en">English</button>
@@ -108,108 +297,243 @@
     <button type="button" data-lang="bn">বাংলা</button>
   </div>
 
-  <img src="logo.png" alt="GBE Logistics" class="brand-logo" onerror="this.style.display='none'">
-  <h1 data-i18n="heading"></h1>
-  <p class="sub" data-i18n="subtitle"></p>
+  <div class="container">
+    <header class="hero">
+      <div class="brand">
+        <div class="logo"><span>GBE</span><small>Logistics</small><i></i></div>
+      </div>
+      <div class="hero-copy">
+        <div class="eyebrow" data-i18n="eyebrow"></div>
+        <h1 data-i18n="heading"></h1>
+        <p><span data-i18n="taglinePlain"></span> <span data-i18n="taglineAccent"></span></p>
+      </div>
+      <div class="truck-art" aria-hidden="true">
+        <div class="route-line"></div>
+        <svg class="truck-icon"><use href="#icon-truck"/></svg>
+        <svg class="pin-icon"><use href="#icon-pin"/></svg>
+        <div class="city city-a"></div>
+        <div class="city city-b"></div>
+        <div class="city city-c"></div>
+      </div>
+    </header>
 
-  <div id="config-note" data-i18n="configNote"></div>
+    <div id="config-note" data-i18n="configNote"></div>
 
-  <div id="screen-form">
-    <p class="choose-hint" data-i18n="chooseTypeTitle"></p>
-    <div class="toggle" id="type-toggle">
-      <button type="button" data-type="start"><span class="icon">▶️</span><span data-i18n="typeStart"></span></button>
-      <button type="button" data-type="end"><span class="icon">⏹️</span><span data-i18n="typeEnd"></span></button>
-      <button type="button" data-type="reinforcement"><span class="icon">💵</span><span data-i18n="typeReinforcement"></span></button>
+    <div id="screen-form">
+      <section class="panel">
+        <div class="section-title">
+          <div class="step">1</div>
+          <div>
+            <h2 data-i18n="chooseTypeTitle"></h2>
+            <p data-i18n="chooseTypeSubtitle"></p>
+          </div>
+        </div>
+
+        <div class="action-grid" id="type-toggle">
+          <button type="button" class="action-card" data-type="start">
+            <span class="selected"><svg><use href="#icon-checkcircle"/></svg></span>
+            <span class="action-icon"><svg><use href="#icon-play"/></svg></span>
+            <strong data-i18n="typeStart"></strong>
+            <small data-i18n="typeStartDesc"></small>
+          </button>
+          <button type="button" class="action-card" data-type="end">
+            <span class="selected"><svg><use href="#icon-checkcircle"/></svg></span>
+            <span class="action-icon"><svg><use href="#icon-square"/></svg></span>
+            <strong data-i18n="typeEnd"></strong>
+            <small data-i18n="typeEndDesc"></small>
+          </button>
+          <button type="button" class="action-card green" data-type="reinforcement">
+            <span class="selected"><svg><use href="#icon-checkcircle"/></svg></span>
+            <span class="action-icon"><svg><use href="#icon-walletcards"/></svg></span>
+            <strong data-i18n="typeReinforcement"></strong>
+            <small data-i18n="typeReinforcementDesc"></small>
+          </button>
+        </div>
+      </section>
+
+      <section class="panel" id="shift-info-card" style="display:none">
+        <div class="section-title">
+          <div class="step">2</div>
+          <div>
+            <h2 data-i18n="shiftInfoTitle"></h2>
+            <p data-i18n="shiftInfoSubtitle"></p>
+          </div>
+        </div>
+
+        <form id="shift-form">
+          <div class="fields">
+            <div class="field full">
+              <label><span data-i18n="labelShiftDate"></span> <b>*</b></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-calendar"/></svg>
+                <input type="date" id="shift_date" required>
+              </div>
+              <div class="hint"><span>&#9432;</span><span data-i18n="hintShiftDate"></span></div>
+            </div>
+
+            <div class="field">
+              <label><span data-i18n="labelIdentity"></span> <b>*</b></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-user"/></svg>
+                <input type="text" id="identity_number" inputmode="numeric" required data-i18n-placeholder="phIdentity">
+              </div>
+            </div>
+
+            <div class="field">
+              <label><span data-i18n="labelFullName"></span> <b>*</b></label>
+              <div class="input-wrap disabled">
+                <svg><use href="#icon-user"/></svg>
+                <input type="text" id="full_name" required readonly data-i18n-placeholder="placeholderFullName">
+                <svg class="success-icon" id="name-success-icon" style="display:none"><use href="#icon-checkcircle"/></svg>
+              </div>
+              <p class="hint" id="name-lookup-hint"></p>
+            </div>
+
+            <div class="field full">
+              <label><span data-i18n="labelVehiclePlate"></span> <b>*</b></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-car"/></svg>
+                <input type="text" id="vehicle_plate" list="vehicle_plate_list" required autocomplete="off" data-i18n-placeholder="placeholderVehiclePlate">
+                <datalist id="vehicle_plate_list"></datalist>
+              </div>
+            </div>
+
+            <div class="field">
+              <label><span data-i18n="labelStation"></span> <b>*</b></label>
+              <div class="input-wrap select-wrap">
+                <svg><use href="#icon-pin"/></svg>
+                <select id="station_name" required>
+                  <option value="" disabled selected data-i18n="optionStation"></option>
+                </select>
+                <svg><use href="#icon-chevrondown"/></svg>
+              </div>
+            </div>
+
+            <div class="field">
+              <label id="odo-label"></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-gauge"/></svg>
+                <input type="number" min="0" id="odo_reading" required inputmode="decimal" data-i18n-placeholder="phOdo">
+              </div>
+            </div>
+
+            <div class="field">
+              <label id="photo-label"></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-camera"/></svg>
+                <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
+              </div>
+            </div>
+
+            <div id="start-fields" class="contents">
+              <div class="field">
+                <label><span data-i18n="labelConditionVideo"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-video"/></svg>
+                  <input type="file" id="condition_video" accept="video/*" capture="environment" required>
+                </div>
+              </div>
+              <div class="field">
+                <label><span data-i18n="labelOfd"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-package"/></svg>
+                  <input type="number" id="ofd_count" inputmode="numeric" required data-i18n-placeholder="phCount">
+                </div>
+              </div>
+            </div>
+
+            <div id="end-fields" class="contents" style="display:none">
+              <div class="field">
+                <label><span data-i18n="labelCod"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-package"/></svg>
+                  <input type="number" id="cod_delivered" inputmode="numeric" data-i18n-placeholder="phCount">
+                </div>
+              </div>
+              <div class="field">
+                <label><span data-i18n="labelPpd"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-package"/></svg>
+                  <input type="number" id="ppd_delivered" inputmode="numeric" data-i18n-placeholder="phCount">
+                </div>
+              </div>
+              <div class="field">
+                <label><span data-i18n="labelPickedUp"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-package"/></svg>
+                  <input type="number" id="picked_up" inputmode="numeric" data-i18n-placeholder="phCount">
+                </div>
+              </div>
+              <div class="field">
+                <label><span data-i18n="labelClientScreenshot"></span> <b>*</b></label>
+                <div class="input-wrap">
+                  <svg><use href="#icon-camera"/></svg>
+                  <input type="file" id="client_screenshot" accept="image/*">
+                </div>
+              </div>
+            </div>
+
+            <div class="field" id="area-field" style="display:none">
+              <label><span data-i18n="labelArea"></span> <b>*</b></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-pin"/></svg>
+                <input type="text" id="area" autocomplete="off" spellcheck="false" data-i18n-placeholder="phArea">
+              </div>
+            </div>
+            <div class="field" id="amount-field" style="display:none">
+              <label><span data-i18n="labelAmount"></span> <b>*</b></label>
+              <div class="input-wrap">
+                <svg><use href="#icon-banknote"/></svg>
+                <input type="number" id="amount" inputmode="decimal" data-i18n-placeholder="phAmount">
+              </div>
+            </div>
+          </div>
+        </form>
+      </section>
+
+      <section class="benefits" id="benefits-panel" style="display:none">
+        <div class="benefit">
+          <span class="benefit-icon"><svg><use href="#icon-shield"/></svg></span>
+          <div><strong data-i18n="featureSecureTitle"></strong><p data-i18n="featureSecureDesc"></p></div>
+        </div>
+        <div class="benefit">
+          <span class="benefit-icon"><svg><use href="#icon-clock"/></svg></span>
+          <div><strong data-i18n="featureTrackingTitle"></strong><p data-i18n="featureTrackingDesc"></p></div>
+        </div>
+        <div class="benefit">
+          <span class="benefit-icon"><svg><use href="#icon-chart"/></svg></span>
+          <div><strong data-i18n="featureRecordsTitle"></strong><p data-i18n="featureRecordsDesc"></p></div>
+        </div>
+        <div class="benefit">
+          <span class="benefit-icon"><svg><use href="#icon-bell"/></svg></span>
+          <div><strong data-i18n="featureAlertsTitle"></strong><p data-i18n="featureAlertsDesc"></p></div>
+        </div>
+      </section>
+
+      <div class="actions-footer" id="actions-footer" style="display:none">
+        <button type="button" class="btn btn-secondary" id="clear-form-btn"><svg><use href="#icon-x"/></svg><span data-i18n="clearFormBtn"></span></button>
+        <button type="submit" form="shift-form" class="btn btn-primary" id="submit-btn"><svg><use href="#icon-send"/></svg><span data-i18n="submit"></span></button>
+      </div>
+      <div id="status"></div>
     </div>
 
-    <form id="shift-form" style="display:none">
-      <div class="field">
-        <label><span data-i18n="labelShiftDate"></span> <span class="req">*</span></label>
-        <input type="date" id="shift_date" required>
-        <p class="hint" data-i18n="hintShiftDate"></p>
+    <div id="screen-success" class="panel" style="display:none">
+      <div class="success-badge"><svg><use href="#icon-checkcircle"/></svg></div>
+      <h2 data-i18n="successTitle"></h2>
+      <p class="success-message" data-i18n="successMessage"></p>
+      <div class="success-summary">
+        <div class="success-summary-row"><span data-i18n="successLabelName"></span><strong id="success-name"></strong></div>
+        <div class="success-summary-row"><span data-i18n="successLabelId"></span><strong id="success-id"></strong></div>
+        <div class="success-summary-row"><span data-i18n="successLabelType"></span><strong id="success-type"></strong></div>
       </div>
-      <div class="field">
-        <label><span data-i18n="labelIdentity"></span> <span class="req">*</span></label>
-        <input type="text" id="identity_number" inputmode="numeric" required>
+      <div class="actions-footer">
+        <button type="button" class="btn btn-primary" id="new-entry-btn"><span data-i18n="newEntryBtn"></span></button>
       </div>
-      <div class="field">
-        <label><span data-i18n="labelFullName"></span> <span class="req">*</span></label>
-        <input type="text" id="full_name" required readonly data-i18n-placeholder="placeholderFullName">
-        <p class="hint" id="name-lookup-hint"></p>
-      </div>
-      <div class="field">
-        <label><span data-i18n="labelVehiclePlate"></span> <span class="req">*</span></label>
-        <input type="text" id="vehicle_plate" list="vehicle_plate_list" required autocomplete="off" data-i18n-placeholder="placeholderVehiclePlate">
-        <datalist id="vehicle_plate_list"></datalist>
-      </div>
-      <div class="field">
-        <label><span data-i18n="labelStation"></span> <span class="req">*</span></label>
-        <select id="station_name" required>
-          <option value="" disabled selected data-i18n="optionStation"></option>
-        </select>
-      </div>
+    </div>
 
-      <div class="field">
-        <label id="odo-label"></label>
-        <input type="number" id="odo_reading" required inputmode="decimal">
-      </div>
-      <div class="field">
-        <label id="photo-label"></label>
-        <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
-      </div>
-
-      <div id="start-fields">
-        <div class="field">
-          <label><span data-i18n="labelConditionVideo"></span> <span class="req">*</span></label>
-          <input type="file" id="condition_video" accept="video/*" capture="environment" required>
-        </div>
-        <div class="field">
-          <label><span data-i18n="labelOfd"></span> <span class="req">*</span></label>
-          <input type="number" id="ofd_count" inputmode="numeric" required>
-        </div>
-      </div>
-
-      <div id="end-fields" style="display:none">
-        <div class="section-title" data-i18n="sectionDelivery"></div>
-        <div class="field">
-          <label><span data-i18n="labelCod"></span> <span class="req">*</span></label>
-          <input type="number" id="cod_delivered" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label><span data-i18n="labelPpd"></span> <span class="req">*</span></label>
-          <input type="number" id="ppd_delivered" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label><span data-i18n="labelPickedUp"></span> <span class="req">*</span></label>
-          <input type="number" id="picked_up" inputmode="numeric">
-        </div>
-        <div class="field">
-          <label><span data-i18n="labelClientScreenshot"></span> <span class="req">*</span></label>
-          <input type="file" id="client_screenshot" accept="image/*">
-        </div>
-      </div>
-
-      <div class="field" id="area-field" style="display:none">
-        <label><span data-i18n="labelArea"></span> <span class="req">*</span></label>
-        <input type="text" id="area">
-      </div>
-      <div class="field" id="amount-field" style="display:none">
-        <label><span data-i18n="labelAmount"></span> <span class="req">*</span></label>
-        <input type="number" id="amount" inputmode="decimal">
-      </div>
-
-      <button type="submit" class="submit" id="submit-btn" data-i18n="submit"></button>
-      <div id="status"></div>
-    </form>
+    <footer class="page-footer" data-i18n="footerText"></footer>
   </div>
-
-  <div id="screen-success" style="display:none">
-    <div class="success-icon">✓</div>
-    <h2 data-i18n="successTitle"></h2>
-    <p class="success-message" data-i18n="successMessage"></p>
-    <button type="button" class="submit" id="new-entry-btn" data-i18n="newEntryBtn"></button>
-  </div>
-</div>
+</main>
 
 <script>
 /* ============================================================
@@ -224,112 +548,167 @@ const isConfigured = !SUPABASE_URL.includes("YOUR_") && !SUPABASE_ANON_KEY.inclu
 let shiftType = null;
 
 /* ============================================================
-   الترجمة — عربي / إنجليزي / أوردو
+   الترجمة — عربي / إنجليزي / أوردو / بنغالي
    ============================================================ */
 const translations = {
   ar: {
     dir: "rtl",
     pageTitle: "تسجيل دوام — GBE Fleet Tracker",
+    eyebrow: "GBE لوجيستكس • نظام تتبع الأسطول",
     heading: "تسجيل بداية / نهاية الدوام",
-    subtitle: "GBE Logistics — Fleet Tracker",
+    taglinePlain: "تتبع. إدارة.",
+    taglineAccent: "تقدّم مستمر.",
     configNote: 'محتاجة تحطي SUPABASE_URL و SUPABASE_ANON_KEY في أول ملف الصفحة.',
-    chooseTypeTitle: "اختاري نوع العملية",
+    chooseTypeTitle: "اختر نوع العملية",
+    chooseTypeSubtitle: "اختر العملية اللي عايز تسجّلها",
     typeStart: "بداية الدوام",
     typeEnd: "نهاية الدوام",
     typeReinforcement: "طلب تعزيز",
+    typeStartDesc: "بدء دوام جديد",
+    typeEndDesc: "إنهاء الدوام الحالي",
+    typeReinforcementDesc: "طلب دعم إضافي",
+    shiftInfoTitle: "بيانات الدوام",
+    shiftInfoSubtitle: "ادخل بيانات السائق والمركبة المطلوبة",
     labelShiftDate: "تاريخ الدوام",
-    hintShiftDate: "لو بتسجلي نهاية الدوام بعد نص الليل، اختاري تاريخ يوم بداية الدوام مش تاريخ اليوم الجديد.",
+    hintShiftDate: "لو بتسجل نهاية الدوام بعد نص الليل، اختر تاريخ يوم بداية الدوام مش تاريخ اليوم الجديد.",
     labelIdentity: "رقم الهوية أو الإقامة",
+    phIdentity: "ادخل رقم الهوية أو الإقامة",
     labelFullName: "اسم السائق",
     placeholderFullName: "هيظهر تلقائيًا بعد إدخال رقم الهوية",
     lookupSearching: "جاري البحث...",
-    lookupNotFound: "لم يتم العثور على سائق بهذا الرقم. تأكدي من رقم الهوية أو تواصلي مع الإدارة.",
-    lookupError: "تعذر البحث عن السائق، حاولي تاني.",
+    lookupNotFound: "لم يتم العثور على سائق بهذا الرقم. تأكد من رقم الهوية أو تواصل مع الإدارة.",
+    lookupError: "تعذر البحث عن السائق، حاول تاني.",
     labelVehiclePlate: "لوحة المركبة",
-    placeholderVehiclePlate: "اكتبي رقم أو حروف اللوحة للبحث...",
+    placeholderVehiclePlate: "اكتب رقم أو حروف اللوحة للبحث...",
     labelStation: "المحطة",
-    optionStation: "— اختاري المحطة —",
+    optionStation: "— اختر المحطة —",
     labelOdoStart: "قراءة عداد البداية",
     labelOdoEnd: "قراءة عداد النهاية",
     labelOdoGeneric: "قراءة العداد",
+    phOdo: "ادخل قراءة العداد",
+    phOdoStart: "ادخل قراءة عداد البداية (كم)",
+    phOdoEnd: "ادخل قراءة عداد النهاية (كم)",
     labelPhotoStart: "صورة عداد البداية",
     labelPhotoEnd: "صورة عداد النهاية",
     labelPhotoGeneric: "صورة العداد",
     labelConditionVideo: "فيديو حالة المركبة",
     labelOfd: "الشحنات المستلمة (OFD)",
-    sectionDelivery: "بيانات التوصيل",
     labelCod: "الشحنات الموصّلة غير المدفوعة (COD)",
     labelPpd: "الشحنات الموصّلة المدفوعة (PPD)",
     labelPickedUp: "الشحنات المستلمة (Picked Up)",
+    phCount: "ادخل العدد",
     labelClientScreenshot: "صورة من تطبيق العميل",
     labelArea: "المنطقة",
+    phArea: "ادخل المنطقة",
     labelAmount: "المبلغ",
+    phAmount: "ادخل المبلغ",
+    featureSecureTitle: "آمن وموثوق", featureSecureDesc: "بياناتك محفوظة ومشفّرة",
+    featureTrackingTitle: "تتبع لحظي", featureTrackingDesc: "تتبع كل دوام فور تسجيله",
+    featureRecordsTitle: "سجلات دقيقة", featureRecordsDesc: "بيانات الأسطول دقيقة دومًا",
+    featureAlertsTitle: "تنبيهات ذكية", featureAlertsDesc: "إشعارات فورية بأي تحديث مهم",
+    clearFormBtn: "تفريغ الفورم",
     submit: "إرسال",
     submitBusy: "بيتم رفع الصور والإرسال…",
-    errNoPlate: "لوحة المركبة دي مش موجودة في القائمة، اختاري لوحة صحيحة من الاقتراحات.",
+    errNoPlate: "لوحة المركبة دي مش موجودة في القائمة، اختر لوحة صحيحة من الاقتراحات.",
     errGeneric: "حصل خطأ: ",
     successTitle: "تم استلام بياناتك بنجاح ✓",
-    successMessage: "شكرًا لك! تسجيلك الدقيق والمنتظم لبيانات الدوام هو أساس نجاح فريق GBE Logistics. استمري بهذا الالتزام، فهو يساعدنا نقدّم خدمة أفضل ونحافظ على حقك بشكل عادل ودقيق.",
-    newEntryBtn: "تسجيل عملية جديدة"
+    successMessage: "شكرًا لك! تسجيلك الدقيق والمنتظم لبيانات الدوام هو أساس نجاح فريق GBE Logistics. استمر بهذا الالتزام، فهو يساعدنا نقدّم خدمة أفضل ونحافظ على حقك بشكل عادل ودقيق.",
+    successLabelName: "اسم المندوب",
+    successLabelId: "رقم الهوية",
+    successLabelType: "نوع العملية",
+    newEntryBtn: "تسجيل عملية جديدة",
+    footerText: "GBE Logistics • نظام عمليات الأسطول"
   },
   en: {
     dir: "ltr",
     pageTitle: "Shift Log — GBE Fleet Tracker",
+    eyebrow: "GBE LOGISTICS • FLEET TRACKER",
     heading: "Start / End Shift Registration",
-    subtitle: "GBE Logistics — Fleet Tracker",
+    taglinePlain: "Track. Manage.",
+    taglineAccent: "Move Forward.",
     configNote: "Please add SUPABASE_URL and SUPABASE_ANON_KEY at the top of this file.",
     chooseTypeTitle: "Choose an action",
+    chooseTypeSubtitle: "Select what you want to register",
     typeStart: "Start Shift",
     typeEnd: "End Shift",
     typeReinforcement: "Reinforcement Request",
+    typeStartDesc: "Begin a new shift",
+    typeEndDesc: "End current shift",
+    typeReinforcementDesc: "Request additional support",
+    shiftInfoTitle: "Shift Information",
+    shiftInfoSubtitle: "Enter the required driver and vehicle details",
     labelShiftDate: "Shift Date",
     hintShiftDate: "If you are logging the end of a shift after midnight, pick the date the shift started, not the new day.",
     labelIdentity: "ID / Iqama Number",
+    phIdentity: "Enter ID or Iqama number",
     labelFullName: "Driver Name",
-    placeholderFullName: "Will appear automatically after entering the ID number",
+    placeholderFullName: "Auto-filled after entering ID",
     lookupSearching: "Searching...",
     lookupNotFound: "No driver found with this number. Please check the ID number or contact management.",
     lookupError: "Could not look up the driver, please try again.",
     labelVehiclePlate: "Vehicle Plate",
     placeholderVehiclePlate: "Type the plate number or letters to search...",
     labelStation: "Station",
-    optionStation: "— Select station —",
+    optionStation: "Select station",
     labelOdoStart: "Start Odometer Reading",
     labelOdoEnd: "End Odometer Reading",
     labelOdoGeneric: "Odometer Reading",
+    phOdo: "Enter odometer reading",
+    phOdoStart: "Enter start odometer (KM)",
+    phOdoEnd: "Enter end odometer (KM)",
     labelPhotoStart: "Start Odometer Photo",
     labelPhotoEnd: "End Odometer Photo",
     labelPhotoGeneric: "Odometer Photo",
     labelConditionVideo: "Vehicle Condition Video",
     labelOfd: "Shipments Received (OFD)",
-    sectionDelivery: "Delivery Data",
     labelCod: "Delivered Unpaid Shipments (COD)",
     labelPpd: "Delivered Paid Shipments (PPD)",
     labelPickedUp: "Shipments Received (Picked Up)",
+    phCount: "Enter number",
     labelClientScreenshot: "Client App Screenshot",
     labelArea: "Area",
+    phArea: "Enter area",
     labelAmount: "Amount",
+    phAmount: "Enter amount",
+    featureSecureTitle: "Secure & Reliable", featureSecureDesc: "Your data is safe and encrypted",
+    featureTrackingTitle: "Real-time Tracking", featureTrackingDesc: "Track every shift in real-time",
+    featureRecordsTitle: "Accurate Records", featureRecordsDesc: "Ensure accurate fleet records",
+    featureAlertsTitle: "Smart Alerts", featureAlertsDesc: "Get notified about important updates",
+    clearFormBtn: "Clear Form",
     submit: "Submit",
     submitBusy: "Uploading photos and submitting…",
     errNoPlate: "This vehicle plate isn't in the list, please pick a valid plate from the suggestions.",
     errGeneric: "An error occurred: ",
     successTitle: "Your data was received successfully ✓",
     successMessage: "Thank you! Your accurate and consistent shift logging is the backbone of GBE Logistics' success. Keep up this commitment — it helps us deliver better service and keep your record fair and precise.",
-    newEntryBtn: "Log a new entry"
+    successLabelName: "Driver Name",
+    successLabelId: "ID Number",
+    successLabelType: "Action Type",
+    newEntryBtn: "Log a new entry",
+    footerText: "GBE Logistics • Fleet Operations System"
   },
   ur: {
     dir: "rtl",
     pageTitle: "شفٹ اندراج — GBE فلیٹ ٹریکر",
+    eyebrow: "GBE لاجسٹکس • فلیٹ ٹریکر",
     heading: "شفٹ کے آغاز / اختتام کا اندراج",
-    subtitle: "GBE Logistics — فلیٹ ٹریکر",
+    taglinePlain: "ٹریک کریں۔ منظم کریں۔",
+    taglineAccent: "آگے بڑھیں۔",
     configNote: "براہ کرم فائل کے شروع میں SUPABASE_URL اور SUPABASE_ANON_KEY درج کریں۔",
     chooseTypeTitle: "کارروائی کی قسم منتخب کریں",
+    chooseTypeSubtitle: "منتخب کریں کہ آپ کیا رجسٹر کرنا چاہتے ہیں",
     typeStart: "شفٹ کا آغاز",
     typeEnd: "شفٹ کا اختتام",
     typeReinforcement: "امدادی رقم کی درخواست",
+    typeStartDesc: "نئی شفٹ شروع کریں",
+    typeEndDesc: "موجودہ شفٹ ختم کریں",
+    typeReinforcementDesc: "اضافی امداد کی درخواست",
+    shiftInfoTitle: "شفٹ کی معلومات",
+    shiftInfoSubtitle: "مطلوبہ ڈرائیور اور گاڑی کی تفصیلات درج کریں",
     labelShiftDate: "شفٹ کی تاریخ",
     hintShiftDate: "اگر آپ رات کے بارہ بجے کے بعد شفٹ کا اختتام درج کر رہے ہیں تو شفٹ شروع ہونے کے دن کی تاریخ منتخب کریں، نئے دن کی تاریخ نہیں۔",
     labelIdentity: "شناختی کارڈ یا اقامہ نمبر",
+    phIdentity: "شناختی یا اقامہ نمبر درج کریں",
     labelFullName: "ڈرائیور کا نام",
     placeholderFullName: "شناختی نمبر درج کرنے کے بعد خود بخود ظاہر ہوگا",
     lookupSearching: "تلاش کی جا رہی ہے...",
@@ -338,43 +717,66 @@ const translations = {
     labelVehiclePlate: "گاڑی کی نمبر پلیٹ",
     placeholderVehiclePlate: "تلاش کے لیے نمبر پلیٹ لکھیں...",
     labelStation: "پیٹرول اسٹیشن",
-    optionStation: "— اسٹیشن منتخب کریں —",
+    optionStation: "اسٹیشن منتخب کریں",
     labelOdoStart: "آغاز کی اوڈومیٹر ریڈنگ",
     labelOdoEnd: "اختتام کی اوڈومیٹر ریڈنگ",
     labelOdoGeneric: "اوڈومیٹر ریڈنگ",
+    phOdo: "اوڈومیٹر ریڈنگ درج کریں",
+    phOdoStart: "شروع کی اوڈومیٹر ریڈنگ درج کریں (KM)",
+    phOdoEnd: "اختتام کی اوڈومیٹر ریڈنگ درج کریں (KM)",
     labelPhotoStart: "آغاز کے اوڈومیٹر کی تصویر",
     labelPhotoEnd: "اختتام کے اوڈومیٹر کی تصویر",
     labelPhotoGeneric: "اوڈومیٹر کی تصویر",
     labelConditionVideo: "گاڑی کی حالت کی ویڈیو",
     labelOfd: "موصول شدہ شپمنٹس (OFD)",
-    sectionDelivery: "ڈیلیوری کی تفصیلات",
     labelCod: "ڈیلیور شدہ غیر ادا شدہ شپمنٹس (COD)",
     labelPpd: "ڈیلیور شدہ ادا شدہ شپمنٹس (PPD)",
     labelPickedUp: "موصول شدہ شپمنٹس (Picked Up)",
+    phCount: "تعداد درج کریں",
     labelClientScreenshot: "کلائنٹ ایپ کا اسکرین شاٹ",
     labelArea: "علاقہ",
+    phArea: "علاقہ درج کریں",
     labelAmount: "رقم",
+    phAmount: "رقم درج کریں",
+    featureSecureTitle: "محفوظ اور قابل اعتماد", featureSecureDesc: "آپ کا ڈیٹا محفوظ اور خفیہ کاری شدہ ہے",
+    featureTrackingTitle: "ریئل ٹائم ٹریکنگ", featureTrackingDesc: "ہر شفٹ کو فوری طور پر ٹریک کریں",
+    featureRecordsTitle: "درست ریکارڈ", featureRecordsDesc: "فلیٹ کا ریکارڈ ہمیشہ درست رہتا ہے",
+    featureAlertsTitle: "سمارٹ الرٹس", featureAlertsDesc: "اہم تازہ کاریوں کی فوری اطلاع",
+    clearFormBtn: "فارم صاف کریں",
     submit: "جمع کروائیں",
     submitBusy: "تصاویر اپلوڈ اور ڈیٹا بھیجا جا رہا ہے…",
     errNoPlate: "یہ نمبر پلیٹ فہرست میں موجود نہیں، براہ کرم تجاویز میں سے درست پلیٹ منتخب کریں۔",
     errGeneric: "ایک خرابی پیش آگئی: ",
     successTitle: "آپ کا ڈیٹا کامیابی سے موصول ہوگیا ✓",
     successMessage: "شکریہ! آپ کی درست اور مستقل رپورٹنگ GBE Logistics کی کامیابی کی بنیاد ہے۔ اسی ذمہ داری کو جاری رکھیں — یہ ہمیں بہتر خدمات دینے اور آپ کے ریکارڈ کو منصفانہ اور درست رکھنے میں مدد دیتا ہے۔",
-    newEntryBtn: "نئی کارروائی درج کریں"
+    successLabelName: "ڈرائیور کا نام",
+    successLabelId: "شناختی نمبر",
+    successLabelType: "کارروائی کی قسم",
+    newEntryBtn: "نئی کارروائی درج کریں",
+    footerText: "GBE Logistics • فلیٹ آپریشنز سسٹم"
   },
   bn: {
     dir: "ltr",
     pageTitle: "শিফট এন্ট্রি — GBE ফ্লিট ট্র্যাকার",
+    eyebrow: "GBE লজিস্টিকস • ফ্লিট ট্র্যাকার",
     heading: "শিফট শুরু / শেষ নিবন্ধন",
-    subtitle: "GBE Logistics — ফ্লিট ট্র্যাকার",
+    taglinePlain: "ট্র্যাক করুন। পরিচালনা করুন।",
+    taglineAccent: "এগিয়ে যান।",
     configNote: "ফাইলের শুরুতে SUPABASE_URL এবং SUPABASE_ANON_KEY যুক্ত করুন।",
     chooseTypeTitle: "কাজের ধরন নির্বাচন করুন",
+    chooseTypeSubtitle: "আপনি কী নিবন্ধন করতে চান তা নির্বাচন করুন",
     typeStart: "শিফট শুরু",
     typeEnd: "শিফট শেষ",
     typeReinforcement: "সহায়ক অর্থের অনুরোধ",
+    typeStartDesc: "নতুন শিফট শুরু করুন",
+    typeEndDesc: "চলমান শিফট শেষ করুন",
+    typeReinforcementDesc: "অতিরিক্ত সহায়তার অনুরোধ",
+    shiftInfoTitle: "শিফটের তথ্য",
+    shiftInfoSubtitle: "প্রয়োজনীয় চালক ও গাড়ির তথ্য লিখুন",
     labelShiftDate: "শিফটের তারিখ",
     hintShiftDate: "যদি আপনি মধ্যরাতের পরে শিফট শেষ করার তথ্য দিচ্ছেন, তাহলে শিফট শুরুর দিনের তারিখ বেছে নিন, নতুন দিনের তারিখ নয়।",
     labelIdentity: "পরিচয়পত্র বা ইকামা নম্বর",
+    phIdentity: "পরিচয়পত্র বা ইকামা নম্বর লিখুন",
     labelFullName: "চালকের নাম",
     placeholderFullName: "পরিচয়পত্র নম্বর দেওয়ার পর স্বয়ংক্রিয়ভাবে দেখাবে",
     lookupSearching: "খোঁজা হচ্ছে...",
@@ -383,29 +785,43 @@ const translations = {
     labelVehiclePlate: "গাড়ির নম্বর প্লেট",
     placeholderVehiclePlate: "খোঁজার জন্য প্লেট নম্বর বা অক্ষর লিখুন...",
     labelStation: "স্টেশন",
-    optionStation: "— স্টেশন নির্বাচন করুন —",
+    optionStation: "স্টেশন নির্বাচন করুন",
     labelOdoStart: "শুরুর ওডোমিটার রিডিং",
     labelOdoEnd: "শেষের ওডোমিটার রিডিং",
     labelOdoGeneric: "ওডোমিটার রিডিং",
+    phOdo: "ওডোমিটার রিডিং লিখুন",
+    phOdoStart: "শুরুর ওডোমিটার রিডিং লিখুন (KM)",
+    phOdoEnd: "শেষের ওডোমিটার রিডিং লিখুন (KM)",
     labelPhotoStart: "শুরুর ওডোমিটারের ছবি",
     labelPhotoEnd: "শেষের ওডোমিটারের ছবি",
     labelPhotoGeneric: "ওডোমিটারের ছবি",
     labelConditionVideo: "গাড়ির অবস্থার ভিডিও",
     labelOfd: "প্রাপ্ত শিপমেন্ট (OFD)",
-    sectionDelivery: "ডেলিভারি তথ্য",
     labelCod: "ডেলিভারি করা অপরিশোধিত শিপমেন্ট (COD)",
     labelPpd: "ডেলিভারি করা পরিশোধিত শিপমেন্ট (PPD)",
     labelPickedUp: "প্রাপ্ত শিপমেন্ট (Picked Up)",
+    phCount: "সংখ্যা লিখুন",
     labelClientScreenshot: "ক্লায়েন্ট অ্যাপের স্ক্রিনশট",
     labelArea: "এলাকা",
+    phArea: "এলাকা লিখুন",
     labelAmount: "পরিমাণ",
+    phAmount: "পরিমাণ লিখুন",
+    featureSecureTitle: "নিরাপদ ও বিশ্বাসযোগ্য", featureSecureDesc: "আপনার তথ্য সুরক্ষিত ও এনক্রিপ্টেড",
+    featureTrackingTitle: "রিয়েল-টাইম ট্র্যাকিং", featureTrackingDesc: "প্রতিটি শিফট তাৎক্ষণিকভাবে ট্র্যাক হয়",
+    featureRecordsTitle: "নির্ভুল রেকর্ড", featureRecordsDesc: "ফ্লিটের তথ্য সবসময় নির্ভুল থাকে",
+    featureAlertsTitle: "স্মার্ট অ্যালার্ট", featureAlertsDesc: "গুরুত্বপূর্ণ তথ্যের সাথে সাথে বিজ্ঞপ্তি",
+    clearFormBtn: "ফর্ম মুছুন",
     submit: "জমা দিন",
     submitBusy: "ছবি আপলোড এবং জমা দেওয়া হচ্ছে…",
     errNoPlate: "এই গাড়ির নম্বর প্লেট তালিকায় নেই, অনুগ্রহ করে পরামর্শ থেকে একটি সঠিক প্লেট নির্বাচন করুন।",
     errGeneric: "একটি ত্রুটি ঘটেছে: ",
     successTitle: "আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে ✓",
     successMessage: "ধন্যবাদ! আপনার নির্ভুল ও নিয়মিত শিফট রিপোর্টিং GBE Logistics-এর সাফল্যের ভিত্তি। এই দায়িত্বশীলতা বজায় রাখুন — এটি আমাদের আরও ভালো সেবা দিতে এবং আপনার রেকর্ড ন্যায্য ও নির্ভুলভাবে রাখতে সাহায্য করে।",
-    newEntryBtn: "নতুন এন্ট্রি জমা দিন"
+    successLabelName: "চালকের নাম",
+    successLabelId: "পরিচয়পত্র নম্বর",
+    successLabelType: "কার্যের ধরন",
+    newEntryBtn: "নতুন এন্ট্রি জমা দিন",
+    footerText: "GBE Logistics • ফ্লিট অপারেশনস সিস্টেম"
   }
 };
 
@@ -419,12 +835,14 @@ function t(key) {
 function updateDynamicLabels() {
   const odoLabel = document.getElementById("odo-label");
   const photoLabel = document.getElementById("photo-label");
-  let odoText, photoText;
-  if (shiftType === "start") { odoText = t("labelOdoStart"); photoText = t("labelPhotoStart"); }
-  else if (shiftType === "end") { odoText = t("labelOdoEnd"); photoText = t("labelPhotoEnd"); }
-  else { odoText = t("labelOdoGeneric"); photoText = t("labelPhotoGeneric"); }
-  odoLabel.innerHTML = odoText + ' <span class="req">*</span>';
-  photoLabel.innerHTML = photoText + ' <span class="req">*</span>';
+  const odoInput = document.getElementById("odo_reading");
+  let odoText, photoText, odoPh;
+  if (shiftType === "start") { odoText = t("labelOdoStart"); photoText = t("labelPhotoStart"); odoPh = t("phOdoStart"); }
+  else if (shiftType === "end") { odoText = t("labelOdoEnd"); photoText = t("labelPhotoEnd"); odoPh = t("phOdoEnd"); }
+  else { odoText = t("labelOdoGeneric"); photoText = t("labelPhotoGeneric"); odoPh = t("phOdo"); }
+  odoLabel.innerHTML = odoText + ' <b>*</b>';
+  photoLabel.innerHTML = photoText + ' <b>*</b>';
+  odoInput.placeholder = odoPh;
 }
 
 function applyTranslations() {
@@ -486,13 +904,16 @@ let identityLookupTimer = null;
 async function lookupDriverName(identityNumber) {
   const nameField = document.getElementById("full_name");
   const hint = document.getElementById("name-lookup-hint");
+  const successIcon = document.getElementById("name-success-icon");
   hint.textContent = t("lookupSearching");
+  successIcon.style.display = "none";
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/drivers?select=full_name&identity_number=eq.${encodeURIComponent(identityNumber)}&limit=1`, { headers: headers() });
     const rows = await res.json();
     if (rows[0]?.full_name) {
       nameField.value = rows[0].full_name;
       hint.textContent = "";
+      successIcon.style.display = "block";
     } else {
       nameField.value = "";
       hint.textContent = t("lookupNotFound");
@@ -506,6 +927,7 @@ async function lookupDriverName(identityNumber) {
 document.getElementById("identity_number").addEventListener("input", (e) => {
   clearTimeout(identityLookupTimer);
   document.getElementById("full_name").value = "";
+  document.getElementById("name-success-icon").style.display = "none";
   const hint = document.getElementById("name-lookup-hint");
   const val = e.target.value.trim();
   if (val.length < 5) { hint.textContent = ""; return; }
@@ -534,18 +956,20 @@ async function uploadFile(file, prefix) {
 const START_ONLY_FIELDS = ["condition_video", "ofd_count"];
 const END_ONLY_FIELDS = ["cod_delivered", "ppd_delivered", "picked_up", "client_screenshot"];
 
-document.querySelectorAll(".toggle button").forEach(btn => {
+document.querySelectorAll(".action-card").forEach(btn => {
   btn.addEventListener("click", () => {
-    document.querySelectorAll(".toggle button").forEach(b => b.classList.remove("active"));
+    document.querySelectorAll(".action-card").forEach(b => b.classList.remove("active"));
     btn.classList.add("active");
     shiftType = btn.dataset.type;
     const isStart = shiftType === "start";
     const isEnd = shiftType === "end";
     const isReinforcement = shiftType === "reinforcement";
 
-    document.getElementById("shift-form").style.display = "block";
-    document.getElementById("start-fields").style.display = isStart ? "block" : "none";
-    document.getElementById("end-fields").style.display = isEnd ? "block" : "none";
+    document.getElementById("shift-info-card").style.display = "block";
+    document.getElementById("benefits-panel").style.display = "grid";
+    document.getElementById("actions-footer").style.display = "flex";
+    document.getElementById("start-fields").style.display = isStart ? "contents" : "none";
+    document.getElementById("end-fields").style.display = isEnd ? "contents" : "none";
     document.getElementById("area-field").style.display = isStart ? "block" : "none";
     document.getElementById("amount-field").style.display = isReinforcement ? "block" : "none";
     document.getElementById("area").required = isStart;
@@ -564,10 +988,13 @@ function showScreen(name) {
 
 function resetToStart() {
   document.getElementById("shift-form").reset();
-  document.getElementById("shift-form").style.display = "none";
-  document.querySelectorAll(".toggle button").forEach(b => b.classList.remove("active"));
+  document.getElementById("shift-info-card").style.display = "none";
+  document.getElementById("benefits-panel").style.display = "none";
+  document.getElementById("actions-footer").style.display = "none";
+  document.querySelectorAll(".action-card").forEach(b => b.classList.remove("active"));
   shiftType = null;
   document.getElementById("name-lookup-hint").textContent = "";
+  document.getElementById("name-success-icon").style.display = "none";
   setStatus("", "");
   document.getElementById("status").className = "";
   setDefaultShiftDate();
@@ -575,6 +1002,15 @@ function resetToStart() {
 }
 
 document.getElementById("new-entry-btn").addEventListener("click", resetToStart);
+
+document.getElementById("clear-form-btn").addEventListener("click", () => {
+  document.getElementById("shift-form").reset();
+  document.getElementById("name-lookup-hint").textContent = "";
+  document.getElementById("name-success-icon").style.display = "none";
+  setStatus("", "");
+  document.getElementById("status").className = "";
+  setDefaultShiftDate();
+});
 
 document.getElementById("shift-form").addEventListener("submit", async (e) => {
   e.preventDefault();
@@ -648,6 +1084,10 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
       if (!res.ok) throw new Error(await res.text());
     }
 
+    const typeKey = shiftType === "start" ? "typeStart" : shiftType === "end" ? "typeEnd" : "typeReinforcement";
+    document.getElementById("success-name").textContent = document.getElementById("full_name").value.trim();
+    document.getElementById("success-id").textContent = document.getElementById("identity_number").value.trim();
+    document.getElementById("success-type").textContent = t(typeKey);
     showScreen("success");
   } catch (err) {
     console.error(err);
