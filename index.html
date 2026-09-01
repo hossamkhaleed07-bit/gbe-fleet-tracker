@@ -40,7 +40,7 @@
   h1 { font-size: 1.25rem; margin: 0 0 0.3rem; }
   .sub { color: var(--ink-muted); font-size: 0.85rem; margin: 0 0 1.5rem; }
 
-  .lang-switch { display: flex; gap: 0.4rem; justify-content: flex-end; margin-bottom: 1rem; }
+  .lang-switch { display: flex; gap: 0.4rem; justify-content: flex-end; flex-wrap: wrap; margin-bottom: 1rem; }
   .lang-switch button {
     padding: 0.35rem 0.75rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1);
     color: var(--ink-muted); font-size: 0.78rem; font-weight: 600; cursor: pointer;
@@ -105,6 +105,7 @@
     <button type="button" data-lang="ar">عربي</button>
     <button type="button" data-lang="en">English</button>
     <button type="button" data-lang="ur">اردو</button>
+    <button type="button" data-lang="bn">বাংলা</button>
   </div>
 
   <img src="logo.png" alt="GBE Logistics" class="brand-logo" onerror="this.style.display='none'">
@@ -360,6 +361,51 @@ const translations = {
     successTitle: "آپ کا ڈیٹا کامیابی سے موصول ہوگیا ✓",
     successMessage: "شکریہ! آپ کی درست اور مستقل رپورٹنگ GBE Logistics کی کامیابی کی بنیاد ہے۔ اسی ذمہ داری کو جاری رکھیں — یہ ہمیں بہتر خدمات دینے اور آپ کے ریکارڈ کو منصفانہ اور درست رکھنے میں مدد دیتا ہے۔",
     newEntryBtn: "نئی کارروائی درج کریں"
+  },
+  bn: {
+    dir: "ltr",
+    pageTitle: "শিফট এন্ট্রি — GBE ফ্লিট ট্র্যাকার",
+    heading: "শিফট শুরু / শেষ নিবন্ধন",
+    subtitle: "GBE Logistics — ফ্লিট ট্র্যাকার",
+    configNote: "ফাইলের শুরুতে SUPABASE_URL এবং SUPABASE_ANON_KEY যুক্ত করুন।",
+    chooseTypeTitle: "কাজের ধরন নির্বাচন করুন",
+    typeStart: "শিফট শুরু",
+    typeEnd: "শিফট শেষ",
+    typeReinforcement: "সহায়ক অর্থের অনুরোধ",
+    labelShiftDate: "শিফটের তারিখ",
+    hintShiftDate: "যদি আপনি মধ্যরাতের পরে শিফট শেষ করার তথ্য দিচ্ছেন, তাহলে শিফট শুরুর দিনের তারিখ বেছে নিন, নতুন দিনের তারিখ নয়।",
+    labelIdentity: "পরিচয়পত্র বা ইকামা নম্বর",
+    labelFullName: "চালকের নাম",
+    placeholderFullName: "পরিচয়পত্র নম্বর দেওয়ার পর স্বয়ংক্রিয়ভাবে দেখাবে",
+    lookupSearching: "খোঁজা হচ্ছে...",
+    lookupNotFound: "এই নম্বরে কোনো চালক পাওয়া যায়নি। পরিচয়পত্র নম্বর যাচাই করুন বা প্রশাসনের সাথে যোগাযোগ করুন।",
+    lookupError: "চালক খুঁজে পাওয়া যায়নি, আবার চেষ্টা করুন।",
+    labelVehiclePlate: "গাড়ির নম্বর প্লেট",
+    placeholderVehiclePlate: "খোঁজার জন্য প্লেট নম্বর বা অক্ষর লিখুন...",
+    labelStation: "স্টেশন",
+    optionStation: "— স্টেশন নির্বাচন করুন —",
+    labelOdoStart: "শুরুর ওডোমিটার রিডিং",
+    labelOdoEnd: "শেষের ওডোমিটার রিডিং",
+    labelOdoGeneric: "ওডোমিটার রিডিং",
+    labelPhotoStart: "শুরুর ওডোমিটারের ছবি",
+    labelPhotoEnd: "শেষের ওডোমিটারের ছবি",
+    labelPhotoGeneric: "ওডোমিটারের ছবি",
+    labelConditionVideo: "গাড়ির অবস্থার ভিডিও",
+    labelOfd: "প্রাপ্ত শিপমেন্ট (OFD)",
+    sectionDelivery: "ডেলিভারি তথ্য",
+    labelCod: "ডেলিভারি করা অপরিশোধিত শিপমেন্ট (COD)",
+    labelPpd: "ডেলিভারি করা পরিশোধিত শিপমেন্ট (PPD)",
+    labelPickedUp: "প্রাপ্ত শিপমেন্ট (Picked Up)",
+    labelClientScreenshot: "ক্লায়েন্ট অ্যাপের স্ক্রিনশট",
+    labelArea: "এলাকা",
+    labelAmount: "পরিমাণ",
+    submit: "জমা দিন",
+    submitBusy: "ছবি আপলোড এবং জমা দেওয়া হচ্ছে…",
+    errNoPlate: "এই গাড়ির নম্বর প্লেট তালিকায় নেই, অনুগ্রহ করে পরামর্শ থেকে একটি সঠিক প্লেট নির্বাচন করুন।",
+    errGeneric: "একটি ত্রুটি ঘটেছে: ",
+    successTitle: "আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে ✓",
+    successMessage: "ধন্যবাদ! আপনার নির্ভুল ও নিয়মিত শিফট রিপোর্টিং GBE Logistics-এর সাফল্যের ভিত্তি। এই দায়িত্বশীলতা বজায় রাখুন — এটি আমাদের আরও ভালো সেবা দিতে এবং আপনার রেকর্ড ন্যায্য ও নির্ভুলভাবে রাখতে সাহায্য করে।",
+    newEntryBtn: "নতুন এন্ট্রি জমা দিন"
   }
 };
 
