@@ -11,19 +11,19 @@
   :root {
     font-family: "Inter", system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
     color: #f5f7ff;
-    background: #050913;
+    background: #10182f;
     font-synthesis: none;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; min-width: 320px; background: #050913; }
+  body { margin: 0; min-width: 320px; background: #10182f; }
   button, input, select { font: inherit; }
 
   .page-shell {
     min-height: 100vh; position: relative; overflow: hidden; padding: 22px 14px 36px;
     background:
-      radial-gradient(circle at 75% 5%, rgba(50,78,190,.17), transparent 30%),
-      radial-gradient(circle at 20% 45%, rgba(76,34,150,.10), transparent 34%),
-      linear-gradient(145deg, #040812 0%, #071021 52%, #050913 100%);
+      radial-gradient(circle at 75% 5%, rgba(50,78,190,.34), transparent 38%),
+      radial-gradient(circle at 20% 45%, rgba(76,34,150,.22), transparent 42%),
+      linear-gradient(145deg, #10172f 0%, #182545 52%, #131a30 100%);
   }
 
   .ambient { position: fixed; width: 380px; height: 380px; border-radius: 50%; filter: blur(110px); pointer-events: none; opacity: .18; }
@@ -542,6 +542,7 @@
 const SUPABASE_URL = "https://icgzjqzjmzvhnezpignp.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImljZ3pqcXpqbXp2aG5lenBpZ25wIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODc1NjMzNjMsImV4cCI6MjEwMzEzOTM2M30.S2A-lXgBKTJog2xobvUxJYz1gAjCnGkuz7aqsOfkpks";
 const STORAGE_BUCKET = "shift-media";
+const UPLOAD_FUNCTION_URL = `${SUPABASE_URL}/functions/v1/upload-to-drive`;
 /* ============================================================ */
 
 const isConfigured = !SUPABASE_URL.includes("YOUR_") && !SUPABASE_ANON_KEY.includes("YOUR_");
@@ -943,14 +944,18 @@ function setStatus(kind, text) {
 async function uploadFile(file, prefix) {
   if (!file) return null;
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
-  const path = `${prefix}_${Date.now()}_${safeName}`;
-  const res = await fetch(`${SUPABASE_URL}/storage/v1/object/${STORAGE_BUCKET}/${path}`, {
+  const fileName = `${prefix}_${Date.now()}_${safeName}`;
+  const res = await fetch(UPLOAD_FUNCTION_URL, {
     method: "POST",
-    headers: headers({ "Content-Type": file.type || "application/octet-stream" }),
+    headers: headers({
+      "Content-Type": file.type || "application/octet-stream",
+      "x-file-name": fileName,
+    }),
     body: file,
   });
   if (!res.ok) throw new Error(`رفع الملف فشل: ${await res.text()}`);
-  return `${SUPABASE_URL}/storage/v1/object/public/${STORAGE_BUCKET}/${path}`;
+  const json = await res.json();
+  return json.url;
 }
 
 const START_ONLY_FIELDS = ["condition_video", "ofd_count"];
