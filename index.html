@@ -427,10 +427,10 @@
 
             <div id="start-fields" class="contents">
               <div class="field">
-                <label><span data-i18n="labelConditionVideo"></span> <b>*</b></label>
+                <label><span data-i18n="labelConditionVideo"></span></label>
                 <div class="input-wrap">
                   <svg><use href="#icon-video"/></svg>
-                  <input type="file" id="condition_video" accept="video/*" capture="environment" required>
+                  <input type="file" id="condition_video" accept="video/*" capture="environment">
                 </div>
               </div>
               <div class="field">
@@ -958,7 +958,7 @@ async function uploadFile(file, prefix) {
   return json.url;
 }
 
-const START_ONLY_FIELDS = ["condition_video", "ofd_count"];
+const START_ONLY_FIELDS = ["ofd_count"];
 const END_ONLY_FIELDS = ["cod_delivered", "ppd_delivered", "picked_up", "client_screenshot"];
 
 document.querySelectorAll(".action-card").forEach(btn => {
