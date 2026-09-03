@@ -611,6 +611,7 @@ const translations = {
     submit: "إرسال",
     submitBusy: "بيتم رفع الصور والإرسال…",
     errNoPlate: "لوحة المركبة دي مش موجودة في القائمة، اختر لوحة صحيحة من الاقتراحات.",
+    errDuplicateShift: "تم تسجيل هذه العملية بالفعل لنفس اليوم. لو ده خطأ، تواصل مع الإدارة لتعديله.",
     errGeneric: "حصل خطأ: ",
     successTitle: "تم استلام بياناتك بنجاح ✓",
     successMessage: "شكرًا لك! تسجيلك الدقيق والمنتظم لبيانات الدوام هو أساس نجاح فريق GBE Logistics. استمر بهذا الالتزام، فهو يساعدنا نقدّم خدمة أفضل ونحافظ على حقك بشكل عادل ودقيق.",
@@ -679,6 +680,7 @@ const translations = {
     submit: "Submit",
     submitBusy: "Uploading photos and submitting…",
     errNoPlate: "This vehicle plate isn't in the list, please pick a valid plate from the suggestions.",
+    errDuplicateShift: "This action was already registered for the same day. If this is a mistake, contact management to fix it.",
     errGeneric: "An error occurred: ",
     successTitle: "Your data was received successfully ✓",
     successMessage: "Thank you! Your accurate and consistent shift logging is the backbone of GBE Logistics' success. Keep up this commitment — it helps us deliver better service and keep your record fair and precise.",
@@ -747,6 +749,7 @@ const translations = {
     submit: "جمع کروائیں",
     submitBusy: "تصاویر اپلوڈ اور ڈیٹا بھیجا جا رہا ہے…",
     errNoPlate: "یہ نمبر پلیٹ فہرست میں موجود نہیں، براہ کرم تجاویز میں سے درست پلیٹ منتخب کریں۔",
+    errDuplicateShift: "یہ کارروائی اسی دن کے لیے پہلے ہی درج ہو چکی ہے۔ اگر یہ غلطی ہے تو اسے درست کروانے کے لیے انتظامیہ سے رابطہ کریں۔",
     errGeneric: "ایک خرابی پیش آگئی: ",
     successTitle: "آپ کا ڈیٹا کامیابی سے موصول ہوگیا ✓",
     successMessage: "شکریہ! آپ کی درست اور مستقل رپورٹنگ GBE Logistics کی کامیابی کی بنیاد ہے۔ اسی ذمہ داری کو جاری رکھیں — یہ ہمیں بہتر خدمات دینے اور آپ کے ریکارڈ کو منصفانہ اور درست رکھنے میں مدد دیتا ہے۔",
@@ -815,6 +818,7 @@ const translations = {
     submit: "জমা দিন",
     submitBusy: "ছবি আপলোড এবং জমা দেওয়া হচ্ছে…",
     errNoPlate: "এই গাড়ির নম্বর প্লেট তালিকায় নেই, অনুগ্রহ করে পরামর্শ থেকে একটি সঠিক প্লেট নির্বাচন করুন।",
+    errDuplicateShift: "এই কার্যক্রম একই দিনের জন্য ইতিমধ্যে নিবন্ধিত হয়েছে। এটি ভুল হলে, ঠিক করার জন্য প্রশাসনের সাথে যোগাযোগ করুন।",
     errGeneric: "একটি ত্রুটি ঘটেছে: ",
     successTitle: "আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে ✓",
     successMessage: "ধন্যবাদ! আপনার নির্ভুল ও নিয়মিত শিফট রিপোর্টিং GBE Logistics-এর সাফল্যের ভিত্তি। এই দায়িত্বশীলতা বজায় রাখুন — এটি আমাদের আরও ভালো সেবা দিতে এবং আপনার রেকর্ড ন্যায্য ও নির্ভুলভাবে রাখতে সাহায্য করে।",
@@ -941,8 +945,32 @@ function setStatus(kind, text) {
   el.textContent = text;
 }
 
+const COMPRESS_MAX_DIMENSION = 1600;
+const COMPRESS_QUALITY = 0.72;
+
+async function compressImage(file) {
+  if (!file || !file.type || !file.type.startsWith("image/")) return file;
+  try {
+    const bitmap = await createImageBitmap(file);
+    let { width, height } = bitmap;
+    const scale = Math.min(1, COMPRESS_MAX_DIMENSION / Math.max(width, height));
+    width = Math.round(width * scale);
+    height = Math.round(height * scale);
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext("2d").drawImage(bitmap, 0, 0, width, height);
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, "image/jpeg", COMPRESS_QUALITY));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" });
+  } catch (e) {
+    return file; // unsupported format or decode failure: fall back to the original file
+  }
+}
+
 async function uploadFile(file, prefix) {
   if (!file) return null;
+  file = await compressImage(file);
   const safeName = file.name.replace(/[^\w.\-]+/g, "_");
   const fileName = `${prefix}_${Date.now()}_${safeName}`;
   const res = await fetch(UPLOAD_FUNCTION_URL, {
@@ -1017,6 +1045,25 @@ document.getElementById("clear-form-btn").addEventListener("click", () => {
   setDefaultShiftDate();
 });
 
+async function parseRpcErrorMessage(res) {
+  const text = await res.text();
+  try { return JSON.parse(text).message || text; } catch (e) { return text; }
+}
+
+async function isDuplicateShift(identityNumber, shiftDate, shiftType) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/shift_entry_exists`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_identity_number: identityNumber, p_shift_date: shiftDate, p_shift_type: shiftType }),
+    });
+    if (!res.ok) return false; // fail open: don't block submission if the check itself fails
+    return (await res.json()) === true;
+  } catch (e) {
+    return false;
+  }
+}
+
 document.getElementById("shift-form").addEventListener("submit", async (e) => {
   e.preventDefault();
   if (!isConfigured) { document.getElementById("config-note").style.display = "block"; return; }
@@ -1030,6 +1077,18 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
 
   const btn = document.getElementById("submit-btn");
   btn.disabled = true;
+
+  if (shiftType === "start" || shiftType === "end") {
+    setStatus("busy", t("submitBusy"));
+    const identityNumber = document.getElementById("identity_number").value.trim();
+    const shiftDateVal = document.getElementById("shift_date").value;
+    if (await isDuplicateShift(identityNumber, shiftDateVal, shiftType)) {
+      setStatus("err", t("errDuplicateShift"));
+      btn.disabled = false;
+      return;
+    }
+  }
+
   setStatus("busy", t("submitBusy"));
 
   try {
@@ -1086,7 +1145,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
         headers: headers({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseRpcErrorMessage(res));
     }
 
     const typeKey = shiftType === "start" ? "typeStart" : shiftType === "end" ? "typeEnd" : "typeReinforcement";
@@ -1096,7 +1155,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
     showScreen("success");
   } catch (err) {
     console.error(err);
-    setStatus("err", t("errGeneric") + err.message);
+    setStatus("err", err.message === "DUPLICATE_SHIFT" ? t("errDuplicateShift") : t("errGeneric") + err.message);
   } finally {
     btn.disabled = false;
   }
