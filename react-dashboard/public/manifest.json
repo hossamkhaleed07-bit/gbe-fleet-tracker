@@ -1,0 +1,13 @@
+{
+  "name": "GBE Fleet Tracker — Dashboard",
+  "short_name": "GBE Dashboard",
+  "start_url": "/gbe-fleet-tracker/dashboard-react/",
+  "scope": "/gbe-fleet-tracker/dashboard-react/",
+  "display": "standalone",
+  "background_color": "#2841CD",
+  "theme_color": "#2841CD",
+  "icons": [
+    { "src": "/gbe-fleet-tracker/dashboard-react/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/gbe-fleet-tracker/dashboard-react/icon-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
+}
