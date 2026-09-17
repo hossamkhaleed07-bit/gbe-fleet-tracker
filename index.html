@@ -382,6 +382,16 @@
         </div>
       </section>
 
+      <section class="panel cooldown-panel" id="reinforcement-no-shift-panel" style="display:none">
+        <div class="section-title">
+          <div class="step">!</div>
+          <div>
+            <h2 data-i18n="noShiftStartTitle"></h2>
+            <p data-i18n="noShiftStartMessage"></p>
+          </div>
+        </div>
+      </section>
+
       <section class="panel" id="shift-info-card" style="display:none">
         <div class="section-title">
           <div class="step">2</div>
@@ -604,6 +614,8 @@ const translations = {
     cooldownNextAvailable: "يمكنك تقديم طلب جديد بعد:",
     cooldownRemaining: "الوقت المتبقي",
     cooldownAvailableTitle: "طلب التعزيز متاح الآن",
+    noShiftStartTitle: "لازم تسجّل بداية الدوام الأول",
+    noShiftStartMessage: "مينفعش تقدّم طلب تعزيز قبل ما تسجّل بداية الدوام لنفس اليوم.",
     shiftInfoTitle: "بيانات الدوام",
     shiftInfoSubtitle: "ادخل بيانات السائق والمركبة المطلوبة",
     labelShiftDate: "تاريخ الدوام",
@@ -678,6 +690,8 @@ const translations = {
     cooldownNextAvailable: "You can submit another request after:",
     cooldownRemaining: "Time remaining",
     cooldownAvailableTitle: "Reinforcement Available",
+    noShiftStartTitle: "Start Shift Required First",
+    noShiftStartMessage: "You can't submit a reinforcement request before logging the start of your shift for this date.",
     shiftInfoTitle: "Shift Information",
     shiftInfoSubtitle: "Enter the required driver and vehicle details",
     labelShiftDate: "Shift Date",
@@ -752,6 +766,8 @@ const translations = {
     cooldownNextAvailable: "آپ اس کے بعد نئی درخواست جمع کروا سکتے ہیں:",
     cooldownRemaining: "باقی وقت",
     cooldownAvailableTitle: "تعزیزی درخواست دستیاب ہے",
+    noShiftStartTitle: "پہلے شفٹ کا آغاز درج کریں",
+    noShiftStartMessage: "اس تاریخ کے لیے شفٹ کا آغاز درج کیے بغیر آپ تعزیزی درخواست جمع نہیں کروا سکتے۔",
     shiftInfoTitle: "شفٹ کی معلومات",
     shiftInfoSubtitle: "مطلوبہ ڈرائیور اور گاڑی کی تفصیلات درج کریں",
     labelShiftDate: "شفٹ کی تاریخ",
@@ -826,6 +842,8 @@ const translations = {
     cooldownNextAvailable: "আপনি এর পরে নতুন অনুরোধ জমা দিতে পারবেন:",
     cooldownRemaining: "অবশিষ্ট সময়",
     cooldownAvailableTitle: "রিইনফোর্সমেন্ট অনুরোধ উপলব্ধ",
+    noShiftStartTitle: "প্রথমে শিফট শুরু নিবন্ধন করুন",
+    noShiftStartMessage: "এই তারিখের জন্য শিফট শুরু নিবন্ধন না করে আপনি রিইনফোর্সমেন্ট অনুরোধ জমা দিতে পারবেন না।",
     shiftInfoTitle: "শিফটের তথ্য",
     shiftInfoSubtitle: "প্রয়োজনীয় চালক ও গাড়ির তথ্য লিখুন",
     labelShiftDate: "শিফটের তারিখ",
@@ -1024,7 +1042,32 @@ function showCooldownPanel(nextAllowedAt, remainingSeconds) {
 function hideCooldownPanel() {
   clearInterval(cooldownTimer);
   document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+  document.getElementById("reinforcement-no-shift-panel").style.display = "none";
   if (shiftType === "reinforcement") showCooldownForm(true);
+}
+
+function showNoShiftPanel() {
+  clearInterval(cooldownTimer);
+  showCooldownForm(false);
+  document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+  document.getElementById("reinforcement-no-shift-panel").style.display = "block";
+}
+
+// Reuses the existing shift_entry_exists() RPC (028) — a reinforcement
+// request is only allowed for a driver/day that already has a start-shift
+// logged for that same date.
+async function hasShiftStart(identityNumber, shiftDate) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/shift_entry_exists`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_identity_number: identityNumber, p_shift_date: shiftDate, p_shift_type: "start" }),
+    });
+    if (!res.ok) return null; // fail open on check errors — submit_reinforcement_request still enforces it server-side
+    return await res.json();
+  } catch (e) {
+    return null;
+  }
 }
 
 async function recheckCooldownAtZero() {
@@ -1041,11 +1084,21 @@ async function recheckCooldownAtZero() {
 async function checkReinforcementCooldown(identityNumber) {
   if (shiftType !== "reinforcement" || !identityNumber || identityNumber.length < 5) {
     document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+    document.getElementById("reinforcement-no-shift-panel").style.display = "none";
     return;
   }
   const myToken = ++cooldownCheckToken;
-  const result = await fetchReinforcementCooldown(identityNumber);
+  const shiftDate = document.getElementById("shift_date").value;
+
+  const shiftStarted = await hasShiftStart(identityNumber, shiftDate);
   if (myToken !== cooldownCheckToken) return; // a newer check superseded this one
+  if (shiftStarted === false) {
+    showNoShiftPanel();
+    return;
+  }
+
+  const result = await fetchReinforcementCooldown(identityNumber);
+  if (myToken !== cooldownCheckToken) return;
   if (result && result.allowed === false) {
     showCooldownPanel(result.next_allowed_at, result.remaining_seconds);
   } else {
@@ -1088,6 +1141,10 @@ document.getElementById("identity_number").addEventListener("input", (e) => {
     lookupDriverName(val);
     checkReinforcementCooldown(val);
   }, 400);
+});
+
+document.getElementById("shift_date").addEventListener("change", () => {
+  checkReinforcementCooldown(document.getElementById("identity_number").value.trim());
 });
 
 function setStatus(kind, text) {
@@ -1177,6 +1234,7 @@ function resetToStart() {
   document.getElementById("benefits-panel").style.display = "none";
   document.getElementById("actions-footer").style.display = "none";
   document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+  document.getElementById("reinforcement-no-shift-panel").style.display = "none";
   clearInterval(cooldownTimer);
   document.querySelectorAll(".action-card").forEach(b => b.classList.remove("active"));
   shiftType = null;
@@ -1317,6 +1375,8 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
       const nextAllowedAt = cooldownMatch[1].trim();
       const remaining = Math.max(0, Math.floor((new Date(nextAllowedAt).getTime() - Date.now()) / 1000));
       showCooldownPanel(nextAllowedAt, remaining);
+    } else if ((err.message || "").includes("NO_SHIFT_START")) {
+      showNoShiftPanel();
     } else {
       setStatus("err", err.message === "DUPLICATE_SHIFT" ? t("errDuplicateShift") : t("errGeneric") + err.message);
     }
