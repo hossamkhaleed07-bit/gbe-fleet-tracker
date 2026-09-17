@@ -177,6 +177,21 @@
     display: none; background: rgba(13,25,48,.82); border: 1px solid rgba(105,124,161,.32); border-radius: 12px;
     padding: 1rem 1.1rem; margin-top: 15px; font-size: 0.85rem; color: #8795b1;
   }
+
+  .cooldown-panel { border-color: rgba(248,113,113,.35); }
+  .cooldown-panel.available { border-color: rgba(74,222,128,.35); }
+  .cooldown-box {
+    margin-top: 18px; padding: 22px; border-radius: 14px; text-align: center;
+    background: rgba(239,68,68,.10); border: 1px solid rgba(248,113,113,.28);
+  }
+  .cooldown-panel.available .cooldown-box { background: rgba(34,197,94,.10); border-color: rgba(74,222,128,.28); }
+  .cooldown-label { color: #9fb0d1; font-size: 12px; margin-bottom: 6px; }
+  .cooldown-time { color: #f1f5ff; font-size: 18px; font-weight: 700; margin-bottom: 18px; }
+  .cooldown-countdown {
+    color: #f87171; font-size: 32px; font-weight: 800; letter-spacing: 1px;
+    font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate;
+  }
+  .cooldown-panel.available .cooldown-countdown { color: #4ade80; }
   #config-note code { background: rgba(255,255,255,0.08); padding: 0.1rem 0.35rem; border-radius: 4px; }
 
   #screen-success .success-badge {
@@ -348,6 +363,22 @@
             <strong data-i18n="typeReinforcement"></strong>
             <small data-i18n="typeReinforcementDesc"></small>
           </button>
+        </div>
+      </section>
+
+      <section class="panel cooldown-panel" id="reinforcement-cooldown-panel" style="display:none">
+        <div class="section-title">
+          <div class="step">!</div>
+          <div>
+            <h2 data-i18n="cooldownTitle"></h2>
+            <p data-i18n="cooldownMessage"></p>
+          </div>
+        </div>
+        <div class="cooldown-box">
+          <div class="cooldown-label" data-i18n="cooldownNextAvailable"></div>
+          <div class="cooldown-time" id="cooldown-next-time"></div>
+          <div class="cooldown-label" data-i18n="cooldownRemaining"></div>
+          <div class="cooldown-countdown" id="cooldown-countdown"></div>
         </div>
       </section>
 
@@ -568,6 +599,11 @@ const translations = {
     typeStartDesc: "بدء دوام جديد",
     typeEndDesc: "إنهاء الدوام الحالي",
     typeReinforcementDesc: "طلب دعم إضافي",
+    cooldownTitle: "طلب التعزيز غير متاح حاليًا",
+    cooldownMessage: "لقد قمت بتقديم طلب تعزيز بالفعل.",
+    cooldownNextAvailable: "يمكنك تقديم طلب جديد بعد:",
+    cooldownRemaining: "الوقت المتبقي",
+    cooldownAvailableTitle: "طلب التعزيز متاح الآن",
     shiftInfoTitle: "بيانات الدوام",
     shiftInfoSubtitle: "ادخل بيانات السائق والمركبة المطلوبة",
     labelShiftDate: "تاريخ الدوام",
@@ -637,6 +673,11 @@ const translations = {
     typeStartDesc: "Begin a new shift",
     typeEndDesc: "End current shift",
     typeReinforcementDesc: "Request additional support",
+    cooldownTitle: "Reinforcement Request Not Available",
+    cooldownMessage: "You have already submitted a reinforcement request.",
+    cooldownNextAvailable: "You can submit another request after:",
+    cooldownRemaining: "Time remaining",
+    cooldownAvailableTitle: "Reinforcement Available",
     shiftInfoTitle: "Shift Information",
     shiftInfoSubtitle: "Enter the required driver and vehicle details",
     labelShiftDate: "Shift Date",
@@ -706,6 +747,11 @@ const translations = {
     typeStartDesc: "نئی شفٹ شروع کریں",
     typeEndDesc: "موجودہ شفٹ ختم کریں",
     typeReinforcementDesc: "اضافی امداد کی درخواست",
+    cooldownTitle: "تعزیزی درخواست فی الحال دستیاب نہیں",
+    cooldownMessage: "آپ پہلے ہی ایک تعزیزی درخواست جمع کروا چکے ہیں۔",
+    cooldownNextAvailable: "آپ اس کے بعد نئی درخواست جمع کروا سکتے ہیں:",
+    cooldownRemaining: "باقی وقت",
+    cooldownAvailableTitle: "تعزیزی درخواست دستیاب ہے",
     shiftInfoTitle: "شفٹ کی معلومات",
     shiftInfoSubtitle: "مطلوبہ ڈرائیور اور گاڑی کی تفصیلات درج کریں",
     labelShiftDate: "شفٹ کی تاریخ",
@@ -775,6 +821,11 @@ const translations = {
     typeStartDesc: "নতুন শিফট শুরু করুন",
     typeEndDesc: "চলমান শিফট শেষ করুন",
     typeReinforcementDesc: "অতিরিক্ত সহায়তার অনুরোধ",
+    cooldownTitle: "রিইনফোর্সমেন্ট অনুরোধ এখন উপলব্ধ নয়",
+    cooldownMessage: "আপনি ইতিমধ্যে একটি রিইনফোর্সমেন্ট অনুরোধ জমা দিয়েছেন।",
+    cooldownNextAvailable: "আপনি এর পরে নতুন অনুরোধ জমা দিতে পারবেন:",
+    cooldownRemaining: "অবশিষ্ট সময়",
+    cooldownAvailableTitle: "রিইনফোর্সমেন্ট অনুরোধ উপলব্ধ",
     shiftInfoTitle: "শিফটের তথ্য",
     shiftInfoSubtitle: "প্রয়োজনীয় চালক ও গাড়ির তথ্য লিখুন",
     labelShiftDate: "শিফটের তারিখ",
@@ -905,6 +956,103 @@ async function loadVehicles() {
   } catch (e) { /* no vehicles loaded */ }
 }
 
+/* ============================================================
+   Reinforcement cooldown (2 hours per driver) — the server (see
+   get_reinforcement_cooldown / submit_reinforcement_request in
+   the Supabase migrations) is the source of truth; this UI only
+   reflects it and re-checks itself rather than trusting a local
+   timer forever.
+   ============================================================ */
+let cooldownTimer = null;
+let cooldownCheckToken = 0;
+
+function formatCountdown(totalSeconds) {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  const hh = String(Math.floor(s / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((s % 3600) / 60)).padStart(2, "0");
+  const ss = String(s % 60).padStart(2, "0");
+  return `${hh}:${mm}:${ss}`;
+}
+
+async function fetchReinforcementCooldown(identityNumber) {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_reinforcement_cooldown`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_identity_number: identityNumber }),
+    });
+    if (!res.ok) return null; // fail open on check errors — submit_reinforcement_request still enforces it server-side
+    const json = await res.json();
+    return Array.isArray(json) ? json[0] : json;
+  } catch (e) {
+    return null;
+  }
+}
+
+function showCooldownForm(isAvailableNow) {
+  document.getElementById("shift-info-card").style.display = isAvailableNow ? "block" : "none";
+  document.getElementById("benefits-panel").style.display = isAvailableNow ? "grid" : "none";
+  document.getElementById("actions-footer").style.display = isAvailableNow ? "flex" : "none";
+}
+
+function showCooldownPanel(nextAllowedAt, remainingSeconds) {
+  showCooldownForm(false);
+  const panel = document.getElementById("reinforcement-cooldown-panel");
+  panel.style.display = "block";
+  panel.classList.remove("available");
+  const nextDate = new Date(nextAllowedAt);
+  document.getElementById("cooldown-next-time").textContent = nextDate.toLocaleString(
+    currentLang === "ar" ? "ar-EG" : "en-US",
+    { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
+  );
+
+  clearInterval(cooldownTimer);
+  let remaining = Math.floor(remainingSeconds);
+  const tick = () => {
+    document.getElementById("cooldown-countdown").textContent = formatCountdown(remaining);
+    if (remaining <= 0) {
+      clearInterval(cooldownTimer);
+      recheckCooldownAtZero();
+      return;
+    }
+    remaining -= 1;
+  };
+  tick();
+  cooldownTimer = setInterval(tick, 1000);
+}
+
+function hideCooldownPanel() {
+  clearInterval(cooldownTimer);
+  document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+  if (shiftType === "reinforcement") showCooldownForm(true);
+}
+
+async function recheckCooldownAtZero() {
+  const identityNumber = document.getElementById("identity_number").value.trim();
+  if (!identityNumber) { hideCooldownPanel(); return; }
+  const result = await fetchReinforcementCooldown(identityNumber);
+  if (!result || result.allowed) {
+    hideCooldownPanel();
+  } else {
+    showCooldownPanel(result.next_allowed_at, result.remaining_seconds);
+  }
+}
+
+async function checkReinforcementCooldown(identityNumber) {
+  if (shiftType !== "reinforcement" || !identityNumber || identityNumber.length < 5) {
+    document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+    return;
+  }
+  const myToken = ++cooldownCheckToken;
+  const result = await fetchReinforcementCooldown(identityNumber);
+  if (myToken !== cooldownCheckToken) return; // a newer check superseded this one
+  if (result && result.allowed === false) {
+    showCooldownPanel(result.next_allowed_at, result.remaining_seconds);
+  } else {
+    hideCooldownPanel();
+  }
+}
+
 let identityLookupTimer = null;
 async function lookupDriverName(identityNumber) {
   const nameField = document.getElementById("full_name");
@@ -935,8 +1083,11 @@ document.getElementById("identity_number").addEventListener("input", (e) => {
   document.getElementById("name-success-icon").style.display = "none";
   const hint = document.getElementById("name-lookup-hint");
   const val = e.target.value.trim();
-  if (val.length < 5) { hint.textContent = ""; return; }
-  identityLookupTimer = setTimeout(() => lookupDriverName(val), 400);
+  if (val.length < 5) { hint.textContent = ""; checkReinforcementCooldown(val); return; }
+  identityLookupTimer = setTimeout(() => {
+    lookupDriverName(val);
+    checkReinforcementCooldown(val);
+  }, 400);
 });
 
 function setStatus(kind, text) {
@@ -1009,6 +1160,7 @@ document.querySelectorAll(".action-card").forEach(btn => {
     document.getElementById("amount").required = isReinforcement;
 
     updateDynamicLabels();
+    checkReinforcementCooldown(document.getElementById("identity_number").value.trim());
     START_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isStart; });
     END_ONLY_FIELDS.forEach(id => { document.getElementById(id).required = isEnd; });
   });
@@ -1024,6 +1176,8 @@ function resetToStart() {
   document.getElementById("shift-info-card").style.display = "none";
   document.getElementById("benefits-panel").style.display = "none";
   document.getElementById("actions-footer").style.display = "none";
+  document.getElementById("reinforcement-cooldown-panel").style.display = "none";
+  clearInterval(cooldownTimer);
   document.querySelectorAll(".action-card").forEach(b => b.classList.remove("active"));
   shiftType = null;
   document.getElementById("name-lookup-hint").textContent = "";
@@ -1111,7 +1265,7 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
         headers: headers({ "Content-Type": "application/json" }),
         body: JSON.stringify(payload),
       });
-      if (!res.ok) throw new Error(await res.text());
+      if (!res.ok) throw new Error(await parseRpcErrorMessage(res));
     } else {
       const videoFile = document.getElementById("condition_video")?.files[0];
       const screenshotFile = document.getElementById("client_screenshot")?.files[0];
@@ -1155,7 +1309,17 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
     showScreen("success");
   } catch (err) {
     console.error(err);
-    setStatus("err", err.message === "DUPLICATE_SHIFT" ? t("errDuplicateShift") : t("errGeneric") + err.message);
+    const cooldownMatch = /REINFORCEMENT_COOLDOWN_ACTIVE:(.+)/.exec(err.message || "");
+    if (cooldownMatch) {
+      // Defense in depth: the server rejected this at the last moment (a race
+      // the UI's own pre-check didn't catch) — show the same locked state
+      // instead of a generic error.
+      const nextAllowedAt = cooldownMatch[1].trim();
+      const remaining = Math.max(0, Math.floor((new Date(nextAllowedAt).getTime() - Date.now()) / 1000));
+      showCooldownPanel(nextAllowedAt, remaining);
+    } else {
+      setStatus("err", err.message === "DUPLICATE_SHIFT" ? t("errDuplicateShift") : t("errGeneric") + err.message);
+    }
   } finally {
     btn.disabled = false;
   }
