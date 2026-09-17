@@ -192,6 +192,8 @@
     font-variant-numeric: tabular-nums; direction: ltr; unicode-bidi: isolate;
   }
   .cooldown-panel.available .cooldown-countdown { color: #4ade80; }
+  .no-shift-action { margin-top: 18px; width: auto; min-height: 46px; }
+  .no-shift-message { color: #dce2ee; font-size: 14px; line-height: 1.7; }
   #config-note code { background: rgba(255,255,255,0.08); padding: 0.1rem 0.35rem; border-radius: 4px; }
 
   #screen-success .success-badge {
@@ -239,6 +241,10 @@
     .benefit:nth-child(3), .benefit:nth-child(4) { padding-top: 0; }
     .actions-footer { flex-direction: column; gap: 12px; padding: 17px; }
     .btn { width: 100%; }
+    .cooldown-box { padding: 16px; margin-top: 14px; }
+    .cooldown-countdown { font-size: 24px; }
+    .cooldown-time { font-size: 15px; margin-bottom: 14px; }
+    .no-shift-action { width: 100%; margin-top: 16px; }
   }
 </style>
 </head>
@@ -387,9 +393,12 @@
           <div class="step">!</div>
           <div>
             <h2 data-i18n="noShiftStartTitle"></h2>
-            <p data-i18n="noShiftStartMessage"></p>
           </div>
         </div>
+        <div class="cooldown-box">
+          <div class="no-shift-message" data-i18n="noShiftStartMessage"></div>
+        </div>
+        <button type="button" class="btn btn-primary no-shift-action" id="go-to-start-btn" data-i18n="noShiftStartAction"></button>
       </section>
 
       <section class="panel" id="shift-info-card" style="display:none">
@@ -615,7 +624,8 @@ const translations = {
     cooldownRemaining: "الوقت المتبقي",
     cooldownAvailableTitle: "طلب التعزيز متاح الآن",
     noShiftStartTitle: "لازم تسجّل بداية الدوام الأول",
-    noShiftStartMessage: "مينفعش تقدّم طلب تعزيز قبل ما تسجّل بداية الدوام لنفس اليوم.",
+    noShiftStartMessage: "لازم تسجّل بداية الدوام لنفس تاريخ اليوم ده قبل ما تقدر تطلب تعزيز. سجّل بداية الدوام الأول، وبعدها ارجع لطلب التعزيز.",
+    noShiftStartAction: "سجّل بداية الدوام الآن",
     shiftInfoTitle: "بيانات الدوام",
     shiftInfoSubtitle: "ادخل بيانات السائق والمركبة المطلوبة",
     labelShiftDate: "تاريخ الدوام",
@@ -691,7 +701,8 @@ const translations = {
     cooldownRemaining: "Time remaining",
     cooldownAvailableTitle: "Reinforcement Available",
     noShiftStartTitle: "Start Shift Required First",
-    noShiftStartMessage: "You can't submit a reinforcement request before logging the start of your shift for this date.",
+    noShiftStartMessage: "You need to log the start of your shift for this date before you can submit a reinforcement request. Please log your shift start first, then come back to request reinforcement.",
+    noShiftStartAction: "Log Start Shift Now",
     shiftInfoTitle: "Shift Information",
     shiftInfoSubtitle: "Enter the required driver and vehicle details",
     labelShiftDate: "Shift Date",
@@ -767,7 +778,8 @@ const translations = {
     cooldownRemaining: "باقی وقت",
     cooldownAvailableTitle: "تعزیزی درخواست دستیاب ہے",
     noShiftStartTitle: "پہلے شفٹ کا آغاز درج کریں",
-    noShiftStartMessage: "اس تاریخ کے لیے شفٹ کا آغاز درج کیے بغیر آپ تعزیزی درخواست جمع نہیں کروا سکتے۔",
+    noShiftStartMessage: "تعزیزی درخواست جمع کروانے سے پہلے آپ کو اسی تاریخ کے لیے شفٹ کا آغاز درج کرنا ضروری ہے۔ براہ کرم پہلے شفٹ کا آغاز درج کریں، پھر تعزیزی درخواست کے لیے واپس آئیں۔",
+    noShiftStartAction: "ابھی شفٹ کا آغاز درج کریں",
     shiftInfoTitle: "شفٹ کی معلومات",
     shiftInfoSubtitle: "مطلوبہ ڈرائیور اور گاڑی کی تفصیلات درج کریں",
     labelShiftDate: "شفٹ کی تاریخ",
@@ -843,7 +855,8 @@ const translations = {
     cooldownRemaining: "অবশিষ্ট সময়",
     cooldownAvailableTitle: "রিইনফোর্সমেন্ট অনুরোধ উপলব্ধ",
     noShiftStartTitle: "প্রথমে শিফট শুরু নিবন্ধন করুন",
-    noShiftStartMessage: "এই তারিখের জন্য শিফট শুরু নিবন্ধন না করে আপনি রিইনফোর্সমেন্ট অনুরোধ জমা দিতে পারবেন না।",
+    noShiftStartMessage: "রিইনফোর্সমেন্ট অনুরোধ জমা দেওয়ার আগে আপনাকে এই তারিখের জন্য শিফট শুরু নিবন্ধন করতে হবে। অনুগ্রহ করে প্রথমে শিফট শুরু নিবন্ধন করুন, তারপর রিইনফোর্সমেন্ট অনুরোধের জন্য ফিরে আসুন।",
+    noShiftStartAction: "এখনই শিফট শুরু নিবন্ধন করুন",
     shiftInfoTitle: "শিফটের তথ্য",
     shiftInfoSubtitle: "প্রয়োজনীয় চালক ও গাড়ির তথ্য লিখুন",
     labelShiftDate: "শিফটের তারিখ",
@@ -1247,6 +1260,11 @@ function resetToStart() {
 }
 
 document.getElementById("new-entry-btn").addEventListener("click", resetToStart);
+
+document.getElementById("go-to-start-btn").addEventListener("click", () => {
+  const startCard = document.querySelector('.action-card[data-type="start"]');
+  if (startCard) startCard.click();
+});
 
 document.getElementById("clear-form-btn").addEventListener("click", () => {
   document.getElementById("shift-form").reset();
