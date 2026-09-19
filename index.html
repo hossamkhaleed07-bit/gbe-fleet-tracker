@@ -138,6 +138,32 @@
   .disabled { background: rgba(15,24,43,.5); }
   .success-icon { color: #36d995; flex: 0 0 auto; }
 
+  .odo-photo-capture { display: flex; flex-direction: column; gap: 10px; }
+  .odo-capture-btn { min-height: 53px; }
+  .odo-photo-preview {
+    display: flex; align-items: center; gap: 12px; min-height: 53px; padding: 0 15px;
+    border: 1px solid rgba(105,124,161,.32); border-radius: 11px; background: rgba(13,25,48,.82);
+  }
+  .odo-photo-preview img { width: 40px; height: 40px; object-fit: cover; border-radius: 8px; flex: 0 0 auto; }
+  .odo-photo-preview .success-icon { width: 19px; height: 19px; }
+  .odo-retake-btn {
+    margin-inline-start: auto; background: transparent; border: 1px solid #3a527c; color: #dce2ee;
+    border-radius: 8px; padding: 7px 12px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+
+  .camera-overlay { position: fixed; inset: 0; background: #000; z-index: 999; display: flex; align-items: center; justify-content: center; }
+  .camera-overlay video { width: 100%; height: 100%; object-fit: cover; }
+  .camera-overlay-controls { position: absolute; bottom: 34px; left: 0; right: 0; display: flex; justify-content: center; }
+  .camera-shutter-btn {
+    width: 72px; height: 72px; border-radius: 50%; background: #fff; border: 4px solid rgba(255,255,255,.45); cursor: pointer; padding: 0;
+  }
+  .camera-shutter-btn:active { background: #ddd; }
+  .camera-cancel-btn {
+    position: absolute; top: 18px; inset-inline-start: 18px; width: 40px; height: 40px; border-radius: 50%;
+    background: rgba(255,255,255,.15); color: #fff; border: 0; cursor: pointer; display: flex; align-items: center; justify-content: center;
+  }
+  .camera-cancel-btn svg { width: 20px; height: 20px; }
+
   .hint { margin-top: 9px; color: #73819c; font-size: 11px; line-height: 1.5; }
   .hint span { color: #8da1c6; margin-inline-end: 4px; }
 
@@ -469,9 +495,17 @@
 
             <div class="field">
               <label id="photo-label"></label>
-              <div class="input-wrap">
-                <svg><use href="#icon-camera"/></svg>
-                <input type="file" id="odo_photo" accept="image/*" capture="environment" required>
+              <div class="odo-photo-capture">
+                <input type="file" id="odo_photo" accept="image/*" capture="environment" required style="display:none">
+                <button type="button" class="btn btn-secondary odo-capture-btn" id="odo-capture-btn">
+                  <svg><use href="#icon-camera"/></svg>
+                  <span data-i18n="btnTakePhoto"></span>
+                </button>
+                <div class="odo-photo-preview" id="odo-photo-preview" style="display:none">
+                  <img id="odo-photo-thumb" alt="">
+                  <svg class="success-icon"><use href="#icon-checkcircle"/></svg>
+                  <button type="button" class="odo-retake-btn" id="odo-retake-btn" data-i18n="btnRetakePhoto"></button>
+                </div>
               </div>
             </div>
 
@@ -585,6 +619,15 @@
   </div>
 </main>
 
+<div id="camera-overlay" class="camera-overlay" style="display:none">
+  <video id="camera-video" autoplay playsinline muted></video>
+  <canvas id="camera-canvas" style="display:none"></canvas>
+  <button type="button" class="camera-cancel-btn" id="camera-cancel-btn" aria-label="close"><svg><use href="#icon-x"/></svg></button>
+  <div class="camera-overlay-controls">
+    <button type="button" class="camera-shutter-btn" id="camera-shutter-btn" aria-label="capture"></button>
+  </div>
+</div>
+
 <script>
 /* ============================================================
    حطي بيانات الاتصال بتاعتك هنا (Project Settings → API)
@@ -650,6 +693,8 @@ const translations = {
     labelPhotoStart: "صورة عداد البداية",
     labelPhotoEnd: "صورة عداد النهاية",
     labelPhotoGeneric: "صورة العداد",
+    btnTakePhoto: "التقط صورة",
+    btnRetakePhoto: "إعادة التصوير",
     labelConditionVideo: "فيديو حالة المركبة",
     labelOfd: "الشحنات المستلمة (OFD)",
     labelCod: "الشحنات الموصّلة غير المدفوعة (COD)",
@@ -669,6 +714,7 @@ const translations = {
     submit: "إرسال",
     submitBusy: "بيتم رفع الصور والإرسال…",
     errNoPlate: "لوحة المركبة دي مش موجودة في القائمة، اختر لوحة صحيحة من الاقتراحات.",
+    errNoOdoPhoto: "لازم تلتقط صورة قراءة العداد بالكاميرا.",
     errDuplicateShift: "تم تسجيل هذه العملية بالفعل لنفس اليوم. لو ده خطأ، تواصل مع الإدارة لتعديله.",
     errGeneric: "حصل خطأ: ",
     successTitle: "تم استلام بياناتك بنجاح ✓",
@@ -727,6 +773,8 @@ const translations = {
     labelPhotoStart: "Start Odometer Photo",
     labelPhotoEnd: "End Odometer Photo",
     labelPhotoGeneric: "Odometer Photo",
+    btnTakePhoto: "Take Photo",
+    btnRetakePhoto: "Retake Photo",
     labelConditionVideo: "Vehicle Condition Video",
     labelOfd: "Shipments Received (OFD)",
     labelCod: "Delivered Unpaid Shipments (COD)",
@@ -746,6 +794,7 @@ const translations = {
     submit: "Submit",
     submitBusy: "Uploading photos and submitting…",
     errNoPlate: "This vehicle plate isn't in the list, please pick a valid plate from the suggestions.",
+    errNoOdoPhoto: "You must take a photo of the odometer reading with the camera.",
     errDuplicateShift: "This action was already registered for the same day. If this is a mistake, contact management to fix it.",
     errGeneric: "An error occurred: ",
     successTitle: "Your data was received successfully ✓",
@@ -804,6 +853,8 @@ const translations = {
     labelPhotoStart: "آغاز کے اوڈومیٹر کی تصویر",
     labelPhotoEnd: "اختتام کے اوڈومیٹر کی تصویر",
     labelPhotoGeneric: "اوڈومیٹر کی تصویر",
+    btnTakePhoto: "تصویر لیں",
+    btnRetakePhoto: "دوبارہ تصویر لیں",
     labelConditionVideo: "گاڑی کی حالت کی ویڈیو",
     labelOfd: "موصول شدہ شپمنٹس (OFD)",
     labelCod: "ڈیلیور شدہ غیر ادا شدہ شپمنٹس (COD)",
@@ -823,6 +874,7 @@ const translations = {
     submit: "جمع کروائیں",
     submitBusy: "تصاویر اپلوڈ اور ڈیٹا بھیجا جا رہا ہے…",
     errNoPlate: "یہ نمبر پلیٹ فہرست میں موجود نہیں، براہ کرم تجاویز میں سے درست پلیٹ منتخب کریں۔",
+    errNoOdoPhoto: "آپ کو کیمرے سے اوڈومیٹر کی ریڈنگ کی تصویر لینا ضروری ہے۔",
     errDuplicateShift: "یہ کارروائی اسی دن کے لیے پہلے ہی درج ہو چکی ہے۔ اگر یہ غلطی ہے تو اسے درست کروانے کے لیے انتظامیہ سے رابطہ کریں۔",
     errGeneric: "ایک خرابی پیش آگئی: ",
     successTitle: "آپ کا ڈیٹا کامیابی سے موصول ہوگیا ✓",
@@ -881,6 +933,8 @@ const translations = {
     labelPhotoStart: "শুরুর ওডোমিটারের ছবি",
     labelPhotoEnd: "শেষের ওডোমিটারের ছবি",
     labelPhotoGeneric: "ওডোমিটারের ছবি",
+    btnTakePhoto: "ছবি তুলুন",
+    btnRetakePhoto: "পুনরায় ছবি তুলুন",
     labelConditionVideo: "গাড়ির অবস্থার ভিডিও",
     labelOfd: "প্রাপ্ত শিপমেন্ট (OFD)",
     labelCod: "ডেলিভারি করা অপরিশোধিত শিপমেন্ট (COD)",
@@ -900,6 +954,7 @@ const translations = {
     submit: "জমা দিন",
     submitBusy: "ছবি আপলোড এবং জমা দেওয়া হচ্ছে…",
     errNoPlate: "এই গাড়ির নম্বর প্লেট তালিকায় নেই, অনুগ্রহ করে পরামর্শ থেকে একটি সঠিক প্লেট নির্বাচন করুন।",
+    errNoOdoPhoto: "আপনাকে ক্যামেরা দিয়ে ওডোমিটার রিডিংয়ের ছবি তুলতে হবে।",
     errDuplicateShift: "এই কার্যক্রম একই দিনের জন্য ইতিমধ্যে নিবন্ধিত হয়েছে। এটি ভুল হলে, ঠিক করার জন্য প্রশাসনের সাথে যোগাযোগ করুন।",
     errGeneric: "একটি ত্রুটি ঘটেছে: ",
     successTitle: "আপনার তথ্য সফলভাবে গ্রহণ করা হয়েছে ✓",
@@ -1275,6 +1330,90 @@ document.getElementById("clear-form-btn").addEventListener("click", () => {
   setDefaultShiftDate();
 });
 
+/* ============================================================
+   Odometer photo — camera-only capture. Drivers must photograph the
+   odometer live via getUserMedia rather than attaching an existing
+   photo from their gallery (that would defeat the point of an odometer
+   proof photo). The native file input stays in the DOM (hidden) so the
+   submit handler's existing `#odo_photo.files[0]` read keeps working —
+   a captured frame is injected into it via DataTransfer. Falls back to
+   the native picker (still hinted to open the camera via
+   capture="environment") if getUserMedia isn't available or is denied,
+   so a driver is never stuck unable to submit.
+   ============================================================ */
+let odoCameraStream = null;
+let odoPhotoPreviewUrl = null;
+
+function odoPhotoInput() { return document.getElementById("odo_photo"); }
+
+function updateOdoPhotoPreview(file) {
+  const captureBtn = document.getElementById("odo-capture-btn");
+  const preview = document.getElementById("odo-photo-preview");
+  if (!file) {
+    captureBtn.style.display = "flex";
+    preview.style.display = "none";
+    return;
+  }
+  if (odoPhotoPreviewUrl) URL.revokeObjectURL(odoPhotoPreviewUrl);
+  odoPhotoPreviewUrl = URL.createObjectURL(file);
+  document.getElementById("odo-photo-thumb").src = odoPhotoPreviewUrl;
+  captureBtn.style.display = "none";
+  preview.style.display = "flex";
+}
+
+function setOdoPhotoFile(file) {
+  const dt = new DataTransfer();
+  dt.items.add(file);
+  odoPhotoInput().files = dt.files;
+  updateOdoPhotoPreview(file);
+}
+
+function hasCameraSupport() {
+  return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
+}
+
+async function openOdoCamera() {
+  if (!hasCameraSupport()) { odoPhotoInput().click(); return; }
+  const overlay = document.getElementById("camera-overlay");
+  const video = document.getElementById("camera-video");
+  overlay.style.display = "flex";
+  try {
+    odoCameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" }, audio: false });
+    video.srcObject = odoCameraStream;
+  } catch (e) {
+    // Permission denied / no camera — fall back to the native picker
+    // rather than leaving the driver stuck with no way to submit.
+    closeOdoCamera();
+    odoPhotoInput().click();
+  }
+}
+
+function closeOdoCamera() {
+  document.getElementById("camera-overlay").style.display = "none";
+  if (odoCameraStream) { odoCameraStream.getTracks().forEach(tr => tr.stop()); odoCameraStream = null; }
+}
+
+function captureOdoPhoto() {
+  const video = document.getElementById("camera-video");
+  const canvas = document.getElementById("camera-canvas");
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext("2d").drawImage(video, 0, 0, canvas.width, canvas.height);
+  canvas.toBlob(blob => {
+    if (!blob) return;
+    setOdoPhotoFile(new File([blob], `odo_${Date.now()}.jpg`, { type: "image/jpeg" }));
+    closeOdoCamera();
+  }, "image/jpeg", 0.9);
+}
+
+document.getElementById("odo-capture-btn").addEventListener("click", openOdoCamera);
+document.getElementById("odo-retake-btn").addEventListener("click", () => { odoPhotoInput().value = ""; openOdoCamera(); });
+document.getElementById("camera-cancel-btn").addEventListener("click", closeOdoCamera);
+document.getElementById("camera-shutter-btn").addEventListener("click", captureOdoPhoto);
+// Keeps the custom preview in sync on the rare native-picker fallback path.
+odoPhotoInput().addEventListener("change", () => updateOdoPhotoPreview(odoPhotoInput().files[0]));
+document.getElementById("shift-form").addEventListener("reset", () => updateOdoPhotoPreview(null));
+
 async function parseRpcErrorMessage(res) {
   const text = await res.text();
   try { return JSON.parse(text).message || text; } catch (e) { return text; }
@@ -1302,6 +1441,13 @@ document.getElementById("shift-form").addEventListener("submit", async (e) => {
   if (!validPlates.has(plateInput.value.trim())) {
     setStatus("err", t("errNoPlate"));
     plateInput.focus();
+    return;
+  }
+
+  // The native input is hidden and browsers skip constraint validation on
+  // hidden required fields, so this has to be checked explicitly here.
+  if (!odoPhotoInput().files[0]) {
+    setStatus("err", t("errNoOdoPhoto"));
     return;
   }
 
