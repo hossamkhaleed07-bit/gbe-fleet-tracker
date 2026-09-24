@@ -8,7 +8,7 @@ const DetailModalContext = createContext(null);
 
 export function DetailModalProvider({ children }) {
   const { canEditShiftEntries } = useAuth();
-  const { vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates, approvedFuelByKey, patchShiftEntries } = useDashboard();
+  const { vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates, approvedFuelByKey, automaticFuelByKey, patchShiftEntries } = useDashboard();
   const [group, setGroup] = useState(null);
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -60,7 +60,7 @@ export function DetailModalProvider({ children }) {
     return true;
   }
 
-  const computed = group ? buildGroupMetrics(group, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey }) : null;
+  const computed = group ? buildGroupMetrics(group, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey }) : null;
 
   return (
     <DetailModalContext.Provider value={{ group, editing, setEditing, computed, canEdit: canEditShiftEntries, openDetail, closeDetail, saveEdit, saving, saveError }}>

@@ -7,11 +7,11 @@ import { prevDay } from "../hooks/usePrevDayShift";
 
 export default function PrevDayFuelSection({ shiftDate, prevDayGroup, loading }) {
   const { t } = useLang();
-  const { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey } = useDashboard();
+  const { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey } = useDashboard();
   const stationName = prevDayGroup?.end?.station_name || prevDayGroup?.start?.station_name;
   const m = prevDayGroup
-    ? buildGroupMetrics(prevDayGroup, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey })
-    : { dist: "—", fuelLiters: "—", fuelCost: "—", actualFuelCost: "—", offDuty: null, delivered: "—", deliveryPct: "—", sales: "—" };
+    ? buildGroupMetrics(prevDayGroup, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey })
+    : { dist: "—", fuelLiters: "—", fuelCost: "—", automaticFuelCost: "—", actualFuelCost: "—", totalFuelCost: "—", offDuty: null, delivered: "—", deliveryPct: "—", sales: "—" };
 
   return (
     <div className="compare-card-section" style={{ padding: "0 0 1rem" }}>
@@ -30,7 +30,9 @@ export default function PrevDayFuelSection({ shiftDate, prevDayGroup, loading })
           <Field label={t("compare.colDistanceCovered")} val={m.dist} />
           <Field label={t("common.expectedFuelLiters")} val={m.fuelLiters} />
           <Field label={t("compare.colExpectedFuelCost")} val={m.fuelCost} />
+          <Field label={t("compare.colAutomaticFuelCost")} val={m.automaticFuelCost} />
           <Field label={t("compare.colActualFuelCost")} val={m.actualFuelCost} />
+          <Field label={t("compare.colTotalFuelCost")} val={m.totalFuelCost} />
           <Field label={t("compare.colOffDuty")} val={m.offDuty ?? "—"} />
           <Field label={t("common.startTime")} val={formatLocalTime(prevDayGroup.start?.created_at)} />
           <Field label={t("common.endTime")} val={formatLocalTime(prevDayGroup.end?.created_at)} />

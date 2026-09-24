@@ -1,11 +1,25 @@
+import { useMemo } from "react";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
 import GlobalFilters from "../components/GlobalFilters";
+import DataTable from "../components/DataTable";
 import { downloadCsv } from "../lib/csv";
 
 export default function Stations() {
   const { scopedStationRows: stationRows } = useDashboard();
   const { t } = useLang();
+
+  const columns = useMemo(() => [
+    { accessorKey: "station", header: t("stations.colStation") },
+    { accessorKey: "total", header: t("stations.colRecordCount"), meta: { align: "end" } },
+    { accessorKey: "drivers", header: t("stations.colDriverCount"), meta: { align: "end" } },
+    { accessorKey: "startCount", header: t("stations.colStartRecords"), meta: { align: "end" } },
+    { accessorKey: "endCount", header: t("stations.colEndRecords"), meta: { align: "end" } },
+    { accessorKey: "ofd", header: t("stations.colTotalOfd"), meta: { align: "end" } },
+    { accessorKey: "cod", header: t("stations.colTotalCod"), meta: { align: "end" } },
+    { accessorKey: "ppd", header: t("stations.colTotalPpd"), meta: { align: "end" } },
+    { accessorKey: "picked", header: t("stations.colTotalPickedUp"), meta: { align: "end" } },
+  ], [t]);
 
   function handleExport() {
     if (!stationRows.length) return;
@@ -27,26 +41,7 @@ export default function Stations() {
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
       </div>
       <GlobalFilters />
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("stations.colStation")}</th><th>{t("stations.colRecordCount")}</th><th>{t("stations.colDriverCount")}</th><th>{t("stations.colStartRecords")}</th>
-              <th>{t("stations.colEndRecords")}</th><th>{t("stations.colTotalOfd")}</th><th>{t("stations.colTotalCod")}</th><th>{t("stations.colTotalPpd")}</th><th>{t("stations.colTotalPickedUp")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {!stationRows.length ? (
-              <tr className="empty-row"><td colSpan={9}>{t("common.loading")}</td></tr>
-            ) : stationRows.map(g => (
-              <tr key={g.station}>
-                <td>{g.station}</td><td>{g.total}</td><td>{g.drivers}</td><td>{g.startCount}</td>
-                <td>{g.endCount}</td><td>{g.ofd}</td><td>{g.cod}</td><td>{g.ppd}</td><td>{g.picked}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={stationRows} emptyMessage={t("common.loading")} />
     </>
   );
 }

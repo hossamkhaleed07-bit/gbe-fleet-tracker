@@ -5,14 +5,16 @@ import { useDetailModal } from "../contexts/DetailModalContext";
 import { useLang } from "../contexts/LanguageContext";
 import { StatusBadge } from "../components/DetailModal";
 import GlobalFilters from "../components/GlobalFilters";
+import FuelTrendChart from "../components/FuelTrendChart";
+import DriverPerformanceTable from "../components/DriverPerformanceTable";
 import { localToday, compareStatus } from "../lib/calc";
-
-const KPI_COLORS = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
+import { LEAVE_CODES, ABSENT_CODES, OFF_CODES } from "../lib/attendanceCodes";
 
 export default function Overview() {
   const {
     scopedRows: allRows, scopedCompareGroups: allCompareGroups, scopedStationRows: stationRows, scopedDrivers: allDrivers,
-    scopedVehicles: allVehicles, stationRates, loading, error, lastUpdated,
+    scopedVehicles: allVehicles, scopedReinforcementRows, scopedReinforcementSummary, scopedAutomaticFuelRows, scopedAutomaticFuelTotal,
+    scopedAttendanceRows, stationRates, loading, error, lastUpdated,
   } = useDashboard();
   const { openDetail } = useDetailModal();
   const { t, lang } = useLang();
@@ -20,28 +22,7 @@ export default function Overview() {
   const [searchParams] = useSearchParams();
   const today = localToday();
 
-  const stats = useMemo(() => {
-    const startCount = allRows.filter(r => r.shift_type === "start").length;
-    const endCount = allRows.filter(r => r.shift_type === "end").length;
-    const drivers = new Set(allRows.map(r => r.identity_number)).size;
-    const completedToday = allCompareGroups.filter(g => g.day === today && g.start && g.end).length;
-    return [
-      { label: t("overview.totalDrivers"), num: allDrivers.length },
-      { label: t("overview.totalRecords"), num: allRows.length },
-      { label: t("overview.shiftStarts"), num: startCount },
-      { label: t("overview.shiftEnds"), num: endCount },
-      { label: t("overview.distinctDrivers"), num: drivers },
-      { label: t("overview.driversCompletedToday"), num: completedToday },
-    ];
-  }, [allRows, allCompareGroups, allDrivers, today, t]);
-
-  const quickGlance = useMemo(() => {
-    const total = allCompareGroups.length;
-    const completedAll = allCompareGroups.filter(g => g.start && g.end).length;
-    const incomplete = total - completedAll;
-    const rate = total ? Math.round((completedAll / total) * 100) : 0;
-    return { total, completedAll, incomplete, rate };
-  }, [allCompareGroups]);
+  const activeDrivers = useMemo(() => allDrivers.filter(d => d.is_active), [allDrivers]);
 
   const todayGroups = useMemo(() => allCompareGroups.filter(g => g.day === today), [allCompareGroups, today]);
   const started = todayGroups.filter(g => g.start).length;
@@ -49,8 +30,45 @@ export default function Overview() {
   const partial = started - completed;
   const pct = started ? Math.round((completed / started) * 100) : 0;
 
-  const attentionRows = useMemo(() => todayGroups.filter(g => !(g.start && g.end)), [todayGroups]);
-  const reviewRows = useMemo(() => allCompareGroups.slice(0, 8), [allCompareGroups]);
+  // "Today" numbers are always pinned to the real current date, independent
+  // of whatever date range is selected via GlobalFilters — matches the
+  // explicit "Today's Operations" spec (always today, not the active filter).
+  const todayAttendanceRows = useMemo(() => scopedAttendanceRows.filter(r => r.attendance_date === today), [scopedAttendanceRows, today]);
+  const todayLeaveCount = useMemo(() => new Set(todayAttendanceRows.filter(r => LEAVE_CODES.has(r.status)).map(r => r.identity_number)).size, [todayAttendanceRows]);
+  const todayAbsentCount = useMemo(() => new Set(todayAttendanceRows.filter(r => ABSENT_CODES.has(r.status)).map(r => r.identity_number)).size, [todayAttendanceRows]);
+  const todayPresentCount = Math.max(0, activeDrivers.length - todayLeaveCount - todayAbsentCount);
+
+  const driversWithFormTodaySet = useMemo(() => new Set(todayGroups.map(g => g.identity_number)), [todayGroups]);
+  const missingFormsToday = useMemo(() => activeDrivers.filter(d => !driversWithFormTodaySet.has(d.identity_number)), [activeDrivers, driversWithFormTodaySet]);
+
+  const todayStartSet = useMemo(() => new Set(allRows.filter(r => r.shift_type === "start" && r.shift_date === today).map(r => r.identity_number)), [allRows, today]);
+  const driversWithoutStartToday = useMemo(() => activeDrivers.filter(d => !todayStartSet.has(d.identity_number)), [activeDrivers, todayStartSet]);
+
+  const todayReinforcement = useMemo(() => scopedReinforcementRows.filter(r => r.shift_date === today), [scopedReinforcementRows, today]);
+  const todayPendingCount = todayReinforcement.filter(r => r.status === "pending").length;
+
+  // Attendance conflict = a (non-rejected) reinforcement request landing on a
+  // day the same driver was marked leave/absent — scoped to whatever range/
+  // project is currently active, unlike the sidebar's always-global badge.
+  const conflictCount = useMemo(() => {
+    const nonPresentSet = new Set(
+      scopedAttendanceRows.filter(r => OFF_CODES.has(r.status)).map(r => `${r.identity_number}|${r.attendance_date}`)
+    );
+    return scopedReinforcementRows.filter(r => r.status !== "rejected" && nonPresentSet.has(`${r.identity_number}|${r.shift_date}`)).length;
+  }, [scopedAttendanceRows, scopedReinforcementRows]);
+
+  const rangeAttendance = useMemo(() => {
+    const leave = scopedAttendanceRows.filter(r => LEAVE_CODES.has(r.status)).length;
+    const absent = scopedAttendanceRows.filter(r => ABSENT_CODES.has(r.status)).length;
+    return { leave, absent };
+  }, [scopedAttendanceRows]);
+
+  const avgReinforcementPerDriver = useMemo(() => {
+    const driversWithApproved = new Set(scopedReinforcementRows.filter(r => r.status === "approved").map(r => r.identity_number));
+    return driversWithApproved.size ? (scopedReinforcementSummary.totalCost / driversWithApproved.size) : 0;
+  }, [scopedReinforcementRows, scopedReinforcementSummary]);
+
+  const totalFuelCost = scopedAutomaticFuelTotal + scopedReinforcementSummary.totalCost;
 
   const stationTotal = stationRows.reduce((a, g) => a + g.total, 0) || 1;
   const topStations = stationRows.slice(0, 5);
@@ -67,10 +85,24 @@ export default function Overview() {
 
   const totalSystemIssues = systemIssues.vehiclesNoRate.length + systemIssues.driversNoVehicle.length + systemIssues.stationsNoRate.length;
 
-  function goToRecords(filterPartial) {
+  function goTo(pathname, params) {
     const next = new URLSearchParams(searchParams);
-    if (filterPartial) next.set("status", "partial"); else next.delete("status");
-    navigate({ pathname: "/records", search: next.toString() });
+    for (const [k, v] of Object.entries(params || {})) {
+      if (v === undefined || v === null || v === "") next.delete(k); else next.set(k, v);
+    }
+    navigate({ pathname, search: next.toString() });
+  }
+
+  function goToRecords(filterPartial) {
+    goTo("/records", { status: filterPartial ? "partial" : undefined });
+  }
+
+  function goToRecordsToday(status) {
+    goTo("/records", { status, from: today, to: today });
+  }
+
+  function goToAttendanceToday(status) {
+    goTo("/attendance", { status, date: today });
   }
 
   return (
@@ -90,19 +122,110 @@ export default function Overview() {
         </span>
       </div>
 
-      <div className="kpi-dot-grid">
-        <div className="kpi-dot-card"><span className="dot blue" /><div className="label">{t("overview.totalRecords")}</div><div className="num">{quickGlance.total}</div><div className="sub">{t("overview.allAvailableRecords")}</div></div>
-        <div className="kpi-dot-card"><span className="dot green" /><div className="label">{t("overview.completedRecords")}</div><div className="num">{quickGlance.completedAll}</div><div className="sub">{t("overview.pctOfTotalRecords", { rate: quickGlance.rate })}</div></div>
-        <div className="kpi-dot-card clickable" onClick={() => goToRecords(true)}><span className="dot red" /><div className="label">{t("overview.needsReview")}</div><div className="num">{quickGlance.incomplete}</div><div className="sub">{t("overview.clickToViewCases")}</div></div>
-        <div className="kpi-dot-card"><span className="dot orange" /><div className="label">{t("overview.completionRate")}</div><div className="num">{quickGlance.rate}%</div><div className="sub">{t("overview.suggestedTarget")}</div></div>
+      {/* Level 1 — what is happening right now (always today) */}
+      <div className="ov-section-title">{t("overview.todaysOpsTitle")}</div>
+      <div className="kpi-dot-grid kpi-dot-grid-6">
+        <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/drivers", search: searchParams.toString() })}>
+          <span className="dot blue" /><div className="label">{t("overview.kpiDrivers")}</div><div className="num">{activeDrivers.length}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("present")}>
+          <span className="dot green" /><div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("leave")}>
+          <span className="dot orange" /><div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("absent")}>
+          <span className="dot red" /><div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToRecordsToday("incomplete_or_missing")}>
+          <span className="dot orange" /><div className="label">{t("overview.kpiMissingForms")}</div><div className="num">{missingFormsToday.length}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approver", search: searchParams.toString() })}>
+          <span className="dot purple" /><div className="label">{t("overview.kpiPendingRequests")}</div><div className="num">{todayPendingCount}</div>
+        </div>
       </div>
 
-      <div id="stats">
-        {stats.map((s, i) => (
-          <div key={s.label} className="kpi-card" style={{ background: `var(--${KPI_COLORS[i % KPI_COLORS.length]}-bg)`, color: `var(--${KPI_COLORS[i % KPI_COLORS.length]}-ink)` }}>
-            <div className="num">{s.num}</div><div className="label">{s.label}</div>
-          </div>
-        ))}
+      {/* Level 2 — what requires action */}
+      <div className="ov-section-title">{t("overview.actionRequiredTitle")}</div>
+      <div className="panel">
+        {!(todayPendingCount || missingFormsToday.length || conflictCount || driversWithoutStartToday.length) ? (
+          <div className="ov-empty">{t("overview.noActionRequired")}</div>
+        ) : (
+          <>
+            {todayPendingCount > 0 && (
+              <div className="ov-row danger" onClick={() => navigate({ pathname: "/fuel-approver", search: searchParams.toString() })}>
+                <div><span className="ov-alert-dot red" />{t("overview.alertPendingReinforcement", { n: todayPendingCount })}</div>
+              </div>
+            )}
+            {missingFormsToday.length > 0 && (
+              <div className="ov-row danger" onClick={() => goToRecordsToday("incomplete_or_missing")}>
+                <div><span className="ov-alert-dot orange" />{t("overview.alertMissingForms", { n: missingFormsToday.length })}</div>
+              </div>
+            )}
+            {conflictCount > 0 && (
+              <div className="ov-row danger" onClick={() => navigate({ pathname: "/fuel-approval", search: searchParams.toString() })}>
+                <div><span className="ov-alert-dot yellow" />{t("overview.alertAttendanceConflicts", { n: conflictCount })}</div>
+              </div>
+            )}
+            {driversWithoutStartToday.length > 0 && (
+              <div className="ov-row danger" onClick={() => goToRecordsToday("incomplete_or_missing")}>
+                <div><span className="ov-alert-dot blue" />{t("overview.alertNoStartForm", { n: driversWithoutStartToday.length })}</div>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Level 3 — money / fuel, respects the selected date range */}
+      <div className="ov-section-title">{t("overview.fuelOverviewTitle")}</div>
+      <div className="kpi-dot-grid">
+        <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/automatic-fuel", search: searchParams.toString() })}>
+          <span className="dot cyan" /><div className="label">{t("compare.colAutomaticFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedAutomaticFuelTotal.toFixed(0)}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "approved" })}>
+          <span className="dot green" /><div className="label">{t("compare.colActualFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedReinforcementSummary.totalCost.toFixed(0)}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approval", search: searchParams.toString() })}>
+          <span className="dot blue" /><div className="label">{t("compare.colTotalFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {totalFuelCost.toFixed(0)}</div>
+        </div>
+      </div>
+
+      {/* Level 3 — reinforcement request workflow, respects the selected date range */}
+      <div className="ov-section-title">{t("overview.reinforcementOverviewTitle")}</div>
+      <div className="kpi-dot-grid">
+        <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approver", search: searchParams.toString() })}>
+          <span className="dot purple" /><div className="label">{t("fuel.statusPending")}</div><div className="num">{scopedReinforcementSummary.pending}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "approved" })}>
+          <span className="dot green" /><div className="label">{t("fuel.statusApproved")}</div><div className="num">{scopedReinforcementSummary.approved}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "rejected" })}>
+          <span className="dot red" /><div className="label">{t("fuel.statusRejected")}</div><div className="num">{scopedReinforcementSummary.rejected}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "" })}>
+          <span className="dot blue" /><div className="label">{t("overview.kpiTotalRequests")}</div><div className="num">{scopedReinforcementSummary.total}</div>
+        </div>
+        <div className="kpi-dot-card no-dot">
+          <div className="label">{t("overview.kpiAvgReinforcement")}</div><div className="num">{t("fuel.amountPrefix")} {avgReinforcementPerDriver.toFixed(0)}</div>
+        </div>
+      </div>
+
+      {/* Level 3 — attendance breakdown for today (drill-down needs one concrete date) */}
+      <div className="ov-section-title">{t("overview.attendanceOverviewTitle")}</div>
+      <div className="kpi-dot-grid">
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("present")}>
+          <span className="dot green" /><div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("leave")}>
+          <span className="dot orange" /><div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
+        </div>
+        <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("absent")}>
+          <span className="dot red" /><div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
+        </div>
+        <div className="kpi-dot-card no-dot">
+          <div className="label">{t("overview.kpiRangeAttendanceMarks")}</div><div className="num">{rangeAttendance.leave + rangeAttendance.absent}</div>
+          <div className="sub">{t("overview.kpiRangeAttendanceSub")}</div>
+        </div>
       </div>
 
       <div className="ov-stack">
@@ -121,64 +244,45 @@ export default function Overview() {
           </div>
           <div className="panel">
             <div className="ov-block-head">
-              <div><h3>{t("overview.attentionTitle")}</h3><span className="ov-block-sub">{t("overview.attentionSub")}</span></div>
-              <button className="btn" onClick={() => goToRecords(true)}>{t("overview.viewAll")}</button>
+              <div><h3>{t("overview.systemIssuesTitle")}</h3><span className="ov-block-sub">{t("overview.systemIssuesSub")}</span></div>
             </div>
-            {!attentionRows.length ? (
-              <div className="ov-empty">{t("overview.noAttentionCases")}</div>
-            ) : attentionRows.map((g, i) => (
-              <div key={i} className="ov-row danger" onClick={() => openDetail(g)}>
-                <div>
-                  <div className="who">{g.full_name}</div>
-                  <div className="meta">{g.identity_number}{g.project ? " · " + g.project : ""} · 🚗 {g.vehicle_plate || "—"}</div>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: "0.4rem" }}>
-                  <StatusBadge status={compareStatus(g)} />
-                  <button className="ov-row-action" onClick={e => { e.stopPropagation(); openDetail(g); }}>{t("overview.review")}</button>
-                </div>
-              </div>
-            ))}
+            {!totalSystemIssues ? (
+              <div className="ov-empty">{t("overview.noSystemIssues")}</div>
+            ) : (
+              <>
+                {systemIssues.vehiclesNoRate.length > 0 && (
+                  <div className="ov-row danger" onClick={() => navigate({ pathname: "/fleet", search: searchParams.toString() })}>
+                    <div>
+                      <div className="who">{t("overview.vehiclesNoRate")}</div>
+                      <div className="meta">{systemIssues.vehiclesNoRate.slice(0, 4).map(v => v.vehicle_plate).join(" · ")}{systemIssues.vehiclesNoRate.length > 4 ? " ..." : ""}</div>
+                    </div>
+                    <span className="badge partial">{systemIssues.vehiclesNoRate.length}</span>
+                  </div>
+                )}
+                {systemIssues.driversNoVehicle.length > 0 && (
+                  <div className="ov-row danger" onClick={() => navigate({ pathname: "/drivers", search: searchParams.toString() })}>
+                    <div>
+                      <div className="who">{t("overview.driversNoVehicle")}</div>
+                      <div className="meta">{systemIssues.driversNoVehicle.slice(0, 4).map(d => d.full_name).join(" · ")}{systemIssues.driversNoVehicle.length > 4 ? " ..." : ""}</div>
+                    </div>
+                    <span className="badge partial">{systemIssues.driversNoVehicle.length}</span>
+                  </div>
+                )}
+                {systemIssues.stationsNoRate.length > 0 && (
+                  <div className="ov-row danger" onClick={() => navigate({ pathname: "/stations", search: searchParams.toString() })}>
+                    <div>
+                      <div className="who">{t("overview.stationsNoRate")}</div>
+                      <div className="meta">{systemIssues.stationsNoRate.slice(0, 4).map(s => s.station).join(" · ")}{systemIssues.stationsNoRate.length > 4 ? " ..." : ""}</div>
+                    </div>
+                    <span className="badge partial">{systemIssues.stationsNoRate.length}</span>
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
-        <div className="panel">
-          <div className="ov-block-head">
-            <div><h3>{t("overview.systemIssuesTitle")}</h3><span className="ov-block-sub">{t("overview.systemIssuesSub")}</span></div>
-          </div>
-          {!totalSystemIssues ? (
-            <div className="ov-empty">{t("overview.noSystemIssues")}</div>
-          ) : (
-            <>
-              {systemIssues.vehiclesNoRate.length > 0 && (
-                <div className="ov-row danger" onClick={() => navigate({ pathname: "/fleet", search: searchParams.toString() })}>
-                  <div>
-                    <div className="who">{t("overview.vehiclesNoRate")}</div>
-                    <div className="meta">{systemIssues.vehiclesNoRate.slice(0, 4).map(v => v.vehicle_plate).join(" · ")}{systemIssues.vehiclesNoRate.length > 4 ? " ..." : ""}</div>
-                  </div>
-                  <span className="badge partial">{systemIssues.vehiclesNoRate.length}</span>
-                </div>
-              )}
-              {systemIssues.driversNoVehicle.length > 0 && (
-                <div className="ov-row danger" onClick={() => navigate({ pathname: "/drivers", search: searchParams.toString() })}>
-                  <div>
-                    <div className="who">{t("overview.driversNoVehicle")}</div>
-                    <div className="meta">{systemIssues.driversNoVehicle.slice(0, 4).map(d => d.full_name).join(" · ")}{systemIssues.driversNoVehicle.length > 4 ? " ..." : ""}</div>
-                  </div>
-                  <span className="badge partial">{systemIssues.driversNoVehicle.length}</span>
-                </div>
-              )}
-              {systemIssues.stationsNoRate.length > 0 && (
-                <div className="ov-row danger" onClick={() => navigate({ pathname: "/stations", search: searchParams.toString() })}>
-                  <div>
-                    <div className="who">{t("overview.stationsNoRate")}</div>
-                    <div className="meta">{systemIssues.stationsNoRate.slice(0, 4).map(s => s.station).join(" · ")}{systemIssues.stationsNoRate.length > 4 ? " ..." : ""}</div>
-                  </div>
-                  <span className="badge partial">{systemIssues.stationsNoRate.length}</span>
-                </div>
-              )}
-            </>
-          )}
-        </div>
+        <FuelTrendChart reinforcementRows={scopedReinforcementRows} automaticFuelRows={scopedAutomaticFuelRows} />
 
         <div className="panel">
           <h3>{t("overview.distributionByStation")}</h3>
@@ -194,13 +298,20 @@ export default function Overview() {
           })}
         </div>
 
+        <DriverPerformanceTable
+          drivers={allDrivers}
+          compareGroups={allCompareGroups}
+          reinforcementRows={scopedReinforcementRows}
+          automaticFuelRows={scopedAutomaticFuelRows}
+        />
+
         <div className="panel">
           <div className="ov-block-head">
             <div><h3>{t("overview.interactiveReviewTitle")}</h3><span className="ov-block-sub">{t("overview.interactiveReviewSub")}</span></div>
           </div>
-          {!reviewRows.length ? (
+          {!allCompareGroups.length ? (
             <div className="ov-empty">{t("overview.noRecordsYet")}</div>
-          ) : reviewRows.map((g, i) => (
+          ) : allCompareGroups.slice(0, 8).map((g, i) => (
             <div key={i} className="ov-row" onClick={() => openDetail(g)}>
               <div>
                 <div className="who">{g.full_name}</div>

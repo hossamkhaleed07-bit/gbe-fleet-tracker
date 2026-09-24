@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
+import { useFuelInsights } from "../hooks/useFuelInsights";
 import BranchSwitcher from "./BranchSwitcher";
 
 export default function Layout() {
@@ -13,11 +14,13 @@ export default function Layout() {
   const location = useLocation();
   const canManageFleet = isAdmin || isFleetManager;
   const canSeeFuel = canManageFleet || !!currentUserProject;
+  const { pendingCount, conflictCount } = useFuelInsights();
 
   const FUEL_LINKS = [
-    { to: "/fuel-approver", icon: "⛽", label: t("fuel.navApprover"), key: "fuel-approver" },
+    { to: "/fuel-approver", icon: "⛽", label: t("fuel.navApprover"), key: "fuel-approver", badge: pendingCount },
     { to: "/fuel-approval", icon: "👍", label: t("fuel.navApproval"), key: "fuel-approval" },
     { to: "/fuel-missing-form", icon: "⚠️", label: t("fuel.navMissingForm"), key: "fuel-missing-form" },
+    { to: "/automatic-fuel", icon: "🔄", label: t("fuel.navAutomaticFuel"), key: "automatic-fuel" },
   ];
   const isOnFuelPage = FUEL_LINKS.some(l => location.pathname === l.to);
   const [fuelOpen, setFuelOpen] = useState(isOnFuelPage);
@@ -32,6 +35,7 @@ export default function Layout() {
       { to: "/overview", icon: "📊", label: t("layout.navOverview"), key: "overview" },
       { to: "/form-response", icon: "📝", label: t("layout.navFormResponse"), key: "form-response" },
       { to: "/records", icon: "🗂️", label: t("layout.navRecords"), key: "records" },
+      { to: "/attendance", icon: "🗓️", label: t("layout.navAttendance"), key: "attendance", badge: conflictCount },
       { to: "/compare", icon: "🔁", label: t("layout.navCompare"), key: "compare" },
       { to: "/stations", icon: "📍", label: t("layout.navStations"), key: "stations" },
       { to: "/project-performance", icon: "📈", label: t("layout.navProjectPerformance"), key: "project-performance" },
@@ -77,6 +81,7 @@ export default function Layout() {
                 return (
                   <NavLink key={link.key} to={{ pathname: link.to, search: location.search }} className={({ isActive }) => "side-link" + (isActive ? " active" : "")}>
                     <span className="ic">{link.icon}</span> {link.label}
+                    {!!link.badge && <span className="side-badge">{link.badge}</span>}
                   </NavLink>
                 );
               })}
@@ -86,6 +91,7 @@ export default function Layout() {
             <div>
               <button type="button" className="side-link side-group-toggle" onClick={() => setFuelOpen(o => !o)}>
                 <span className="ic">⛽</span> {t("fuel.navSection")}
+                {!!pendingCount && <span className="side-badge">{pendingCount}</span>}
                 <span className={"side-group-chevron" + (fuelOpen ? " open" : "")}>▾</span>
               </button>
               {fuelOpen && (
@@ -93,6 +99,7 @@ export default function Layout() {
                   {FUEL_LINKS.map(link => (
                     <NavLink key={link.key} to={{ pathname: link.to, search: location.search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> {link.label}
+                      {!!link.badge && <span className="side-badge">{link.badge}</span>}
                     </NavLink>
                   ))}
                 </div>
@@ -109,7 +116,9 @@ export default function Layout() {
         {isAdmin && viewingProject && (
           <div className="scope-banner">{t("layout.scopeBannerPrefix")} <b>{viewingProject}</b> {t("layout.scopeBannerSuffix")}</div>
         )}
-        <Outlet />
+        <div key={location.pathname} className="page-transition">
+          <Outlet />
+        </div>
       </main>
     </div>
   );

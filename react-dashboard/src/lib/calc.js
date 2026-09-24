@@ -81,14 +81,19 @@ export function buildVehicleEndHistory(endHistoryRows) {
   return history;
 }
 
+// Off Duty = this shift's start odometer minus the vehicle's MOST RECENT
+// prior end-of-day odometer, whichever day that was — not necessarily the
+// literal day before, since a driver doesn't submit every single day
+// (days off, leave, gaps in service). Requiring exactly "day - 1" meant
+// this was almost always "—" for any driver with a day off in between.
 export function getOffDuty(g, vehicleEndHistory) {
   if (!g.start || g.start.odo_reading == null || !g.vehicle_plate) return null;
   const history = vehicleEndHistory[g.vehicle_plate];
   if (!history) return null;
-  const d = new Date(g.day + "T00:00:00Z");
-  d.setUTCDate(d.getUTCDate() - 1);
-  const prevDay = d.toISOString().slice(0, 10);
-  const prevEnd = history.find(entry => entry.day === prevDay);
+  let prevEnd = null;
+  for (const entry of history) {
+    if (entry.day < g.day) prevEnd = entry; else break;
+  }
   if (!prevEnd) return null;
   return g.start.odo_reading - prevEnd.odo;
 }
@@ -113,6 +118,93 @@ export function expectedFuelCost(vehiclePlate, liters, vehicleFuelTypes, station
 export function actualFuelCost(identityNumber, day, approvedFuelByKey) {
   const val = approvedFuelByKey?.[`${identityNumber}|${day}`];
   return val == null ? "—" : val.toFixed(2);
+}
+
+// The FDP automatic-fuel allocation (PetroApp) for a driver-day — kept
+// entirely separate from actualFuelCost (approved reinforcement requests
+// only). Never merge these into one number; show both plus their sum.
+export function automaticFuelCost(identityNumber, day, automaticFuelByKey) {
+  const val = automaticFuelByKey?.[`${identityNumber}|${day}`];
+  return val == null ? "—" : val.toFixed(2);
+}
+
+export function totalFuelCost(actual, automatic) {
+  if (actual === "—" && automatic === "—") return "—";
+  return ((actual === "—" ? 0 : Number(actual)) + (automatic === "—" ? 0 : Number(automatic))).toFixed(2);
+}
+
+// Shared by useDashboardData (unscoped) and DataContext (project-scoped) so
+// both compute the Overview's reinforcement/automatic-fuel numbers the same way.
+export function summarizeReinforcement(rows) {
+  const summary = { pending: 0, approved: 0, rejected: 0, total: 0, totalCost: 0 };
+  for (const r of rows) {
+    summary.total += 1;
+    if (r.status === "pending") summary.pending += 1;
+    else if (r.status === "approved") { summary.approved += 1; summary.totalCost += Number(r.amount || 0) + Number(r.loan_adjustment || 0); }
+    else if (r.status === "rejected") summary.rejected += 1;
+  }
+  return summary;
+}
+
+export function sumAutomaticFuel(rows) {
+  return rows.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+}
+
+function periodKeyFor(dateStr, granularity) {
+  if (!dateStr) return null;
+  if (granularity === "month") return dateStr.slice(0, 7);
+  if (granularity !== "week") return dateStr;
+  const d = new Date(dateStr + "T00:00:00Z");
+  const day = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() + ((day === 0 ? -6 : 1) - day)); // snap to Monday
+  return d.toISOString().slice(0, 10);
+}
+
+// Buckets reinforcement (approved only, amount+loan_adjustment) and automatic
+// fuel rows into one chronologically-sorted series per period, for the
+// Overview fuel trend chart. Mirrors summarizeReinforcement/sumAutomaticFuel's
+// cost logic so the chart totals always agree with the KPI cards above it.
+export function bucketFuelTrend(reinforcementRows, automaticFuelRows, granularity = "day") {
+  const buckets = {};
+  for (const r of reinforcementRows) {
+    if (r.status !== "approved") continue;
+    const key = periodKeyFor(r.shift_date, granularity);
+    if (!key) continue;
+    (buckets[key] ||= { period: key, actual: 0, automatic: 0 }).actual += Number(r.amount || 0) + Number(r.loan_adjustment || 0);
+  }
+  for (const r of automaticFuelRows) {
+    const key = periodKeyFor(r.allocation_date, granularity);
+    if (!key) continue;
+    (buckets[key] ||= { period: key, actual: 0, automatic: 0 }).automatic += Number(r.amount || 0);
+  }
+  return Object.values(buckets)
+    .map(b => ({ ...b, total: b.actual + b.automatic }))
+    .sort((a, b) => a.period.localeCompare(b.period));
+}
+
+// Per-driver rollup for the Overview "Driver Performance" table — completed
+// shifts (start+end) and total fuel cost (actual + automatic), both scoped to
+// whatever compareGroups/reinforcementRows/automaticFuelRows were passed in.
+export function buildDriverPerformance(drivers, compareGroups, reinforcementRows, automaticFuelRows) {
+  const completedByDriver = {};
+  for (const g of compareGroups) {
+    if (g.start && g.end) completedByDriver[g.identity_number] = (completedByDriver[g.identity_number] || 0) + 1;
+  }
+  const fuelByDriver = {};
+  for (const r of reinforcementRows) {
+    if (r.status !== "approved") continue;
+    fuelByDriver[r.identity_number] = (fuelByDriver[r.identity_number] || 0) + Number(r.amount || 0) + Number(r.loan_adjustment || 0);
+  }
+  for (const r of automaticFuelRows) {
+    fuelByDriver[r.identity_number] = (fuelByDriver[r.identity_number] || 0) + Number(r.amount || 0);
+  }
+  return drivers.map(d => ({
+    identity_number: d.identity_number,
+    full_name: d.full_name,
+    project: d.project,
+    completedShifts: completedByDriver[d.identity_number] || 0,
+    fuelCost: fuelByDriver[d.identity_number] || 0,
+  }));
 }
 
 export function computeDeliveryMetrics(g, stationRates) {
@@ -143,16 +235,20 @@ export function compareStatus(g) {
 // Single source of truth for the odometer/fuel/delivery figures shown for a
 // driver-day group (used by Compare, FuelApprover, DetailModal and CSV export)
 // so every place that displays a group shows the same numbers.
-export function buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey }) {
+export function buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey }) {
   const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : null;
   const fuelLiters = expectedFuelLiters(g.vehicle_plate, dist, vehicleRates);
   const stationName = g.end?.station_name || g.start?.station_name;
   const fuelCost = expectedFuelCost(g.vehicle_plate, fuelLiters, vehicleFuelTypes, stationName, stationRates);
+  const actualCost = actualFuelCost(g.identity_number, g.day, approvedFuelByKey);
+  const automaticCost = automaticFuelCost(g.identity_number, g.day, automaticFuelByKey);
   return {
     dist: dist ?? "—",
     fuelLiters,
     fuelCost,
-    actualFuelCost: actualFuelCost(g.identity_number, g.day, approvedFuelByKey),
+    actualFuelCost: actualCost,
+    automaticFuelCost: automaticCost,
+    totalFuelCost: totalFuelCost(actualCost, automaticCost),
     offDuty: getOffDuty(g, vehicleEndHistory),
     ...computeDeliveryMetrics(g, stationRates),
     status: compareStatus(g),

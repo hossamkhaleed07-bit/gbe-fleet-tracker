@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
 import { StatusBadge } from "../components/DetailModal";
@@ -8,6 +9,7 @@ import { sb } from "../lib/supabase";
 import { compareStatus } from "../lib/calc";
 import { downloadCsv } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
+import DataTable from "../components/DataTable";
 
 const AVATAR_BG = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
 const emptyForm = {
@@ -20,8 +22,9 @@ const emptyForm = {
 export default function Drivers() {
   const { scopedDrivers: allDrivers, scopedCompareGroups: allCompareGroups, upsertDriver, removeDriver } = useDashboard();
   const { t } = useLang();
+  const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
-  const [project, setProject] = useState("");
+  const [project, setProject] = useState(searchParams.get("project") || "");
   const [status, setStatus] = useState("");
   const [shiftStatusFilter, setShiftStatusFilter] = useState("");
   const [view, setView] = useState("gallery");
@@ -58,6 +61,43 @@ export default function Drivers() {
     return r;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allDrivers, project, status, shiftStatusFilter, shiftStatusMap, search]);
+
+  const columns = useMemo(() => [
+    { accessorKey: "identity_number", header: t("drivers.colIdNumber") },
+    { accessorKey: "full_name", header: t("common.name"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "nationality", header: t("common.nationality"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "mobile_number", header: t("drivers.colMobile"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "project", header: t("common.project"), cell: ({ getValue }) => getValue() ? <ProjectBadge project={getValue()} /> : "—" },
+    { accessorKey: "assigned_vehicle_plate", header: t("common.assignedVehicle"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "vehicle_type", header: t("common.vehicleType"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "city_name", header: t("common.city"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "job_title", header: t("common.jobTitle"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "employee_type", header: t("common.employeeType"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "contract_type", header: t("common.contractType"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "vendor_name", header: t("common.vendor"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "job_id", header: t("common.jobId"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "date_of_hiring", header: t("common.hiringDate"), cell: ({ getValue }) => getValue() || "—" },
+    { accessorKey: "pns_status", header: t("common.pnsStatus"), cell: ({ getValue }) => getValue() || "—" },
+    {
+      id: "petro_app_link", header: t("common.petroAppLink"), enableSorting: false,
+      cell: ({ row }) => row.original.petro_app_link
+        ? <a className="media-link" href={row.original.petro_app_link} target="_blank" rel="noreferrer" onClick={e => e.stopPropagation()}>{t("common.petroAppLink")}</a>
+        : "—",
+    },
+    { id: "shift_status", header: t("drivers.shiftStatus"), accessorFn: shiftStatusOf, cell: ({ row }) => <StatusBadge status={shiftStatusOf(row.original)} /> },
+    { accessorKey: "is_active", header: t("common.status"), cell: ({ getValue }) => <span className={`badge ${getValue() ? "complete" : "partial"}`}>{getValue() ? t("common.active") : t("common.inactive")}</span> },
+    {
+      id: "actions", header: t("drivers.colActions"), enableSorting: false,
+      cell: ({ row }) => (
+        <div className="row-actions" onClick={e => e.stopPropagation()}>
+          <button className="btn" onClick={() => toggleActive(row.original)}>{row.original.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
+          <button className="btn" onClick={() => openEdit(row.original)}>{t("common.edit")}</button>
+          <button className="btn btn-danger" onClick={() => handleDelete(row.original)}>{t("common.delete")}</button>
+        </div>
+      ),
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  ], [t, shiftStatusMap]);
 
   function handleReset() {
     setSearch("");
@@ -239,49 +279,12 @@ export default function Drivers() {
         })}
       </div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>{t("drivers.colIdNumber")}</th><th>{t("common.name")}</th><th>{t("common.nationality")}</th><th>{t("drivers.colMobile")}</th><th>{t("common.project")}</th>
-                <th>{t("common.assignedVehicle")}</th><th>{t("common.vehicleType")}</th><th>{t("common.city")}</th><th>{t("common.jobTitle")}</th>
-                <th>{t("common.employeeType")}</th><th>{t("common.contractType")}</th><th>{t("common.vendor")}</th><th>{t("common.jobId")}</th>
-                <th>{t("common.hiringDate")}</th><th>{t("common.pnsStatus")}</th><th>{t("common.petroAppLink")}</th><th>{t("drivers.shiftStatus")}</th><th>{t("common.status")}</th><th>{t("drivers.colActions")}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {!rows.length ? (
-                <tr className="empty-row"><td colSpan={19}>{t("drivers.noMatchingDrivers")}</td></tr>
-              ) : rows.map(d => (
-                <tr key={d.identity_number}>
-                  <td>{d.identity_number}</td>
-                  <td>{d.full_name || "—"}</td>
-                  <td>{d.nationality || "—"}</td>
-                  <td>{d.mobile_number || "—"}</td>
-                  <td>{d.project ? <ProjectBadge project={d.project} /> : "—"}</td>
-                  <td>{d.assigned_vehicle_plate || "—"}</td>
-                  <td>{d.vehicle_type || "—"}</td>
-                  <td>{d.city_name || "—"}</td>
-                  <td>{d.job_title || "—"}</td>
-                  <td>{d.employee_type || "—"}</td>
-                  <td>{d.contract_type || "—"}</td>
-                  <td>{d.vendor_name || "—"}</td>
-                  <td>{d.job_id || "—"}</td>
-                  <td>{d.date_of_hiring || "—"}</td>
-                  <td>{d.pns_status || "—"}</td>
-                  <td>{d.petro_app_link ? <a className="media-link" href={d.petro_app_link} target="_blank" rel="noreferrer">{t("common.petroAppLink")}</a> : "—"}</td>
-                  <td><StatusBadge status={shiftStatusOf(d)} /></td>
-                  <td><span className={`badge ${d.is_active ? "complete" : "partial"}`}>{d.is_active ? t("common.active") : t("common.inactive")}</span></td>
-                  <td className="row-actions">
-                    <button className="btn" onClick={() => toggleActive(d)}>{d.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
-                    <button className="btn" onClick={() => openEdit(d)}>{t("common.edit")}</button>
-                    <button className="btn btn-danger" onClick={() => handleDelete(d)}>{t("common.delete")}</button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <DataTable
+          columns={columns}
+          data={rows}
+          onRowClick={openEdit}
+          emptyMessage={t("drivers.noMatchingDrivers")}
+        />
       )}
 
       {modalOpen && (
@@ -313,7 +316,7 @@ export default function Drivers() {
             {saveError && <div style={{ color: "var(--critical)", fontSize: "0.8rem" }}>{saveError}</div>}
             <div id="driver-actions">
               <button className="btn" onClick={() => setModalOpen(false)} disabled={saving}>{t("common.cancel")}</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</button>
+              <button className={"btn btn-primary" + (saving ? " btn-loading" : "")} onClick={handleSave} disabled={saving}>{t("common.save")}</button>
             </div>
           </div>
         </div>

@@ -6,6 +6,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useLang } from "../contexts/LanguageContext";
 import { useUndo } from "../contexts/UndoContext";
 import GlobalFilters from "../components/GlobalFilters";
+import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { formatLocalDateTime } from "../lib/calc";
 import { PROJECT_LIST } from "../lib/constants";
@@ -53,6 +54,57 @@ export default function FormResponse() {
     });
   }
 
+  const columns = useMemo(() => {
+    const cols = [
+      { accessorKey: "shift_date", header: t("records.colShiftDate") },
+      { accessorKey: "created_at", header: t("records.colTimestamp"), cell: ({ getValue }) => formatLocalDateTime(getValue()) },
+      {
+        id: "type", header: t("records.colType"), enableSorting: false,
+        cell: ({ row }) => (
+          <span className={"badge " + (row.original.shift_type === "start" ? "start" : "end")}>
+            {row.original.shift_type === "start" ? t("records.typeStart") : t("records.typeEnd")}
+          </span>
+        ),
+      },
+      { accessorKey: "full_name", header: t("records.colDriver") },
+      { accessorKey: "identity_number", header: t("records.colIdNumber") },
+      {
+        id: "project", header: t("common.project"), accessorFn: r => driverProjects[r.identity_number] || "",
+        cell: ({ row }) => driverProjects[row.original.identity_number] ? <ProjectBadge project={driverProjects[row.original.identity_number]} /> : "—",
+      },
+      { accessorKey: "vehicle_plate", header: t("common.plate") },
+      { accessorKey: "station_name", header: t("records.colStation") },
+      { accessorKey: "odo_reading", header: t("records.colOdometerSingle"), cell: ({ getValue }) => getValue() ?? "—" },
+      {
+        id: "media", header: t("records.colMedia"), enableSorting: false,
+        cell: ({ row }) => {
+          const r = row.original;
+          const media = [];
+          if (r.odo_photo_url) media.push(<a key="op" className="media-link" href={r.odo_photo_url} target="_blank" rel="noreferrer">{r.shift_type === "start" ? t("records.mediaStartOdo") : t("records.mediaEndOdo")}</a>);
+          if (r.condition_video_url) media.push(<a key="cv" className="media-link" href={r.condition_video_url} target="_blank" rel="noreferrer">{t("records.mediaVideo")}</a>);
+          if (r.client_screenshot_url) media.push(<a key="cs" className="media-link" href={r.client_screenshot_url} target="_blank" rel="noreferrer">{t("records.mediaScreenshot")}</a>);
+          return media.length ? media.reduce((acc, el, idx) => idx === 0 ? [el] : [...acc, " · ", el], []) : "—";
+        },
+      },
+      { accessorKey: "area", header: t("records.colArea") },
+    ];
+    if (canEditShiftEntries) {
+      cols.push({
+        id: "actions", header: "", enableSorting: false,
+        cell: ({ row }) => (
+          <div className="row-actions">
+            <button className="btn" onClick={() => openSingleDetail(row.original)}>{t("records.viewEdit")}</button>
+            <button className="btn btn-danger" disabled={busyDelete === row.original.id} onClick={() => handleDelete(row.original)}>
+              {busyDelete === row.original.id ? "..." : t("common.delete")}
+            </button>
+          </div>
+        ),
+      });
+    }
+    return cols;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, canEditShiftEntries, busyDelete, driverProjects]);
+
   function openSingleDetail(r) {
     openDetail({
       day: r.shift_date,
@@ -98,49 +150,7 @@ export default function FormResponse() {
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("records.colShiftDate")}</th><th>{t("records.colTimestamp")}</th><th>{t("records.colType")}</th><th>{t("records.colDriver")}</th><th>{t("records.colIdNumber")}</th><th>{t("common.project")}</th><th>{t("common.plate")}</th>
-              <th>{t("records.colStation")}</th><th>{t("records.colOdometerSingle")}</th><th>{t("records.colMedia")}</th><th>{t("records.colArea")}</th>{canEditShiftEntries && <th></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {!rows.length ? (
-              <tr className="empty-row"><td colSpan={12}>{t("records.noMatchingRecords")}</td></tr>
-            ) : rows.map(r => {
-              const media = [];
-              if (r.odo_photo_url) media.push(<a key="op" className="media-link" href={r.odo_photo_url} target="_blank" rel="noreferrer">{r.shift_type === "start" ? t("records.mediaStartOdo") : t("records.mediaEndOdo")}</a>);
-              if (r.condition_video_url) media.push(<a key="cv" className="media-link" href={r.condition_video_url} target="_blank" rel="noreferrer">{t("records.mediaVideo")}</a>);
-              if (r.client_screenshot_url) media.push(<a key="cs" className="media-link" href={r.client_screenshot_url} target="_blank" rel="noreferrer">{t("records.mediaScreenshot")}</a>);
-              return (
-                <tr key={r.id}>
-                  <td>{r.shift_date}</td>
-                  <td>{formatLocalDateTime(r.created_at)}</td>
-                  <td><span className={"badge " + (r.shift_type === "start" ? "start" : "end")}>{r.shift_type === "start" ? t("records.typeStart") : t("records.typeEnd")}</span></td>
-                  <td>{r.full_name}</td>
-                  <td>{r.identity_number}</td>
-                  <td>{driverProjects[r.identity_number] ? <ProjectBadge project={driverProjects[r.identity_number]} /> : "—"}</td>
-                  <td>{r.vehicle_plate}</td>
-                  <td>{r.station_name}</td>
-                  <td>{r.odo_reading ?? "—"}</td>
-                  <td>{media.length ? media.reduce((acc, el, idx) => idx === 0 ? [el] : [...acc, " · ", el], []) : "—"}</td>
-                  <td>{r.area}</td>
-                  {canEditShiftEntries && (
-                    <td className="row-actions">
-                      <button className="btn" onClick={() => openSingleDetail(r)}>{t("records.viewEdit")}</button>
-                      <button className="btn btn-danger" disabled={busyDelete === r.id} onClick={() => handleDelete(r)}>
-                        {busyDelete === r.id ? "..." : t("common.delete")}
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={rows} emptyMessage={t("records.noMatchingRecords")} />
     </>
   );
 }

@@ -33,11 +33,24 @@
 | 025 | `reinforcement_request_amount_fix.sql` | إصلاح مشكلة `amount` بييجي فاضي في الطلبات الجديدة — حذف صريح لأي نسخة قديمة من دالة `submit_reinforcement_request` (لو فيه أكتر من نسخة متضاربة) وإعادة إنشائها نظيفة + إجبار PostgREST يعمل reload للـ schema | ✅ نشط |
 | 026 | `reinforcement_loan_adjustment_migration.sql` | إضافة عمود `loan_adjustment` — يسمح للمراجع (Fuel Approver) يعدّل قيمة الطلب قبل الموافقة/الرفض من غير ما يغيّر المبلغ الأصلي اللي طلبه المندوب | ✅ نشط |
 | 027 | `driver_petroapp_link_migration.sql` | إضافة عمود `petro_app_link` لجدول `drivers` — لينك PetroApp خاص بكل سائق، بيتضاف من صفحة السائقين وبيظهر في تفاصيل طلب التعزيز | ✅ نشط — لسه محتاج تشغيل |
+| 028 | `prevent_duplicate_shift_migration.sql` | دالة `shift_entry_exists(...)` (فحص سريع قبل الرفع) + إعادة تعريف `submit_shift_entry` عشان ترفض تسجيل شيفت مكرر (نفس السائق/التاريخ/النوع) | ✅ نشط — النسخة الحالية من `submit_shift_entry` |
+| 029 | `shift_entries_insert_policy_migration.sql` | صلاحية إدخال (INSERT) على `shift_entries` للأدمن — عشان ميزة التراجع (Ctrl+Z) بعد الحذف | ⚠️ قديم — النطاق اتوسّع في #032 |
+| 030 | `reinforcement_requests_realtime_migration.sql` | إضافة `reinforcement_requests` لقائمة realtime عشان إشعارات الطلبات الجديدة تظهر لحظيًا في الداشبورد | ✅ نشط |
+| 031 | `shift_entries_realtime_migration.sql` | نفس الحاجة لجدول `shift_entries` (كان ناقص من #030) | ✅ نشط |
+| 032 | `project_scoped_shift_entries_edit_migration.sql` | مدير المشروع (زي `fdp.manager@gbe.sa`) بقى يقدر يعدّل/يحذف سجلات الشيفت الخاصة بسائقين مشروعه بس، مش الأدمن الرئيسي وبس زي الأول | ✅ نشط — النسخة الحالية |
+| 033 | `driver_attendance_migration.sql` | جدول جديد `driver_attendance` — حالة حضور يومية لكل سائق (حاضر/إجازة/غياب)، مستقل عن `shift_entries`. ده الأساس لميزة "تعارض الحضور" (طلب وقود في يوم السائق فيه إجازة/غايب) | ✅ نشط |
+| 034 | `reinforcement_rejection_reason_migration.sql` | إضافة عمود `rejection_reason` لجدول `reinforcement_requests` — بيتسجل فيه سبب الرفض من نافذة تأكيد الرفض الجديدة في الداشبورد | ✅ نشط |
+| 035 | `reinforcement_cooldown_migration.sql` | فترة انتظار ساعتين بين طلبات التعزيز لنفس السائق — اتفرضت جوه `submit_reinforcement_request` نفسها (مينفعش تتلف عن طريق نداء الـ API مباشرة) + دالة قراءة `get_reinforcement_cooldown` للفورم العام يعرض عداد تنازلي بيها | ✅ نشط |
+| 036 | `automatic_fuel_allocations_migration.sql` | جدول جديد `automatic_fuel_allocations` — الوقود التلقائي اليومي لسائقي FDP النشطين (عن طريق PetroApp)، منفصل تمامًا عن "الوقود الفعلي" الحالي. أتمتة بـ pg_cron الساعة 12 ظهرًا بتوقيت الرياض، مضمونة عدم التكرار عن طريق قيد فريد في قاعدة البيانات | ✅ نشط |
+| 037 | `reinforcement_requires_shift_start_migration.sql` | طلب التعزيز مينفعش يتقدّم إلا لو السائق سجّل بداية دوام (`shift_entries`, shift_type='start') لنفس تاريخ الطلب — فحص جوه `submit_reinforcement_request` نفسها | ✅ نشط |
+| 038 | `automatic_fuel_backfill_support_migration.sql` | `allocate_daily_automatic_fuel()` بقت تقبل تاريخ اختياري — الـ cron لسه بينادي بدون تاريخ (يعني النهاردة زي ما هو)، لكن دلوقتي ممكن تتنادى يدويًا لأي تاريخ فات (backfill) | ✅ نشط |
+| 039 | `fix_shc_manager_project_tag_migration.sql` | تصحيح النقطة اللي كانت متسجلة تحت — تعديل `project` بتاع حساب `shc.manager@gbe.sa` من `SHC` لـ `MGF` عشان يتطابق مع بيانات السائقين والكود | ✅ نشط — لسه محتاج تشغيل |
+| 040 | `attendance_status_codes_migration.sql` | توسيع `driver_attendance.status` من 3 حالات (حاضر/إجازة/غياب) لـ 20 كود حقيقي (A, WO, OT, OTF, NJ, Left, NM, UP, SL, EA, EF, ND, FD, AL, EL, PH, VI, PNS, P, VM) — عشان صفحة الحضور بقت جدول شهري كامل زي شيت الـ HR، مش تسجيل يوم واحد بس | ⚠️ قديم — تم تقليل الأكواد لـ 6 بس في #041 |
+| 041 | `attendance_codes_reduce_migration.sql` | تقليل أكواد الحضور من 20 لـ 6 بس حسب طلب المستخدمة: A, WO, Left, AL, P, VM — أي بيانات كانت باقي الأكواد اتحولت لأقرب كود من الـ 6 (تفاصيل التحويل جوه الملف) | ⚠️ قديم — تمت إضافة NM تاني في #042 |
+| 042 | `attendance_add_not_marked_migration.sql` | إضافة كود "NM" (لم يتم التحضير) تاني كسابع كود standard، وبقى هو الافتراضي — ده مرتبط بتعديل في الكود: P/A بقوا يتحسبوا أوتوماتيك من نموذج الدوام (سجّل الفورم = P، عدى اليوم من غير تسجيل = A)، وNM هو الشكل قبل ما الحساب ده يتطبق أو قبل أي استثناء يدوي | ✅ نشط — لسه محتاج تشغيل |
 
 ---
 
-## ⚠️ نقطة تحتاج انتباه: مشروع "SHC" مقابل "MGF"
+## ✅ تم حلها: مشروع "SHC" مقابل "MGF"
 
-لاحظت وأنا براجع الملفات دي حاجة مهمة: في #006 السائق صاحب رقم الهوية `2168811582` (خالد إبراهيم صالح) اتحط project = **`MGF`**، لكن في #007 حساب المدير اتعمله tag باسم `shc.manager@gbe.sa` ومشروعه **`SHC`**. يعني من الأول كان فيه اختلاف بين اسم المشروع في بيانات السائق (`MGF`) واسم المشروع في حساب المدير والواجهة (`SHC`) — ده غالبًا سبب طلبك السابق بتغيير SHC لـ MGF.
-
-**الخلاصة:** لو عايزة توحدي الاسم، غالبًا التعديل الأسهل هو في **الكود بس** (تغيير "SHC" لـ "MGF" في القوائم الجاهزة بالداشبورد) — من غير ما نحتاج نلمس بيانات السائقين خالص، لأن بيانات السائق نفسه أصلًا مكتوب فيها MGF من البداية. محتاجة نكمل فيها؟
+كانت متسجلة هنا نقطة إن #006 حط project = **`MGF`** لبيانات السائقين، لكن #007 حط حساب المدير `shc.manager@gbe.sa` بمشروع **`SHC`** — يعني المدير ده كان شايف صفحته فاضية من غير سائقين خالص. تم حلها في #039 بتعديل حساب المدير نفسه لـ `MGF` (من غير أي لمس لبيانات السائقين، لأنها كانت صحيحة من البداية).

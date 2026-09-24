@@ -6,12 +6,13 @@ import { useLang } from "../contexts/LanguageContext";
 import { StatusBadge } from "../components/DetailModal";
 import ProjectBadge from "../components/ProjectBadge";
 import GlobalFilters from "../components/GlobalFilters";
+import DataTable from "../components/DataTable";
 import { compareStatus, buildGroupMetrics, formatLocalTime } from "../lib/calc";
 import { downloadCsv, GROUP_CSV_KEYS, groupToCsvRow } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
 
 export default function Compare() {
-  const { scopedCompareGroups: allCompareGroups, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates, approvedFuelByKey } = useDashboard();
+  const { scopedCompareGroups: allCompareGroups, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates, approvedFuelByKey, automaticFuelByKey } = useDashboard();
   const { openDetail } = useDetailModal();
   const { isAdmin } = useAuth();
   const { t } = useLang();
@@ -40,9 +41,74 @@ export default function Compare() {
 
   function handleExport() {
     if (!rows.length) return;
-    const ctx = { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, buildGroupMetrics };
+    const ctx = { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey, buildGroupMetrics };
     downloadCsv(`driver_comparison_${new Date().toISOString().slice(0, 10)}.csv`, GROUP_CSV_KEYS, rows.map(g => groupToCsvRow(g, ctx)));
   }
+
+  // Pre-compute each row's metrics once (rather than inside every cell renderer)
+  // so the 8 odometer/fuel columns that all need buildGroupMetrics() don't
+  // recompute it redundantly.
+  const tableRows = useMemo(() => {
+    const ctx = { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey };
+    return rows.map(g => ({ ...g, _m: buildGroupMetrics(g, ctx) }));
+  }, [rows, vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey]);
+
+  const columns = useMemo(() => {
+    const tripData = {
+      header: t("compare.groupTripData"),
+      columns: [
+        { accessorKey: "day", header: t("compare.colDate") },
+        { accessorKey: "full_name", header: t("compare.colDriver") },
+        { accessorKey: "identity_number", header: t("compare.colIdNumber") },
+        {
+          id: "project", header: t("common.project"), enableSorting: false,
+          cell: ({ row }) => row.original.project ? <ProjectBadge project={row.original.project} /> : "—",
+        },
+        { accessorKey: "vehicle_plate", header: t("compare.colPlate") },
+        {
+          id: "status", header: t("common.status"), enableSorting: false,
+          cell: ({ row }) => <StatusBadge status={compareStatus(row.original)} />,
+        },
+      ],
+    };
+    const odoFuel = {
+      header: t("compare.groupOdometerFuel"),
+      meta: { groupAlt: true },
+      columns: [
+        { id: "startOdo", header: t("common.startOdometer"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original.start?.odo_reading ?? "—" },
+        { id: "endOdo", header: t("common.endOdometer"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original.end?.odo_reading ?? "—" },
+        { id: "dist", header: t("compare.colDistanceCovered"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.dist },
+        { id: "fuelLiters", header: t("common.expectedFuelLiters"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.fuelLiters },
+        { id: "fuelCost", header: t("compare.colExpectedFuelCost"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.fuelCost },
+        { id: "automaticFuelCost", header: t("compare.colAutomaticFuelCost"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.automaticFuelCost },
+        { id: "actualFuelCost", header: t("compare.colActualFuelCost"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.actualFuelCost },
+        { id: "totalFuelCost", header: t("compare.colTotalFuelCost"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.totalFuelCost },
+        { id: "offDuty", header: t("compare.colOffDuty"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => row.original._m.offDuty ?? "—" },
+        { id: "startTime", header: t("common.startTime"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => formatLocalTime(row.original.start?.created_at) },
+        { id: "endTime", header: t("common.endTime"), meta: { groupAlt: true }, enableSorting: false, cell: ({ row }) => formatLocalTime(row.original.end?.created_at) },
+      ],
+    };
+    const deliverySales = {
+      header: t("compare.groupDeliverySales"),
+      columns: [
+        { id: "ofd", header: "OFD", enableSorting: false, cell: ({ row }) => row.original.start?.ofd_count ?? "—" },
+        { id: "cod", header: "COD", enableSorting: false, cell: ({ row }) => row.original.end?.cod_delivered ?? "—" },
+        { id: "ppd", header: "PPD", enableSorting: false, cell: ({ row }) => row.original.end?.ppd_delivered ?? "—" },
+        { id: "pickedUp", header: "Picked Up", enableSorting: false, cell: ({ row }) => row.original.end?.picked_up ?? "—" },
+        { id: "delivered", header: "Delivered", enableSorting: false, cell: ({ row }) => row.original._m.delivered },
+        { id: "deliveryPct", header: "Delivery %", enableSorting: false, cell: ({ row }) => row.original._m.deliveryPct },
+        { id: "sales", header: "Sales", enableSorting: false, cell: ({ row }) => row.original._m.sales },
+      ],
+    };
+    const cols = [tripData, odoFuel, deliverySales];
+    if (isAdmin) {
+      cols.push({
+        id: "actions", header: t("drivers.colActions"), enableSorting: false,
+        cell: ({ row }) => <div className="row-actions"><button className="btn" onClick={() => openDetail(row.original)}>{t("common.edit")}</button></div>,
+      });
+    }
+    return cols;
+  }, [t, isAdmin, openDetail]);
 
   return (
     <>
@@ -100,47 +166,7 @@ export default function Compare() {
           ))}
         </div>
       ) : (
-        <div className="table-wrap">
-          <table>
-            <thead>
-              <tr className="group-row">
-                <th colSpan={6}>{t("compare.groupTripData")}</th>
-                <th colSpan={9} className="group-alt">{t("compare.groupOdometerFuel")}</th>
-                <th colSpan={7}>{t("compare.groupDeliverySales")}</th>
-                {isAdmin && <th></th>}
-              </tr>
-              <tr>
-                <th>{t("compare.colDate")}</th><th>{t("compare.colDriver")}</th><th>{t("compare.colIdNumber")}</th><th>{t("common.project")}</th><th>{t("compare.colPlate")}</th><th>{t("common.status")}</th>
-                <th className="group-alt">{t("common.startOdometer")}</th><th className="group-alt">{t("common.endOdometer")}</th><th className="group-alt">{t("compare.colDistanceCovered")}</th>
-                <th className="group-alt">{t("common.expectedFuelLiters")}</th><th className="group-alt">{t("compare.colExpectedFuelCost")}</th><th className="group-alt">{t("compare.colActualFuelCost")}</th><th className="group-alt">{t("compare.colOffDuty")}</th><th className="group-alt">{t("common.startTime")}</th><th className="group-alt">{t("common.endTime")}</th>
-                <th>OFD</th><th>COD</th><th>PPD</th><th>Picked Up</th><th>Delivered</th><th>Delivery %</th><th>Sales</th>
-                {isAdmin && <th>{t("drivers.colActions")}</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {!rows.length ? (
-                <tr className="empty-row"><td colSpan={isAdmin ? 23 : 22}>{t("common.noMatchingData")}</td></tr>
-              ) : rows.map((g, i) => {
-                const m = buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey });
-                return (
-                  <tr key={i}>
-                    <td>{g.day}</td><td>{g.full_name}</td><td>{g.identity_number}</td>
-                    <td>{g.project ? <ProjectBadge project={g.project} /> : "—"}</td>
-                    <td>{g.vehicle_plate}</td>
-                    <td><StatusBadge status={compareStatus(g)} /></td>
-                    <td className="group-alt">{g.start?.odo_reading ?? "—"}</td><td className="group-alt">{g.end?.odo_reading ?? "—"}</td>
-                    <td className="group-alt">{m.dist}</td><td className="group-alt">{m.fuelLiters}</td><td className="group-alt">{m.fuelCost}</td><td className="group-alt">{m.actualFuelCost}</td><td className="group-alt">{m.offDuty ?? "—"}</td>
-                    <td className="group-alt">{formatLocalTime(g.start?.created_at)}</td><td className="group-alt">{formatLocalTime(g.end?.created_at)}</td>
-                    <td>{g.start?.ofd_count ?? "—"}</td><td>{g.end?.cod_delivered ?? "—"}</td>
-                    <td>{g.end?.ppd_delivered ?? "—"}</td><td>{g.end?.picked_up ?? "—"}</td>
-                    <td>{m.delivered}</td><td>{m.deliveryPct}</td><td>{m.sales}</td>
-                    {isAdmin && <td className="row-actions"><button className="btn" onClick={() => openDetail(g)}>{t("common.edit")}</button></td>}
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <DataTable columns={columns} data={tableRows} emptyMessage={t("common.noMatchingData")} />
       )}
     </>
   );

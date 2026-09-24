@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useAuth } from "./AuthContext";
-import { buildStationReport } from "../lib/calc";
+import { buildStationReport, summarizeReinforcement, sumAutomaticFuel } from "../lib/calc";
 
 const DataContext = createContext(null);
 
@@ -57,6 +57,11 @@ export function DataProvider({ children }) {
         scopedStationRows: data.stationRows,
         scopedDrivers: data.allDrivers,
         scopedVehicles: data.allVehicles,
+        scopedReinforcementRows: data.reinforcementRows,
+        scopedReinforcementSummary: data.reinforcementSummary,
+        scopedAutomaticFuelRows: data.automaticFuelRows,
+        scopedAutomaticFuelTotal: data.automaticFuelTotal,
+        scopedAttendanceRows: data.attendanceRows,
       };
     }
     const rows = data.allRows.filter(r => data.driverProjects[r.identity_number] === viewingProject);
@@ -66,14 +71,26 @@ export function DataProvider({ children }) {
       const drv = data.vehicleDriverMap[v.vehicle_plate];
       return drv && data.driverProjects[drv.identity_number] === viewingProject;
     });
+    const reinforcementRows = data.reinforcementRows.filter(r => data.driverProjects[r.identity_number] === viewingProject);
+    const automaticFuelRows = data.automaticFuelRows.filter(r => r.project === viewingProject);
+    const attendanceRows = data.attendanceRows.filter(r => r.project === viewingProject);
     return {
       scopedRows: rows,
       scopedCompareGroups: compareGroups,
       scopedStationRows: buildStationReport(rows),
       scopedDrivers: drivers,
       scopedVehicles: vehicles,
+      scopedReinforcementRows: reinforcementRows,
+      scopedReinforcementSummary: summarizeReinforcement(reinforcementRows),
+      scopedAutomaticFuelRows: automaticFuelRows,
+      scopedAutomaticFuelTotal: sumAutomaticFuel(automaticFuelRows),
+      scopedAttendanceRows: attendanceRows,
     };
-  }, [viewingProject, data.allRows, data.allCompareGroups, data.stationRows, data.allDrivers, data.allVehicles, data.driverProjects, data.vehicleDriverMap]);
+  }, [
+    viewingProject, data.allRows, data.allCompareGroups, data.stationRows, data.allDrivers, data.allVehicles,
+    data.driverProjects, data.vehicleDriverMap, data.reinforcementRows, data.reinforcementSummary,
+    data.automaticFuelRows, data.automaticFuelTotal, data.attendanceRows,
+  ]);
 
   return (
     <DataContext.Provider value={{ ...data, ...scoped, from, to, setFrom, setTo, applyFilter, resetFilter, viewingProject, setViewingProject }}>

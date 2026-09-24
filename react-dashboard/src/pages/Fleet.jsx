@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
+import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { downloadCsv } from "../lib/csv";
 
@@ -73,6 +74,31 @@ export default function Fleet() {
     upsertVehicle({ ...v, is_active });
   }
 
+  const columns = useMemo(() => [
+    { id: "index", header: t("fleet.colIndex"), cell: ({ row }) => row.index + 1, enableSorting: false },
+    { accessorKey: "vehicle_plate", header: t("fleet.colPlate") },
+    { id: "driverId", header: t("fleet.colDriverId"), accessorFn: v => vehicleDriverMap[v.vehicle_plate]?.identity_number || "—" },
+    { id: "driverName", header: t("fleet.colDriverName"), accessorFn: v => vehicleDriverMap[v.vehicle_plate]?.full_name || "—" },
+    { accessorKey: "vehicle_vendor", header: t("fleet.colVendor") },
+    { accessorKey: "fuel_type", header: t("fleet.colFuelType") },
+    { accessorKey: "model", header: t("fleet.colModel") },
+    { accessorKey: "avg_per_liter", header: t("fleet.colRate"), meta: { align: "end" }, cell: ({ getValue }) => getValue() ?? "—" },
+    {
+      id: "status", header: t("common.status"), enableSorting: false,
+      cell: ({ row }) => (
+        <button className={"toggle-pill " + (row.original.is_active ? "active" : "inactive")} onClick={() => toggleActive(row.original)}>
+          {row.original.is_active ? t("fleet.activeF") : t("fleet.inactiveF")}
+        </button>
+      ),
+    },
+    {
+      id: "actions", header: "", enableSorting: false,
+      cell: ({ row }) => (
+        <div className="row-actions"><button className="btn" onClick={() => openEdit(row.original)}>{t("common.edit")}</button></div>
+      ),
+    },
+  ], [t, vehicleDriverMap, toggleActive, openEdit]);
+
   function handleExport() {
     if (!rows.length) return;
     const keys = ["vehicle_plate", "driver_identity_number", "driver_full_name", "vehicle_vendor", "fuel_type", "model", "avg_per_liter", "is_active"];
@@ -110,37 +136,7 @@ export default function Fleet() {
         </div>
       </div>
       <div className="cards-count">{t("fleet.vehiclesCount", { n: rows.length })}</div>
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("fleet.colIndex")}</th><th>{t("fleet.colPlate")}</th><th>{t("fleet.colDriverId")}</th><th>{t("fleet.colDriverName")}</th><th>{t("fleet.colVendor")}</th><th>{t("fleet.colFuelType")}</th><th>{t("fleet.colModel")}</th><th>{t("fleet.colRate")}</th>
-              <th>{t("common.status")}</th><th></th>
-            </tr>
-          </thead>
-          <tbody>
-            {!rows.length ? (
-              <tr className="empty-row"><td colSpan={10}>{t("fleet.noVehicles")}</td></tr>
-            ) : rows.map((v, i) => {
-              const drv = vehicleDriverMap[v.vehicle_plate];
-              return (
-                <tr key={v.vehicle_plate}>
-                  <td>{i + 1}</td>
-                  <td>{v.vehicle_plate}</td>
-                  <td>{drv ? drv.identity_number : "—"}</td>
-                  <td>{drv ? drv.full_name : "—"}</td>
-                  <td>{v.vehicle_vendor}</td>
-                  <td>{v.fuel_type}</td>
-                  <td>{v.model}</td>
-                  <td>{v.avg_per_liter ?? "—"}</td>
-                  <td><button className={"toggle-pill " + (v.is_active ? "active" : "inactive")} onClick={() => toggleActive(v)}>{v.is_active ? t("fleet.activeF") : t("fleet.inactiveF")}</button></td>
-                  <td className="row-actions"><button className="btn" onClick={() => openEdit(v)}>{t("common.edit")}</button></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={rows} emptyMessage={t("fleet.noVehicles")} />
 
       {modalOpen && (
         <div id="vehicle-backdrop" style={{ display: "flex" }}>
@@ -154,7 +150,7 @@ export default function Fleet() {
             {saveError && <div style={{ color: "var(--critical)", fontSize: "0.8rem" }}>{saveError}</div>}
             <div id="vehicle-actions">
               <button className="btn" onClick={() => setModalOpen(false)} disabled={saving}>{t("common.cancel")}</button>
-              <button className="btn btn-primary" onClick={handleSave} disabled={saving}>{saving ? t("common.saving") : t("common.save")}</button>
+              <button className={"btn btn-primary" + (saving ? " btn-loading" : "")} onClick={handleSave} disabled={saving}>{t("common.save")}</button>
             </div>
           </div>
         </div>
