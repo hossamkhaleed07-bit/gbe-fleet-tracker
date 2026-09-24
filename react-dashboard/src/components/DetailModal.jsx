@@ -68,7 +68,9 @@ export default function DetailModal() {
                 <Field label={t("detailModal.distance")} val={computed.dist} />
                 <Field label={t("common.expectedFuelLiters")} val={computed.fuelLiters} />
                 <Field label={t("compare.colExpectedFuelCost")} val={computed.fuelCost} />
+                <Field label={t("compare.colAutomaticFuelCost")} val={computed.automaticFuelCost} />
                 <Field label={t("compare.colActualFuelCost")} val={computed.actualFuelCost} />
+                <Field label={t("compare.colTotalFuelCost")} val={computed.totalFuelCost} />
                 <Field label="Off Duty" val={computed.offDuty} />
               </div>
             </div>

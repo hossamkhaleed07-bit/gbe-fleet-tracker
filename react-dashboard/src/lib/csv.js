@@ -14,13 +14,13 @@ export function downloadCsv(filename, keys, rows) {
 
 export const GROUP_CSV_KEYS = [
   "date", "full_name", "identity_number", "project", "vehicle_plate", "station",
-  "start_odo", "end_odo", "distance", "expected_fuel_liters", "expected_fuel_cost", "actual_fuel_cost", "off_duty_km",
+  "start_odo", "end_odo", "distance", "expected_fuel_liters", "expected_fuel_cost", "automatic_fuel_cost", "actual_fuel_cost", "total_fuel_cost", "off_duty_km",
   "start_time", "end_time", "ofd", "cod", "ppd", "picked_up", "delivered", "delivery_pct", "sales", "status",
 ];
 
-export function groupToCsvRow(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, buildGroupMetrics }) {
+export function groupToCsvRow(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey, buildGroupMetrics }) {
   const station = g.end?.station_name || g.start?.station_name || "";
-  const m = buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey });
+  const m = buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey });
   return {
     date: g.day, full_name: g.full_name, identity_number: g.identity_number, project: g.project || "", vehicle_plate: g.vehicle_plate,
     station,
@@ -28,7 +28,9 @@ export function groupToCsvRow(g, { vehicleRates, vehicleFuelTypes, stationRates,
     distance: m.dist,
     expected_fuel_liters: m.fuelLiters,
     expected_fuel_cost: m.fuelCost,
+    automatic_fuel_cost: m.automaticFuelCost,
     actual_fuel_cost: m.actualFuelCost,
+    total_fuel_cost: m.totalFuelCost,
     off_duty_km: m.offDuty ?? "",
     start_time: g.start ? formatLocalTime(g.start.created_at) : "",
     end_time: g.end ? formatLocalTime(g.end.created_at) : "",

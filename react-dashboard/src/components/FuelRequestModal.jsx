@@ -69,6 +69,9 @@ export default function FuelRequestModal({ request, onClose, onSaved }) {
           <Field label={t("fuel.colRequestedAt")} val={formatLocalDateTime(request.created_at)} />
           <Field label={t("fuel.colReviewedBy")} val={request.reviewed_by || "—"} />
           <Field label={t("fuel.colReviewedAt")} val={formatLocalDateTime(request.reviewed_at)} />
+          {request.status === "rejected" && (
+            <Field label={t("fuel.rejectReasonTitle")} val={request.rejection_reason || "—"} />
+          )}
           <Field label={t("common.petroAppLink")} val={driver?.petro_app_link ? <a className="media-link" href={driver.petro_app_link} target="_blank" rel="noreferrer">{t("common.petroAppLink")}</a> : "—"} />
         </div>
 

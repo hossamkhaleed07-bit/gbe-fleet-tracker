@@ -8,6 +8,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useLang } from "../contexts/LanguageContext";
 import { useUndo } from "../contexts/UndoContext";
 import GlobalFilters from "../components/GlobalFilters";
+import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { compareStatus, buildGroupMetrics, localToday } from "../lib/calc";
 import { downloadCsv, GROUP_CSV_KEYS, groupToCsvRow } from "../lib/csv";
@@ -29,7 +30,7 @@ function daysInRange(fromStr, toStr) {
 export default function Records() {
   const {
     scopedCompareGroups: allCompareGroups, scopedDrivers, vehicleEndHistory, vehicleRates, vehicleFuelTypes,
-    stationRates, approvedFuelByKey, removeShiftEntries, addShiftEntries, from, to,
+    stationRates, approvedFuelByKey, automaticFuelByKey, removeShiftEntries, addShiftEntries, from, to,
   } = useDashboard();
   const { openDetail } = useDetailModal();
   const { canEditShiftEntries } = useAuth();
@@ -38,7 +39,7 @@ export default function Records() {
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState(searchParams.get("status") || "");
-  const [project, setProject] = useState("");
+  const [project, setProject] = useState(searchParams.get("project") || "");
   const [busyDelete, setBusyDelete] = useState(null);
 
   const missingRows = useMemo(() => {
@@ -65,6 +66,8 @@ export default function Records() {
     let r = allCompareGroups;
     if (status === "complete") r = r.filter(g => g.start && g.end);
     if (status === "partial") r = r.filter(g => !(g.start && g.end));
+    if (status === "start_only") r = r.filter(g => g.start && !g.end);
+    if (status === "end_only") r = r.filter(g => !g.start && g.end);
     if (status === "incomplete_or_missing") r = [...r.filter(g => !(g.start && g.end)), ...missingRows];
     if (project) r = r.filter(g => g.project === project);
     if (search.trim()) {
@@ -96,9 +99,64 @@ export default function Records() {
 
   function handleExport() {
     if (!rows.length) return;
-    const ctx = { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, buildGroupMetrics };
+    const ctx = { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey, buildGroupMetrics };
     downloadCsv(`shift_entries_${new Date().toISOString().slice(0, 10)}.csv`, GROUP_CSV_KEYS, rows.map(g => groupToCsvRow(g, ctx)));
   }
+
+  const columns = useMemo(() => {
+    const cols = [
+      { accessorKey: "day", header: t("records.colShiftDate") },
+      {
+        id: "status", header: t("common.status"), enableSorting: false,
+        cell: ({ row }) => <StatusBadge status={compareStatus(row.original)} />,
+      },
+      { accessorKey: "full_name", header: t("records.colDriver") },
+      { accessorKey: "identity_number", header: t("records.colIdNumber") },
+      {
+        id: "project", header: t("common.project"), accessorFn: g => g.project || "",
+        cell: ({ row }) => row.original.project ? <ProjectBadge project={row.original.project} /> : "—",
+      },
+      { id: "vehicle_plate", header: t("common.plate"), accessorFn: g => g.vehicle_plate || "—" },
+      { id: "station", header: t("records.colStation"), accessorFn: g => g.end?.station_name || g.start?.station_name || "—" },
+      {
+        id: "odometer", header: t("records.colOdometer"), enableSorting: false,
+        cell: ({ row }) => `${row.original.start?.odo_reading ?? "—"} → ${row.original.end?.odo_reading ?? "—"}`,
+      },
+      {
+        id: "media", header: t("records.colMedia"), enableSorting: false,
+        cell: ({ row }) => {
+          const g = row.original;
+          const media = [];
+          if (g.start?.odo_photo_url) media.push(<a key="op" className="media-link" href={g.start.odo_photo_url} target="_blank" rel="noreferrer">{t("records.mediaStartOdo")}</a>);
+          if (g.start?.condition_video_url) media.push(<a key="cv" className="media-link" href={g.start.condition_video_url} target="_blank" rel="noreferrer">{t("records.mediaVideo")}</a>);
+          if (g.end?.odo_photo_url) media.push(<a key="oe" className="media-link" href={g.end.odo_photo_url} target="_blank" rel="noreferrer">{t("records.mediaEndOdo")}</a>);
+          if (g.end?.client_screenshot_url) media.push(<a key="cs" className="media-link" href={g.end.client_screenshot_url} target="_blank" rel="noreferrer">{t("records.mediaScreenshot")}</a>);
+          return media.length ? media.reduce((acc, el, idx) => idx === 0 ? [el] : [...acc, " · ", el], []) : "—";
+        },
+      },
+      { id: "area", header: t("records.colArea"), accessorFn: g => g.end?.area || g.start?.area || "—" },
+    ];
+    if (canEditShiftEntries) {
+      cols.push({
+        id: "actions", header: "", enableSorting: false,
+        cell: ({ row }) => {
+          const g = row.original;
+          if (g.synthetic) return "—";
+          const ids = [g.start?.id, g.end?.id].filter(Boolean).join(",");
+          return (
+            <div className="row-actions">
+              <button className="btn" onClick={() => openDetail(g)}>{t("records.viewEdit")}</button>
+              <button className="btn btn-danger" disabled={busyDelete === ids} onClick={() => handleDelete(g)}>
+                {busyDelete === ids ? "..." : t("common.delete")}
+              </button>
+            </div>
+          );
+        },
+      });
+    }
+    return cols;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [t, canEditShiftEntries, busyDelete]);
 
   return (
     <>
@@ -122,6 +180,8 @@ export default function Records() {
             <option value="">{t("common.all")}</option>
             <option value="complete">{t("common.complete")}</option>
             <option value="partial">{t("common.incomplete")}</option>
+            <option value="start_only">{t("detailModal.startOnly")}</option>
+            <option value="end_only">{t("detailModal.endOnly")}</option>
             <option value="incomplete_or_missing">{t("records.statusIncompleteOrMissing")}</option>
           </select>
         </div>
@@ -134,56 +194,7 @@ export default function Records() {
         </div>
       </div>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("records.colShiftDate")}</th><th>{t("common.status")}</th><th>{t("records.colDriver")}</th><th>{t("records.colIdNumber")}</th><th>{t("common.project")}</th><th>{t("common.plate")}</th>
-              <th>{t("records.colStation")}</th><th>{t("records.colOdometer")}</th><th>{t("records.colMedia")}</th><th>{t("records.colArea")}</th>{canEditShiftEntries && <th></th>}
-            </tr>
-          </thead>
-          <tbody>
-            {!rows.length ? (
-              <tr className="empty-row"><td colSpan={11}>{t("records.noMatchingRecords")}</td></tr>
-            ) : rows.map((g, i) => {
-              const media = [];
-              if (g.start?.odo_photo_url) media.push(<a key="op" className="media-link" href={g.start.odo_photo_url} target="_blank" rel="noreferrer">{t("records.mediaStartOdo")}</a>);
-              if (g.start?.condition_video_url) media.push(<a key="cv" className="media-link" href={g.start.condition_video_url} target="_blank" rel="noreferrer">{t("records.mediaVideo")}</a>);
-              if (g.end?.odo_photo_url) media.push(<a key="oe" className="media-link" href={g.end.odo_photo_url} target="_blank" rel="noreferrer">{t("records.mediaEndOdo")}</a>);
-              if (g.end?.client_screenshot_url) media.push(<a key="cs" className="media-link" href={g.end.client_screenshot_url} target="_blank" rel="noreferrer">{t("records.mediaScreenshot")}</a>);
-              const station = g.end?.station_name || g.start?.station_name;
-              const area = g.end?.area || g.start?.area;
-              const ids = [g.start?.id, g.end?.id].filter(Boolean).join(",");
-              return (
-                <tr key={`${g.identity_number}-${g.day}-${i}`}>
-                  <td>{g.day}</td>
-                  <td><StatusBadge status={compareStatus(g)} /></td>
-                  <td>{g.full_name}</td>
-                  <td>{g.identity_number}</td>
-                  <td>{g.project ? <ProjectBadge project={g.project} /> : "—"}</td>
-                  <td>{g.vehicle_plate || "—"}</td>
-                  <td>{station || "—"}</td>
-                  <td>{g.start?.odo_reading ?? "—"} → {g.end?.odo_reading ?? "—"}</td>
-                  <td>{media.length ? media.reduce((acc, el, idx) => idx === 0 ? [el] : [...acc, " · ", el], []) : "—"}</td>
-                  <td>{area || "—"}</td>
-                  {canEditShiftEntries && (
-                    <td className="row-actions">
-                      {g.synthetic ? "—" : (
-                        <>
-                          <button className="btn" onClick={() => openDetail(g)}>{t("records.viewEdit")}</button>
-                          <button className="btn btn-danger" disabled={busyDelete === ids} onClick={() => handleDelete(g)}>
-                            {busyDelete === ids ? "..." : t("common.delete")}
-                          </button>
-                        </>
-                      )}
-                    </td>
-                  )}
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={rows} emptyMessage={t("records.noMatchingRecords")} />
     </>
   );
 }

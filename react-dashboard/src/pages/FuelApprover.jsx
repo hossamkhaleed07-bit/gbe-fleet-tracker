@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
+import { useToast } from "../contexts/ToastContext";
 import { StatusBadge } from "../components/DetailModal";
 import ProjectBadge from "../components/ProjectBadge";
 import Field from "../components/Field";
 import PrevDayFuelSection from "../components/PrevDayFuelSection";
+import RejectReasonModal from "../components/RejectReasonModal";
+import ApproveConfirmModal from "../components/ApproveConfirmModal";
 import { usePrevDayShift } from "../hooks/usePrevDayShift";
 import { sb } from "../lib/supabase";
-import { compareStatus, formatRequestCode, formatLocalDateTime } from "../lib/calc";
+import { compareStatus, formatRequestCode, formatLocalDateTime, localToday } from "../lib/calc";
 import { getPageCache, setPageCache } from "../lib/pageCache";
+import { OFF_CODES, attendanceLabel, deriveAttendanceStatus } from "../lib/attendanceCodes";
 
 const CACHE_KEY = "fuelApprover.pending";
 
@@ -30,7 +34,8 @@ function EditableField({ label, value, onChange }) {
 export default function FuelApprover() {
   const { session, isAdmin } = useAuth();
   const { scopedDrivers } = useDashboard();
-  const { t } = useLang();
+  const { t, lang } = useLang();
+  const { showToast } = useToast();
   const cached = getPageCache(CACHE_KEY);
   const [rows, setRows] = useState(cached?.rows ?? []);
   const [selectedId, setSelectedId] = useState(cached?.selectedId ?? null);
@@ -40,6 +45,9 @@ export default function FuelApprover() {
   const [todayGroup, setTodayGroup] = useState(null);
   const [todayLoading, setTodayLoading] = useState(false);
   const [loanAdjustment, setLoanAdjustment] = useState("");
+  const [rejectModalOpen, setRejectModalOpen] = useState(false);
+  const [approveModalOpen, setApproveModalOpen] = useState(false);
+  const [attendanceStatus, setAttendanceStatus] = useState(null);
 
   async function load(keepSelection) {
     if (!getPageCache(CACHE_KEY)) setLoading(true);
@@ -69,6 +77,17 @@ export default function FuelApprover() {
   const { prevDayGroup, prevDayLoading } = usePrevDayShift(selected?.identity_number, selected?.shift_date, selected?.vehicle_plate);
 
   useEffect(() => {
+    if (!selected) { setAttendanceStatus(null); return; }
+    (async () => {
+      const { data } = await sb.from("driver_attendance").select("status")
+        .eq("identity_number", selected.identity_number).eq("attendance_date", selected.shift_date).maybeSingle();
+      // A reinforcement request always has a shift-start for its day (#037),
+      // so with no explicit override the effective status is always "P".
+      setAttendanceStatus(deriveAttendanceStatus({ explicitStatus: data?.status, hasShiftEntry: true, day: selected.shift_date, today: localToday() }));
+    })();
+  }, [selected?.id]);
+
+  useEffect(() => {
     if (!selected) { setTodayGroup(null); return; }
     (async () => {
       setTodayLoading(true);
@@ -81,8 +100,9 @@ export default function FuelApprover() {
     })();
   }, [selected?.id]);
 
-  async function decide(status) {
+  async function decide(status, rejectionReason) {
     if (!selected) return;
+    const decidedId = selected.id;
     setBusy(true);
     setError("");
     const { error: err } = await sb.from("reinforcement_requests").update({
@@ -90,10 +110,22 @@ export default function FuelApprover() {
       reviewed_by: session?.user?.email || null,
       reviewed_at: new Date().toISOString(),
       loan_adjustment: loanAdjustment === "" ? null : Number(loanAdjustment),
-    }).eq("id", selected.id);
+      ...(status === "rejected" ? { rejection_reason: rejectionReason } : {}),
+    }).eq("id", decidedId);
     setBusy(false);
     if (err) { setError(t("fuel.actionFailed") + err.message); return; }
-    await load(true);
+    setRejectModalOpen(false);
+    setApproveModalOpen(false);
+    const remaining = rows.filter(r => r.id !== decidedId);
+    const nextSelected = remaining[0]?.id ?? null;
+    setRows(remaining);
+    setSelectedId(nextSelected);
+    setPageCache(CACHE_KEY, { rows: remaining, selectedId: nextSelected });
+    showToast(status === "approved" ? t("fuel.toastApproved") : t("fuel.toastRejected"), status === "approved" ? "success" : "error");
+  }
+
+  function handleRejectClick() {
+    setRejectModalOpen(true);
   }
 
   return (
@@ -148,12 +180,20 @@ export default function FuelApprover() {
               <Field label={t("common.petroAppLink")} val={selectedDriver?.petro_app_link ? <a className="media-link" href={selectedDriver.petro_app_link} target="_blank" rel="noreferrer">{t("common.petroAppLink")}</a> : "—"} />
             </div>
 
+            {OFF_CODES.has(attendanceStatus) && (
+              <div className="attendance-conflict-banner">
+                ⚠ {t("fuel.attendanceConflictTitle")}
+                <br />
+                {t("fuel.attendanceConflictGeneric", { name: selected.full_name, status: attendanceLabel(attendanceStatus, lang), date: selected.shift_date })}
+              </div>
+            )}
+
             <PrevDayFuelSection shiftDate={selected.shift_date} prevDayGroup={prevDayGroup} loading={prevDayLoading} />
 
             {isAdmin && (
               <div className="fuel-detail-actions">
-                <button className="btn btn-primary" disabled={busy} onClick={() => decide("approved")}>{t("fuel.approve")}</button>
-                <button className="btn btn-danger" disabled={busy} onClick={() => decide("rejected")}>{t("fuel.reject")}</button>
+                <button className="btn btn-primary" disabled={busy} onClick={() => setApproveModalOpen(true)}>{t("fuel.approve")}</button>
+                <button className="btn btn-danger" disabled={busy} onClick={handleRejectClick}>{t("fuel.reject")}</button>
               </div>
             )}
           </div>
@@ -161,6 +201,30 @@ export default function FuelApprover() {
           <div className="fuel-empty-detail">{t("fuel.noPendingRequests")}</div>
         )}
       </div>
+
+      {approveModalOpen && selected && (
+        <ApproveConfirmModal
+          request={selected}
+          project={selectedDriver?.project}
+          attendanceStatus={attendanceStatus}
+          loanAdjustment={loanAdjustment}
+          saving={busy}
+          onCancel={() => setApproveModalOpen(false)}
+          onConfirm={() => decide("approved")}
+        />
+      )}
+
+      {rejectModalOpen && selected && (
+        <RejectReasonModal
+          request={selected}
+          project={selectedDriver?.project}
+          attendanceStatus={attendanceStatus}
+          loanAdjustment={loanAdjustment}
+          saving={busy}
+          onCancel={() => setRejectModalOpen(false)}
+          onConfirm={reason => decide("rejected", reason)}
+        />
+      )}
     </>
   );
 }

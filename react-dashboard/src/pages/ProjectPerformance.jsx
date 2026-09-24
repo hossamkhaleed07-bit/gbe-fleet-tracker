@@ -1,7 +1,9 @@
 import { useMemo } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
 import GlobalFilters from "../components/GlobalFilters";
+import DataTable from "../components/DataTable";
 import { PROJECT_LIST } from "../lib/constants";
 
 const PROJECT_MANAGERS = {
@@ -15,6 +17,21 @@ const PROJECT_MANAGERS = {
 export default function ProjectPerformance() {
   const { allRows, allCompareGroups, allDrivers, from, to } = useDashboard();
   const { t } = useLang();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  function goToRecords(project, status) {
+    const next = new URLSearchParams(searchParams);
+    next.set("project", project);
+    if (status) next.set("status", status); else next.delete("status");
+    navigate({ pathname: "/records", search: next.toString() });
+  }
+
+  function goToDrivers(project) {
+    const next = new URLSearchParams(searchParams);
+    next.set("project", project);
+    navigate({ pathname: "/drivers", search: next.toString() });
+  }
 
   // A driver can submit shifts on more than one day within the selected range, so
   // "expected submissions" must scale by the number of distinct days covered, not
@@ -43,6 +60,45 @@ export default function ProjectPerformance() {
     });
   }, [allRows, allCompareGroups, allDrivers, daysInRange]);
 
+  const columns = useMemo(() => [
+    { accessorKey: "manager", header: t("projectPerformance.colManager") },
+    { accessorKey: "p", header: t("projectPerformance.colProject"), cell: ({ getValue }) => <b>{getValue()}</b> },
+    {
+      accessorKey: "total", header: t("projectPerformance.colTotalDrivers"), meta: { align: "end" },
+      cell: ({ row }) => <span className="badge-link" onClick={() => goToDrivers(row.original.p)}>{row.original.total}</span>,
+    },
+    {
+      accessorKey: "complete", header: t("projectPerformance.colComplete"), meta: { align: "end" },
+      cell: ({ row }) => <span className="badge complete clickable-badge" onClick={() => goToRecords(row.original.p, "complete")}>{row.original.complete}</span>,
+    },
+    {
+      accessorKey: "startOnly", header: t("projectPerformance.colStartOnly"), meta: { align: "end" },
+      cell: ({ row }) => <span className="badge partial clickable-badge" onClick={() => goToRecords(row.original.p, "start_only")}>{row.original.startOnly}</span>,
+    },
+    {
+      accessorKey: "endOnly", header: t("projectPerformance.colEndOnly"), meta: { align: "end" },
+      cell: ({ row }) => <span className="badge partial clickable-badge" onClick={() => goToRecords(row.original.p, "end_only")}>{row.original.endOnly}</span>,
+    },
+    {
+      accessorKey: "rate", header: t("projectPerformance.colCompletionRate"),
+      cell: ({ row }) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div className="bar-track" style={{ width: 90 }}><div className="bar-fill" style={{ width: row.original.rate + "%" }}></div></div>
+          <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{row.original.rate}%</span>
+        </div>
+      ),
+    },
+    {
+      accessorKey: "failRate", header: t("projectPerformance.colFailureRate"),
+      cell: ({ row }) => (
+        <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+          <div className="bar-track" style={{ width: 90 }}><div className="bar-fill critical" style={{ width: row.original.failRate + "%" }}></div></div>
+          <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{row.original.failRate}%</span>
+        </div>
+      ),
+    },
+  ], [t]);
+
   return (
     <>
       <div className="content-header">
@@ -58,46 +114,7 @@ export default function ProjectPerformance() {
           : t("projectPerformance.subNoRange")}
       </p>
 
-      <div className="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>{t("projectPerformance.colManager")}</th>
-              <th>{t("projectPerformance.colProject")}</th>
-              <th>{t("projectPerformance.colTotalDrivers")}</th>
-              <th>{t("projectPerformance.colComplete")}</th>
-              <th>{t("projectPerformance.colStartOnly")}</th>
-              <th>{t("projectPerformance.colEndOnly")}</th>
-              <th>{t("projectPerformance.colCompletionRate")}</th>
-              <th>{t("projectPerformance.colFailureRate")}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(r => (
-              <tr key={r.p}>
-                <td>{r.manager}</td>
-                <td><b>{r.p}</b></td>
-                <td>{r.total}</td>
-                <td><span className="badge complete">{r.complete}</span></td>
-                <td><span className="badge partial">{r.startOnly}</span></td>
-                <td><span className="badge partial">{r.endOnly}</span></td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                    <div className="bar-track" style={{ width: 90 }}><div className="bar-fill" style={{ width: r.rate + "%" }}></div></div>
-                    <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{r.rate}%</span>
-                  </div>
-                </td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
-                    <div className="bar-track" style={{ width: 90 }}><div className="bar-fill critical" style={{ width: r.failRate + "%" }}></div></div>
-                    <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>{r.failRate}%</span>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable columns={columns} data={rows} emptyMessage={t("common.loading")} />
     </>
   );
 }
