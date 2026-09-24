@@ -294,6 +294,40 @@
   @media (max-width: 1100px) { .kpi-dot-grid-6 { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 640px) { .kpi-dot-grid-6 { grid-template-columns: repeat(2, 1fr); } }
 
+  /* ---- overview hero banner ---- */
+  .ov-hero {
+    position: relative; overflow: hidden; border-radius: var(--radius-xl); padding: 2rem 2.2rem;
+    margin-bottom: 1.4rem; color: #f5f6fb;
+    background: linear-gradient(135deg, #14172b 0%, #1c2142 55%, #262c52 100%);
+    box-shadow: var(--shadow-lg);
+    display: flex; align-items: center; justify-content: space-between; gap: 2rem; flex-wrap: wrap;
+  }
+  .ov-hero-glow-a, .ov-hero-glow-b {
+    position: absolute; border-radius: 50%; filter: blur(70px); pointer-events: none;
+  }
+  .ov-hero-glow-a { width: 280px; height: 280px; background: rgba(59,130,246,0.35); top: -120px; inset-inline-end: -60px; }
+  .ov-hero-glow-b { width: 220px; height: 220px; background: rgba(139,92,246,0.25); bottom: -100px; inset-inline-start: 10%; }
+  .ov-hero-content { position: relative; z-index: 1; min-width: 220px; }
+  .ov-hero-eyebrow { font-size: 0.7rem; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(245,246,251,0.6); margin-bottom: 0.6rem; }
+  .ov-hero-title { font-size: 1.7rem; font-weight: 800; margin: 0 0 0.4rem; letter-spacing: -0.01em; }
+  .ov-hero-sub { font-size: 0.85rem; color: rgba(245,246,251,0.65); margin: 0; }
+  .ov-hero-stats { position: relative; z-index: 1; display: flex; gap: 1.6rem; flex-wrap: wrap; }
+  .ov-hero-stat { min-width: 96px; }
+  .ov-hero-stat-num { display: block; font-size: 1.7rem; font-weight: 800; line-height: 1.2; }
+  .ov-hero-stat-label { display: block; font-size: 0.72rem; color: rgba(245,246,251,0.6); margin-top: 0.15rem; }
+  .ov-hero-divider { width: 1px; align-self: stretch; background: rgba(245,246,251,0.14); }
+  @media (max-width: 720px) { .ov-hero { padding: 1.5rem; } .ov-hero-divider { display: none; } }
+
+  .kpi-dot-card .icon-wrap {
+    width: 38px; height: 38px; border-radius: 12px; display: flex; align-items: center; justify-content: center; margin-bottom: 0.8rem;
+  }
+  .kpi-dot-card .icon-wrap.blue { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+  .kpi-dot-card .icon-wrap.green { background: var(--c-green-bg); color: var(--c-green-ink); }
+  .kpi-dot-card .icon-wrap.orange { background: var(--c-orange-bg); color: var(--c-orange-ink); }
+  .kpi-dot-card .icon-wrap.red { background: var(--c-red-bg); color: var(--c-red-ink); }
+  .kpi-dot-card .icon-wrap.purple { background: var(--c-purple-bg); color: var(--c-purple-ink); }
+  .kpi-dot-card .icon-wrap.cyan { background: var(--c-cyan-bg); color: var(--c-cyan-ink); }
+
   .ov-section-title { font-size: 0.78rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-muted); margin: 1.4rem 0 0.6rem; }
   .ov-section-title:first-of-type { margin-top: 0.4rem; }
   .ov-alert-dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-inline-end: 0.5rem; vertical-align: middle; }
