@@ -1,0 +1,1 @@
+import{_ as e}from"./DataContext-vCnIBSDZ.js";var t=e(),n={FDP:`c-blue`,ADM:`c-green`,LMS:`c-purple`,JDL:`c-orange`,MGF:`c-cyan`};function r({project:e}){if(!e)return null;let r=n[e]||`c-pink`;return(0,t.jsx)(`span`,{className:`badge`,style:{background:`var(--${r}-bg)`,color:`var(--${r}-ink)`},children:e})}export{r as t};
