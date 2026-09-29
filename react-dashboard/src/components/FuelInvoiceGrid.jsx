@@ -5,9 +5,19 @@ import DataTable from "./DataTable";
 import PillSelectField from "./PillSelectField";
 import FuelInvoiceRecordModal from "./FuelInvoiceRecordModal";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
-import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, emptyFuelInvoiceForm, money, fieldColorKey } from "../lib/fuelInvoice";
+import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
+import {
+  FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, emptyFuelInvoiceForm, money, fieldColorKey, computeAmountVat,
+} from "../lib/fuelInvoice";
 
 const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
+// "Date" first — grouping by day, with a blank row per day to type straight
+// into, is the main daily-entry workflow this grid is built around.
+const GROUP_OPTIONS = [{ key: "entry_date", label: "Date" }, ...GROUPABLE_FIELDS];
+
+function today() {
+  return new Date().toISOString().slice(0, 10);
+}
 
 // A small type-glyph per field, next to its header label — Airtable-style
 // column headers (text/number/date/select fields each show their kind).
@@ -22,13 +32,53 @@ const FIELD_TYPE_ICON = {
   lookup: <IdCard size={12} />,
 };
 
+// Generic inline text/number cell — local draft buffer so typing feels
+// instant, commits on blur. Works for both a real record (commit → update)
+// and the blank draft row at the bottom of each group (commit → create a
+// new record with just this one field, Airtable-"+"-row style — the row
+// then shows up as a real row elsewhere, and this same blank slot stays
+// ready for the next new entry).
+function InlineTextCell({ value, inputType = "text", multiline, onCommit }) {
+  const [draft, setDraft] = useState(value ?? "");
+  const [dirty, setDirty] = useState(false);
+  const shown = dirty ? draft : (value ?? "");
+
+  function commit() {
+    setDirty(false);
+    if (shown === (value ?? "")) return;
+    onCommit(shown === "" ? null : shown);
+  }
+
+  const props = {
+    value: shown,
+    onChange: e => { setDraft(e.target.value); setDirty(true); },
+    onBlur: commit,
+    onKeyDown: e => { if (e.key === "Enter" && !multiline) e.currentTarget.blur(); },
+    className: "notes-cell-input",
+    placeholder: "—",
+  };
+  return multiline ? <textarea rows={1} {...props} /> : <input type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} {...props} />;
+}
+
+function InlineDateCell({ value, onCommit }) {
+  return (
+    <input
+      type="date"
+      className="notes-cell-input"
+      value={value || ""}
+      onChange={e => onCommit(e.target.value || null)}
+    />
+  );
+}
+
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
   const { records, loading, error, createRecord, updateRecord, deleteRecords } = useFuelInvoiceRecords();
+  const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
 
   const [search, setSearch] = useState("");
   const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
-  const [groupBy, setGroupBy] = useState("");
+  const [groupBy, setGroupBy] = useState("entry_date");
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [modalState, setModalState] = useState(null); // null | { isNew, record }
   const [saving, setSaving] = useState(false);
@@ -64,8 +114,30 @@ export default function FuelInvoiceGrid() {
   }
 
   async function handleInlineFieldSave(record, key, value) {
-    const { error: err } = await updateRecord(record.id, { [key]: value || null, updated_at: new Date().toISOString() });
+    const patch = { [key]: value || null, updated_at: new Date().toISOString() };
+    if (key === "cost") Object.assign(patch, computeAmountVat(value));
+    // Mirrors the source sheet's VLOOKUP(NID, 'DA DB'!A:L, 2, FALSE) — typing
+    // a NID inline re-derives DA Name too, same as the full edit modal does.
+    if (key === "nid") patch.da_name = lookupDaName(value);
+    const { error: err } = await updateRecord(record.id, patch);
     if (err) window.alert("Save failed: " + err.message);
+  }
+
+  // The blank "+" row at the bottom of a group: the first field anyone types
+  // into it creates a brand-new record (with just that field, plus the
+  // group's own date when grouping by day) — it then appears as its own real
+  // row, and this same slot stays blank underneath, ready for the next one.
+  async function handleDraftFieldSave(defaultDate, key, value) {
+    if (!value) return;
+    const payload = { [key]: value, entry_date: defaultDate || today() };
+    if (key === "cost") Object.assign(payload, computeAmountVat(value));
+    if (key === "nid") payload.da_name = lookupDaName(value);
+    const { error: err } = await createRecord(payload);
+    if (err) window.alert("Save failed: " + err.message);
+  }
+
+  function commitField(rec, field, value) {
+    return rec.__isDraft ? handleDraftFieldSave(rec.__draftDate, field, value) : handleInlineFieldSave(rec, field, value);
   }
 
   function openAdd() {
@@ -109,9 +181,9 @@ export default function FuelInvoiceGrid() {
       {
         id: "select", enableSorting: false,
         header: () => <input type="checkbox" checked={allSelected} onChange={toggleAll} />,
-        cell: ({ row }) => <input type="checkbox" checked={selectedIds.has(row.original.id)} onChange={() => toggleOne(row.original.id)} />,
+        cell: ({ row }) => row.original.__isDraft ? null : <input type="checkbox" checked={selectedIds.has(row.original.id)} onChange={() => toggleOne(row.original.id)} />,
       },
-      { id: "index", header: "#", enableSorting: false, cell: ({ row }) => row.index + 1 },
+      { id: "index", header: "#", enableSorting: false, cell: ({ row }) => row.original.__isDraft ? <span style={{ opacity: 0.4 }}>+</span> : row.index + 1 },
     ];
     for (const f of FUEL_INVOICE_FIELDS) {
       cols.push({
@@ -120,6 +192,8 @@ export default function FuelInvoiceGrid() {
         cell: ({ row }) => {
           const rec = row.original;
           const v = rec[f.key];
+          const editable = canEdit;
+
           if (f.type === "select") {
             return (
               <PillSelectField
@@ -127,25 +201,46 @@ export default function FuelInvoiceGrid() {
                 options={distinctValues(records, f.key)}
                 colorFor={val => fieldColorKey(f.key, val)}
                 disabled={!canEdit}
-                onChange={newVal => handleInlineFieldSave(rec, f.key, newVal)}
+                onChange={newVal => commitField(rec, f.key, newVal)}
               />
             );
           }
-          if (f.type === "currency" || f.type === "computed") return money(v);
-          if (f.type === "longtext") return <span title={v || ""} style={{ display: "inline-block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{v || "—"}</span>;
-          return v ?? "—";
+          if (f.type === "computed") return money(rec.__isDraft ? computeAmountVat(rec.cost)[f.key] : v);
+          if (f.type === "lookup") return v || (rec.__isDraft ? "" : "—");
+          if (!editable) {
+            if (f.type === "currency") return money(v);
+            if (f.type === "longtext") return <span title={v || ""} style={{ display: "inline-block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{v || "—"}</span>;
+            return v ?? "—";
+          }
+          if (f.type === "date") return <InlineDateCell value={v} onCommit={val => commitField(rec, f.key, val)} />;
+          if (f.type === "currency") return <InlineTextCell value={v} inputType="number" onCommit={val => commitField(rec, f.key, val)} />;
+          if (f.type === "longtext") return <InlineTextCell value={v} multiline onCommit={val => commitField(rec, f.key, val)} />;
+          return <InlineTextCell value={v} onCommit={val => commitField(rec, f.key, val)} />;
         },
       });
     }
     cols.push({
       id: "actions", header: "", enableSorting: false,
-      cell: ({ row }) => canEdit
+      cell: ({ row }) => (canEdit && !row.original.__isDraft)
         ? <button className="btn" onClick={() => openEdit(row.original)}>Edit</button>
         : null,
     });
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records, selectedIds, allSelected, canEdit]);
+
+  // One blank "+" row template — same shape as a real record so every column
+  // renders consistently, just flagged __isDraft so the cell renderer above
+  // creates-on-commit instead of update-on-commit.
+  function makeDraftRow(draftDate) {
+    return {
+      ...emptyFuelInvoiceForm(),
+      id: `draft-${draftDate || "all"}`,
+      __isDraft: true,
+      __draftDate: draftDate || today(),
+      entry_date: draftDate || today(),
+    };
+  }
 
   const groups = useMemo(() => {
     if (!groupBy) return null;
@@ -155,7 +250,11 @@ export default function FuelInvoiceGrid() {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(r);
     }
-    return [...map.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+    const entries = [...map.entries()];
+    // Date groups read naturally most-recent-first (today's entries at top);
+    // every other grouping keeps its existing alphabetical order.
+    entries.sort((a, b) => groupBy === "entry_date" ? b[0].localeCompare(a[0]) : a[0].localeCompare(b[0]));
+    return entries;
   }, [rows, groupBy]);
 
   return (
@@ -175,8 +274,8 @@ export default function FuelInvoiceGrid() {
         ))}
         <div className="pill-select-wrap">
           <select value={groupBy} onChange={e => setGroupBy(e.target.value)}>
-            <option value="">Group</option>
-            {GROUPABLE_FIELDS.map(f => <option key={f.key} value={f.key}>Group: {f.label}</option>)}
+            <option value="">No grouping</option>
+            {GROUP_OPTIONS.map(f => <option key={f.key} value={f.key}>Group: {f.label}</option>)}
           </select>
         </div>
         <span style={{ flex: 1 }} />
@@ -184,7 +283,7 @@ export default function FuelInvoiceGrid() {
           <span className="pill-search-ic"><Search size={14} /></span>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." />
         </div>
-        {canEdit && <button className="btn btn-primary pill-add-btn" onClick={openAdd}>+ New Entry</button>}
+        {canEdit && <button className="btn btn-primary pill-add-btn" onClick={openAdd}>+ New Entry (form)</button>}
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.8rem" }}>
@@ -205,11 +304,21 @@ export default function FuelInvoiceGrid() {
         groups.map(([groupValue, groupRows]) => (
           <details key={groupValue} open style={{ marginBottom: "1rem" }}>
             <summary style={{ cursor: "pointer", fontWeight: 700, padding: "0.5rem 0" }}>{groupValue} ({groupRows.length})</summary>
-            <DataTable columns={columns} data={groupRows} emptyMessage={loading ? "Loading..." : "No records"} />
+            <DataTable
+              columns={columns}
+              data={canEdit ? [...groupRows, makeDraftRow(groupBy === "entry_date" ? groupValue : today())] : groupRows}
+              emptyMessage={loading ? "Loading..." : "No records"}
+              paginate={false}
+            />
           </details>
         ))
       ) : (
-        <DataTable columns={columns} data={rows} emptyMessage={loading ? "Loading..." : "No records"} pageSize={25} />
+        <DataTable
+          columns={columns}
+          data={canEdit ? [...rows, makeDraftRow(today())] : rows}
+          emptyMessage={loading ? "Loading..." : "No records"}
+          paginate={false}
+        />
       )}
 
       {modalState && (

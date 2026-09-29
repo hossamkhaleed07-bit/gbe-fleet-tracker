@@ -8,7 +8,7 @@ const SORT_ICON = { asc: " ▲", desc: " ▼" };
 // rendered with the app's existing .table-wrap/table CSS (no new styling
 // system). Pages keep owning their own search/filter state and just pass the
 // already-filtered rows in — this only adds sort/paginate/row-click on top.
-export default function DataTable({ columns, data, onRowClick, emptyMessage, pageSize = 20 }) {
+export default function DataTable({ columns, data, onRowClick, emptyMessage, pageSize = 20, paginate = true }) {
   const { t } = useLang();
   const [sorting, setSorting] = useState([]);
   const [pagination, setPagination] = useState({ pageIndex: 0, pageSize });
@@ -16,12 +16,12 @@ export default function DataTable({ columns, data, onRowClick, emptyMessage, pag
   const table = useReactTable({
     data,
     columns,
-    state: { sorting, pagination },
+    state: { sorting, ...(paginate ? { pagination } : {}) },
     onSortingChange: setSorting,
     onPaginationChange: setPagination,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
+    ...(paginate ? { getPaginationRowModel: getPaginationRowModel() } : {}),
   });
 
   const rows = table.getRowModel().rows;
@@ -80,7 +80,7 @@ export default function DataTable({ columns, data, onRowClick, emptyMessage, pag
           </tbody>
         </table>
       </div>
-      {table.getPageCount() > 1 && (
+      {paginate && table.getPageCount() > 1 && (
         <div className="table-pagination">
           <button className="btn" onClick={() => table.previousPage()} disabled={!table.getCanPreviousPage()}>‹ {t("common.prevPage")}</button>
           <span>{t("common.pageOfTotal", { page: pagination.pageIndex + 1, total: table.getPageCount() })}</span>
