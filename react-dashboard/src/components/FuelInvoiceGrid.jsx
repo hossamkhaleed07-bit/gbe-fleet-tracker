@@ -90,6 +90,25 @@ export default function FuelInvoiceGrid() {
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
 
+  // The row-number gutter must show each row's stable position in the FULL,
+  // date-ordered list — not its position within whatever's currently
+  // filtered. react-datasheet-grid's default gutter is just `rowIndex + 1`
+  // of the array it's handed (displayRows), so it renumbers from 1 every
+  // time a filter narrows the view, which looks like rows changed place even
+  // though allRows itself never reorders.
+  //
+  // Created once (empty deps) and reads allRowsRef.current at call time,
+  // rather than closing over a freshly-memoized lookup per render — passing
+  // a new `gutterColumn` object on every allRows change hit a stale-prop
+  // issue in react-datasheet-grid where the grid kept using the gutter
+  // column from an earlier render instead of picking up the new one.
+  const gutterColumn = useMemo(() => ({
+    component: ({ rowData }) => {
+      const idx = allRowsRef.current.findIndex(r => rowKey(r) === rowKey(rowData));
+      return idx === -1 ? "" : idx + 1;
+    },
+  }), []);
+
   function buildSavePayload(row) {
     const payload = row.id ? { id: row.id } : {};
     for (const key of [
@@ -286,6 +305,7 @@ export default function FuelInvoiceGrid() {
         value={displayRows}
         onChange={handleChange}
         columns={columns}
+        gutterColumn={gutterColumn}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
         height={window.innerHeight * 0.65}
