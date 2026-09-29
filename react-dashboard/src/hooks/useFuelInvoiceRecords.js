@@ -11,9 +11,14 @@ async function fetchAllPages() {
   let start = 0;
   for (;;) {
     // Ascending — the grid should start from day 1 and read downward, not
-    // most-recent-first.
+    // most-recent-first. `id` is a required third tiebreaker: rows bulk
+    // -inserted together (the original 1965-row seed migration, or any
+    // paste/re-paste of a day's data) share the exact same entry_date AND
+    // created_at (one INSERT statement = one now()), so with only two sort
+    // columns Postgres has no guaranteed order among them and can return a
+    // different order on every reload even though nothing changed.
     const { data, error } = await sb.from("fuel_invoice_records").select("*")
-      .order("entry_date", { ascending: true }).order("created_at", { ascending: true })
+      .order("entry_date", { ascending: true }).order("created_at", { ascending: true }).order("id", { ascending: true })
       .range(start, start + PAGE_SIZE - 1);
     if (error) return { data: null, error };
     rows.push(...(data || []));
