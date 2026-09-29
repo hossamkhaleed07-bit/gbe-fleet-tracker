@@ -26,6 +26,11 @@ export default function FuelInvoiceGrid() {
   const initializedRef = useRef(false);
   const gridRowsRef = useRef([]);
   gridRowsRef.current = gridRows;
+  // Ctrl+Z history: a snapshot of the whole grid taken right before each
+  // committed change (typing, paste, row insert/delete/duplicate) — capped
+  // so it can't grow unbounded on a long editing session.
+  const undoStackRef = useRef([]);
+  const MAX_UNDO = 50;
 
   useEffect(() => {
     if (!initializedRef.current && !loading) {
@@ -67,6 +72,8 @@ export default function FuelInvoiceGrid() {
   // separate requests.
   async function handleChange(newValue, operations) {
     const previous = gridRowsRef.current;
+    undoStackRef.current.push(previous);
+    if (undoStackRef.current.length > MAX_UNDO) undoStackRef.current.shift();
     setGridRows(newValue);
 
     for (const op of operations) {
@@ -97,6 +104,60 @@ export default function FuelInvoiceGrid() {
     }
   }
 
+  // Ctrl+Z: restore the previous snapshot locally, then reconcile that
+  // reversal with the database — rows that only exist in the CURRENT state
+  // (created by the change being undone) get deleted; rows whose values
+  // differ between the two snapshots get saved back to their restored
+  // values. A row's own local edit history isn't tracked field-by-field, so
+  // this re-diffs the two full snapshots each time, which is simple and
+  // correct even though it re-saves more than the strict minimum on a
+  // large paste's undo.
+  async function handleUndo() {
+    const restored = undoStackRef.current.pop();
+    if (!restored) return;
+    const current = gridRowsRef.current;
+    setGridRows(restored);
+
+    const restoredById = new Map(restored.filter(r => r.id).map(r => [r.id, r]));
+    const currentIds = new Set(current.filter(r => r.id).map(r => r.id));
+
+    const toDelete = [...currentIds].filter(id => !restoredById.has(id));
+    const toSave = [];
+    for (const [id, row] of restoredById) {
+      const wasRow = current.find(r => r.id === id);
+      if (!wasRow || JSON.stringify(wasRow) !== JSON.stringify(row)) toSave.push(buildSavePayload(row));
+    }
+
+    if (toDelete.length) {
+      const { error } = await deleteRecords(toDelete);
+      if (error) window.alert("Undo failed: " + error.message);
+    }
+    if (toSave.length) {
+      const { error } = await bulkUpsert(toSave);
+      if (error) window.alert("Undo failed: " + error.message);
+    }
+  }
+
+  // Document-level (not a wrapper-div handler): react-datasheet-grid tracks
+  // its "active cell" internally without always moving real DOM focus onto
+  // a descendant of this component, so a handler relying on React's normal
+  // event bubbling through this component's own tree would miss most
+  // keypresses. This still only runs while the grid page is mounted.
+  useEffect(() => {
+    function onKeyDown(e) {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        handleUndo();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+    // Deliberately no deps array: re-attaches every render so it always
+    // closes over the latest handleUndo/lookupDaName/records (lookupDaName
+    // in particular closes over state that starts empty before the DA
+    // directory finishes loading) — cheap for a single listener.
+  });
+
   const columns = useMemo(() => {
     const cols = [
       { ...keyColumn("data_source", makeSelectDsgColumn("data_source", () => distinctValues(records, "data_source"))), title: "Data Source", minWidth: 130 },
@@ -122,12 +183,12 @@ export default function FuelInvoiceGrid() {
   }, [records, canEdit]);
 
   return (
-    <div>
+    <div className="fuel-invoice-grid-wrap">
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
         <div className="cards-count">
           {gridRows.length} record{gridRows.length === 1 ? "" : "s"}
           <span className="ink-muted" style={{ marginInlineStart: "0.6rem" }}>
-            — click a cell to select it, arrow keys / Shift+arrows to navigate and select, Ctrl+C / Ctrl+V to copy-paste a range from Excel or Sheets, right-click a row for insert/delete/duplicate.
+            — click a cell to select it, arrow keys / Shift+arrows to navigate and select, Ctrl+C / Ctrl+V to copy-paste a range from Excel or Sheets, Ctrl+Z to undo, right-click a row for insert/delete/duplicate.
           </span>
         </div>
       </div>
@@ -139,6 +200,8 @@ export default function FuelInvoiceGrid() {
         rowKey={({ rowData, rowIndex }) => rowData.id ?? `new-${rowIndex}`}
         lockRows={!canEdit}
         height={window.innerHeight * 0.65}
+        rowHeight={38}
+        headerRowHeight={42}
         createRow={() => ({})}
       />
     </div>

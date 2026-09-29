@@ -426,6 +426,52 @@
   }
   .notes-cell-input:hover { border-color: var(--border); }
   .notes-cell-input:focus { outline: none; background: var(--plane); border-color: var(--blue); box-shadow: 0 0 0 3px color-mix(in srgb, var(--blue) 14%, transparent); }
+
+  /* react-datasheet-grid (Fuel & Invoice module) — reskin via the library's
+     own CSS custom properties instead of fighting its class specificity,
+     so it reads as part of this app instead of a bare default spreadsheet. */
+  .fuel-invoice-grid-wrap {
+    --dsg-border-color: var(--border);
+    --dsg-selection-border-color: var(--blue);
+    --dsg-selection-background-color: color-mix(in srgb, var(--blue) 6%, transparent);
+    --dsg-header-text-color: var(--ink-muted);
+    --dsg-header-active-text-color: var(--ink);
+    --dsg-cell-background-color: var(--surface-1);
+    --dsg-cell-disabled-background-color: var(--plane);
+  }
+  .fuel-invoice-grid-wrap .dsg-container {
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm);
+    font-family: inherit;
+  }
+  .fuel-invoice-grid-wrap .dsg-cell-header-container { font-weight: 700; font-size: 0.78rem; }
+  .fuel-invoice-grid-wrap .dsg-input,
+  .fuel-invoice-grid-wrap .dsg-select-input,
+  .fuel-invoice-grid-wrap .dsg-select-display,
+  .fuel-invoice-grid-wrap .dsg-readonly-cell {
+    font-family: inherit; font-size: 0.85rem;
+  }
+  .fuel-invoice-grid-wrap .dsg-cell:not(.dsg-cell-disabled):not(.dsg-cell-header):not(.dsg-cell-gutter):hover {
+    background: color-mix(in srgb, var(--blue) 3%, var(--dsg-cell-background-color));
+  }
+  .fuel-invoice-grid-wrap .dsg-select-display,
+  .fuel-invoice-grid-wrap .dsg-readonly-cell {
+    width: 100%; height: 100%; display: flex; align-items: center; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fuel-invoice-grid-wrap .dsg-select-input {
+    width: 100%; height: 100%; border: none; background: none; padding: 0 10px; cursor: pointer;
+  }
+  .fuel-invoice-grid-wrap .dsg-add-row {
+    background: var(--surface-1); border-color: var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); padding: 0.6rem 0.8rem;
+  }
+  .fuel-invoice-grid-wrap .dsg-add-row-btn,
+  .fuel-invoice-grid-wrap .dsg-add-row-input {
+    background: var(--plane); border-color: var(--border); border-radius: 999px; font-family: inherit;
+  }
+  .fuel-invoice-grid-wrap .dsg-context-menu {
+    border-radius: var(--radius-sm); box-shadow: var(--shadow-md); font-family: inherit; font-size: 0.85rem;
+  }
+  .fuel-invoice-grid-wrap .dsg-context-menu-item:hover { background: var(--plane); }
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
   a.media-link { color: var(--blue); text-decoration: none; }
