@@ -109,6 +109,33 @@ export default function FuelInvoiceGrid() {
     },
   }), []);
 
+  // Record count moved next to the grid's own native "Add N rows" control
+  // (same bottom bar, not a separate line above the grid) — stable
+  // (empty deps) for the same reason as gutterColumn above, reading the
+  // live counts via refs at render time instead of closing over a
+  // per-render value.
+  const addRowsComponent = useMemo(() => function AddRowsWithCount({ addRows }) {
+    const [value, setValueState] = useState(1);
+    return (
+      <div className="dsg-add-row fuel-invoice-add-row">
+        <div className="cards-count">
+          {displayRowsRef.current.length}{displayRowsRef.current.length !== allRowsRef.current.length ? ` of ${allRowsRef.current.length}` : ""} record{allRowsRef.current.length === 1 ? "" : "s"}
+        </div>
+        <span style={{ flex: 1 }} />
+        <button type="button" className="dsg-add-row-btn" onClick={() => addRows(value)}>Add</button>
+        <input
+          className="dsg-add-row-input"
+          type="number"
+          min={1}
+          value={value}
+          onChange={e => setValueState(Math.max(1, Math.round(parseInt(e.target.value) || 0)))}
+          onKeyDown={e => { if (e.key === "Enter") addRows(value); }}
+        />
+        <span> rows</span>
+      </div>
+    );
+  }, []);
+
   function buildSavePayload(row) {
     const payload = row.id ? { id: row.id } : {};
     for (const key of [
@@ -292,15 +319,12 @@ export default function FuelInvoiceGrid() {
         </div>
       </div>
 
-      <div className="cards-count" style={{ marginBottom: "0.6rem" }}>
-        {displayRows.length}{displayRows.length !== allRows.length ? ` of ${allRows.length}` : ""} record{allRows.length === 1 ? "" : "s"}
-      </div>
-
       <DataSheetGrid
         value={displayRows}
         onChange={handleChange}
         columns={columns}
         gutterColumn={gutterColumn}
+        addRowsComponent={addRowsComponent}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
         height={window.innerHeight * 0.65}
