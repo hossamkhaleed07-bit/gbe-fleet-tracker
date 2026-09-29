@@ -45,6 +45,14 @@ export default function FuelInvoiceGrid() {
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
 
+  const hasActiveFilters = search.trim() !== "" || dateFrom !== "" || dateTo !== "" || Object.values(fieldFilters).some(Boolean);
+  function handleClearFilters() {
+    setSearch("");
+    setFieldFilters({});
+    setDateFrom("");
+    setDateTo("");
+  }
+
   useEffect(() => {
     if (!initializedRef.current && !loading) {
       setAllRows(records);
@@ -255,6 +263,9 @@ export default function FuelInvoiceGrid() {
           <span className="ink-muted">–</span>
           <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" />
         </div>
+        {hasActiveFilters && (
+          <button className="btn pill-add-btn" onClick={handleClearFilters}>Clear</button>
+        )}
         <span style={{ flex: 1 }} />
         <div className="pill-search">
           <span className="pill-search-ic"><Search size={14} /></span>
