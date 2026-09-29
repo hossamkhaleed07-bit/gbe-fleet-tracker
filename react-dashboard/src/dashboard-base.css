@@ -584,6 +584,14 @@
   }
   .pill-select-wrap select:hover { border-color: var(--ink-muted); }
   .pill-search:has(input:hover), .pill-search:has(input:focus) { border-color: var(--ink-muted); }
+  .pill-date-wrap {
+    display: flex; align-items: center; gap: 0.4rem; padding: 0.45rem 0.9rem; border-radius: 999px;
+    border: 1px solid var(--border); background: var(--surface-1); transition: border-color 0.15s ease;
+  }
+  .pill-date-wrap input[type="date"] {
+    border: none; background: none; outline: none; font-size: 0.85rem; color: var(--ink-2); font-weight: 600; font-family: inherit;
+  }
+  .pill-date-wrap:has(input:hover), .pill-date-wrap:has(input:focus) { border-color: var(--ink-muted); }
   .pill-add-btn { border-radius: 999px; }
   .cards-count { font-size: 0.8rem; color: var(--ink-muted); margin-bottom: 0.9rem; }
 
