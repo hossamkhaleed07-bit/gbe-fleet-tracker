@@ -42,6 +42,8 @@ export default function FuelInvoiceGrid() {
 
   const [search, setSearch] = useState("");
   const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   useEffect(() => {
     if (!initializedRef.current && !loading) {
@@ -69,12 +71,14 @@ export default function FuelInvoiceGrid() {
     for (const key of SELECT_FIELD_KEYS) {
       if (fieldFilters[key]) r = r.filter(row => (row[key] || "") === fieldFilters[key]);
     }
+    if (dateFrom) r = r.filter(row => (row.entry_date || "") >= dateFrom);
+    if (dateTo) r = r.filter(row => (row.entry_date || "") <= dateTo);
     if (search.trim()) {
       const s = search.trim().toLowerCase();
       r = r.filter(row => FUEL_INVOICE_FIELDS.some(f => (row[f.key] || "").toString().toLowerCase().includes(s)));
     }
     return r;
-  }, [allRows, fieldFilters, search]);
+  }, [allRows, fieldFilters, dateFrom, dateTo, search]);
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
 
@@ -246,6 +250,11 @@ export default function FuelInvoiceGrid() {
             </select>
           </div>
         ))}
+        <div className="pill-date-wrap">
+          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date" />
+          <span className="ink-muted">–</span>
+          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" />
+        </div>
         <span style={{ flex: 1 }} />
         <div className="pill-search">
           <span className="pill-search-ic"><Search size={14} /></span>
