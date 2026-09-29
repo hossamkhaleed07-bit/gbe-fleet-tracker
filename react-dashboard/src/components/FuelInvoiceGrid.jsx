@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { Type, Hash, DollarSign, CalendarDays, CircleDot, AlignLeft, IdCard, Layers, Search } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import DataTable from "./DataTable";
+import VirtualizedGrid from "./VirtualizedGrid";
 import PillSelectField from "./PillSelectField";
 import FuelInvoiceRecordModal from "./FuelInvoiceRecordModal";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
@@ -304,20 +304,18 @@ export default function FuelInvoiceGrid() {
         groups.map(([groupValue, groupRows]) => (
           <details key={groupValue} open style={{ marginBottom: "1rem" }}>
             <summary style={{ cursor: "pointer", fontWeight: 700, padding: "0.5rem 0" }}>{groupValue} ({groupRows.length})</summary>
-            <DataTable
+            <VirtualizedGrid
               columns={columns}
               data={canEdit ? [...groupRows, makeDraftRow(groupBy === "entry_date" ? groupValue : today())] : groupRows}
               emptyMessage={loading ? "Loading..." : "No records"}
-              paginate={false}
             />
           </details>
         ))
       ) : (
-        <DataTable
+        <VirtualizedGrid
           columns={columns}
           data={canEdit ? [...rows, makeDraftRow(today())] : rows}
           emptyMessage={loading ? "Loading..." : "No records"}
-          paginate={false}
         />
       )}
 
