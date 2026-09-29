@@ -78,7 +78,7 @@ export default function FuelInvoiceGrid() {
 
   const [search, setSearch] = useState("");
   const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
-  const [groupBy, setGroupBy] = useState("entry_date");
+  const [groupBy, setGroupBy] = useState("");
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [modalState, setModalState] = useState(null); // null | { isNew, record }
   const [saving, setSaving] = useState(false);
