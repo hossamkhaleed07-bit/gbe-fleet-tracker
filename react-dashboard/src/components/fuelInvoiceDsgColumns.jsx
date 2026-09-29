@@ -30,23 +30,29 @@ export function makeSelectDsgColumn(fieldKey, getOptions) {
   function SelectCell({ active, rowData, setRowData, disabled }) {
     const style = pillStyle(fieldColorKey(fieldKey, rowData));
     if (!active) {
-      return <div className="dsg-select-display" style={style}>{rowData || ""}</div>;
+      return (
+        <div className="dsg-select-display">
+          {rowData ? <span className="dsg-pill" style={style}>{rowData}</span> : null}
+        </div>
+      );
     }
     const options = getOptions();
     const allOptions = rowData && !options.includes(rowData) ? [rowData, ...options] : options;
     return (
-      <select
-        autoFocus
-        className="dsg-select-input"
-        tabIndex={-1}
-        disabled={disabled}
-        value={rowData || ""}
-        style={style}
-        onChange={e => setRowData(e.target.value || null)}
-      >
-        <option value=""></option>
-        {allOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-      </select>
+      <div className="dsg-select-display">
+        <select
+          autoFocus
+          className="dsg-select-input dsg-pill"
+          tabIndex={-1}
+          disabled={disabled}
+          value={rowData || ""}
+          style={style}
+          onChange={e => setRowData(e.target.value || null)}
+        >
+          <option value=""></option>
+          {allOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+        </select>
+      </div>
     );
   }
   return {

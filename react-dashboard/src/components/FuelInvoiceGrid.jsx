@@ -145,7 +145,12 @@ export default function FuelInvoiceGrid() {
   // keypresses. This still only runs while the grid page is mounted.
   useEffect(() => {
     function onKeyDown(e) {
-      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "z") {
+      // `e.code` (physical key position), not `e.key` — `e.key` reports the
+      // CHARACTER for whatever keyboard language is currently active, so on
+      // an Arabic layout Ctrl+Z's physical key reports the Arabic letter in
+      // that slot instead of "z", and the shortcut would silently never
+      // match.
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.code === "KeyZ") {
         e.preventDefault();
         handleUndo();
       }

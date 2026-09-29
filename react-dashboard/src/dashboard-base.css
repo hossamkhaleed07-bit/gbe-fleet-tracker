@@ -454,13 +454,26 @@
   .fuel-invoice-grid-wrap .dsg-cell:not(.dsg-cell-disabled):not(.dsg-cell-header):not(.dsg-cell-gutter):hover {
     background: color-mix(in srgb, var(--blue) 3%, var(--dsg-cell-background-color));
   }
+  /* All cell content centered, per her explicit request. */
+  .fuel-invoice-grid-wrap .dsg-input { text-align: center; }
   .fuel-invoice-grid-wrap .dsg-select-display,
   .fuel-invoice-grid-wrap .dsg-readonly-cell {
-    width: 100%; height: 100%; display: flex; align-items: center; padding: 0 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; padding: 0 8px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
   .fuel-invoice-grid-wrap .dsg-select-input {
-    width: 100%; height: 100%; border: none; background: none; padding: 0 10px; cursor: pointer;
+    width: 100%; height: 100%; border: none; background: none; cursor: pointer; text-align: center; text-align-last: center;
   }
+  /* The colored "pill" itself — a compact rounded badge inset within the
+     cell (not a flat edge-to-edge color fill), matching how single-select
+     values are shown across the rest of this app (badges) and in the
+     Airtable/Monday-style reference she pointed to. */
+  .fuel-invoice-grid-wrap .dsg-pill {
+    display: inline-flex; align-items: center; justify-content: center;
+    padding: 0.2rem 0.7rem; border-radius: 999px; font-weight: 600; font-size: 0.78rem;
+    max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    background: var(--plane); color: var(--ink-2);
+  }
+  select.dsg-select-input.dsg-pill { appearance: none; -webkit-appearance: none; }
   .fuel-invoice-grid-wrap .dsg-add-row {
     background: var(--surface-1); border-color: var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); padding: 0.6rem 0.8rem;
   }
