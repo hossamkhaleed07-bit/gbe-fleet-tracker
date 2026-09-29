@@ -1,45 +1,56 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Search } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
 import { useAuth } from "../contexts/AuthContext";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
-import { distinctValues, computeAmountVat, money } from "../lib/fuelInvoice";
+import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money } from "../lib/fuelInvoice";
 import { makeSelectDsgColumn, makeReadOnlyDsgColumn, dsgDateColumn } from "./fuelInvoiceDsgColumns";
 
-// Exact 17-column order of the source sheet (Batch, the 18th field, isn't
-// part of her spec and is left out of this grid) — both the column
-// definitions below and buildSavePayload rely on this same list.
 const NID_TEXT_COLUMN = createTextColumn(); // plain text — never coerced to a number, so leading zeros survive
+const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
+
+// A stable per-row key that exists from the moment a row is created — even
+// before it's ever been saved (and so has no database `id` yet). Needed so
+// filtering can show a subset of rows to react-datasheet-grid while still
+// correctly reconciling edits back into the FULL row list by identity
+// rather than by array position (which the filtered view can't provide).
+function rowKey(row) {
+  return row.id ?? row.__tempId;
+}
 
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
   const { records, loading, deleteRecords, bulkUpsert } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
 
-  // The grid's own local, fully-controlled row state — seeded once from the
-  // hook's `records` when they first arrive, then owned locally so typing
-  // feels instant instead of waiting on a network round trip per keystroke.
-  // Saves happen in the background (see handleChange); new rows created
-  // elsewhere (another tab/session) get appended in as they arrive.
-  const [gridRows, setGridRows] = useState([]);
+  // The grid's own local, fully-controlled row state (the FULL set — see
+  // displayRows below for the filtered subset actually shown) — seeded once
+  // from the hook's `records` when they first arrive, then owned locally so
+  // typing feels instant instead of waiting on a network round trip per
+  // keystroke. Saves happen in the background (see handleChange); new rows
+  // created elsewhere (another tab/session) get appended in as they arrive.
+  const [allRows, setAllRows] = useState([]);
   const initializedRef = useRef(false);
-  const gridRowsRef = useRef([]);
-  gridRowsRef.current = gridRows;
-  // Ctrl+Z history: a snapshot of the whole grid taken right before each
-  // committed change (typing, paste, row insert/delete/duplicate) — capped
-  // so it can't grow unbounded on a long editing session.
+  const allRowsRef = useRef([]);
+  allRowsRef.current = allRows;
+  // Ctrl+Z history: a snapshot of the whole (unfiltered) grid taken right
+  // before each committed change — capped so it can't grow unbounded.
   const undoStackRef = useRef([]);
   const MAX_UNDO = 50;
 
+  const [search, setSearch] = useState("");
+  const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
+
   useEffect(() => {
     if (!initializedRef.current && !loading) {
-      setGridRows(records);
+      setAllRows(records);
       initializedRef.current = true;
       return;
     }
     if (initializedRef.current) {
-      setGridRows(prev => {
+      setAllRows(prev => {
         const known = new Set(prev.map(r => r.id).filter(Boolean));
         const missing = records.filter(r => !known.has(r.id));
         return missing.length ? [...prev, ...missing] : prev;
@@ -49,6 +60,23 @@ export default function FuelInvoiceGrid() {
   }, [records, loading]);
 
   const canEdit = isAdmin;
+
+  // The filtered view actually handed to <DataSheetGrid>. Its row order is
+  // whatever `allRows` already holds (fetched date-ascending, day 1 first —
+  // see useFuelInvoiceRecords), just with non-matching rows left out.
+  const displayRows = useMemo(() => {
+    let r = allRows;
+    for (const key of SELECT_FIELD_KEYS) {
+      if (fieldFilters[key]) r = r.filter(row => (row[key] || "") === fieldFilters[key]);
+    }
+    if (search.trim()) {
+      const s = search.trim().toLowerCase();
+      r = r.filter(row => FUEL_INVOICE_FIELDS.some(f => (row[f.key] || "").toString().toLowerCase().includes(s)));
+    }
+    return r;
+  }, [allRows, fieldFilters, search]);
+  const displayRowsRef = useRef([]);
+  displayRowsRef.current = displayRows;
 
   function buildSavePayload(row) {
     const payload = row.id ? { id: row.id } : {};
@@ -66,19 +94,42 @@ export default function FuelInvoiceGrid() {
     return payload;
   }
 
+  // Merges a change made to the FILTERED view back into the full row list,
+  // matching by rowKey (id, or the client-side __tempId a brand-new row is
+  // given the moment it's created) rather than by array position — array
+  // position in the filtered view has no fixed relationship to position in
+  // the full list once a filter has hidden some rows.
+  function mergeIntoAllRows(newFilteredValue, previousFiltered, operations) {
+    setAllRows(prevAll => {
+      const next = [...prevAll];
+      for (const op of operations) {
+        if (op.type === "DELETE") {
+          const removedKeys = new Set(previousFiltered.slice(op.fromRowIndex, op.toRowIndex).map(rowKey));
+          for (let i = next.length - 1; i >= 0; i--) if (removedKeys.has(rowKey(next[i]))) next.splice(i, 1);
+          continue;
+        }
+        for (const row of newFilteredValue.slice(op.fromRowIndex, op.toRowIndex)) {
+          const idx = next.findIndex(r => rowKey(r) === rowKey(row));
+          if (idx !== -1) next[idx] = row; else next.push(row);
+        }
+      }
+      return next;
+    });
+  }
+
   // react-datasheet-grid batches a whole paste (or a whole typed edit) into
   // one contiguous operation per affected range — so a 200-row paste is one
   // CREATE operation here, saved with a single bulkUpsert call, not 200
   // separate requests.
   async function handleChange(newValue, operations) {
-    const previous = gridRowsRef.current;
-    undoStackRef.current.push(previous);
+    const previousFiltered = displayRowsRef.current;
+    undoStackRef.current.push(allRowsRef.current);
     if (undoStackRef.current.length > MAX_UNDO) undoStackRef.current.shift();
-    setGridRows(newValue);
+    mergeIntoAllRows(newValue, previousFiltered, operations);
 
     for (const op of operations) {
       if (op.type === "DELETE") {
-        const removedIds = previous.slice(op.fromRowIndex, op.toRowIndex).map(r => r.id).filter(Boolean);
+        const removedIds = previousFiltered.slice(op.fromRowIndex, op.toRowIndex).map(r => r.id).filter(Boolean);
         if (removedIds.length) {
           const { error } = await deleteRecords(removedIds);
           if (error) window.alert("Delete failed: " + error.message);
@@ -87,44 +138,41 @@ export default function FuelInvoiceGrid() {
       }
       // CREATE or UPDATE
       const slice = newValue.slice(op.fromRowIndex, op.toRowIndex);
+      const keys = slice.map(rowKey);
       const payloads = slice.map(buildSavePayload);
       if (!payloads.length) continue;
       const { data, error } = await bulkUpsert(payloads);
       if (error) { window.alert("Save failed: " + error.message); continue; }
       // Write the DB-generated id (and server-computed fields) back into
-      // the local grid rows at the same positions, so a second edit to a
-      // just-created row updates it instead of creating another one.
-      setGridRows(cur => {
-        const next = [...cur];
-        for (let i = 0; i < data.length && op.fromRowIndex + i < next.length; i++) {
-          next[op.fromRowIndex + i] = { ...next[op.fromRowIndex + i], ...data[i] };
-        }
-        return next;
-      });
+      // the matching rows (by their stable key, not position — a filter
+      // may have changed what's visible while this save was in flight).
+      setAllRows(cur => cur.map(r => {
+        const i = keys.indexOf(rowKey(r));
+        return i === -1 ? r : { ...r, ...data[i] };
+      }));
     }
   }
 
-  // Ctrl+Z: restore the previous snapshot locally, then reconcile that
-  // reversal with the database — rows that only exist in the CURRENT state
-  // (created by the change being undone) get deleted; rows whose values
-  // differ between the two snapshots get saved back to their restored
-  // values. A row's own local edit history isn't tracked field-by-field, so
-  // this re-diffs the two full snapshots each time, which is simple and
-  // correct even though it re-saves more than the strict minimum on a
-  // large paste's undo.
+  // Ctrl+Z: restore the previous full-row-list snapshot, then reconcile
+  // that reversal with the database — rows that only exist in the CURRENT
+  // state (created by the change being undone) get deleted; rows whose
+  // values differ between the two snapshots get saved back to their
+  // restored values.
   async function handleUndo() {
     const restored = undoStackRef.current.pop();
     if (!restored) return;
-    const current = gridRowsRef.current;
-    setGridRows(restored);
+    const current = allRowsRef.current;
+    setAllRows(restored);
 
-    const restoredById = new Map(restored.filter(r => r.id).map(r => [r.id, r]));
-    const currentIds = new Set(current.filter(r => r.id).map(r => r.id));
+    const restoredByKey = new Map(restored.map(r => [rowKey(r), r]));
+    const currentKeys = new Set(current.map(rowKey));
 
-    const toDelete = [...currentIds].filter(id => !restoredById.has(id));
+    const toDelete = [];
     const toSave = [];
-    for (const [id, row] of restoredById) {
-      const wasRow = current.find(r => r.id === id);
+    for (const key of currentKeys) if (!restoredByKey.has(key) && typeof key === "string" && !key.startsWith("temp-")) toDelete.push(key);
+    for (const [key, row] of restoredByKey) {
+      if (!row.id) continue; // never-saved row — nothing in the DB to restore
+      const wasRow = current.find(r => rowKey(r) === key);
       if (!wasRow || JSON.stringify(wasRow) !== JSON.stringify(row)) toSave.push(buildSavePayload(row));
     }
 
@@ -189,9 +237,25 @@ export default function FuelInvoiceGrid() {
 
   return (
     <div className="fuel-invoice-grid-wrap">
+      <div className="pill-bar">
+        {GROUPABLE_FIELDS.map(f => (
+          <div className="pill-select-wrap" key={f.key}>
+            <select value={fieldFilters[f.key] || ""} onChange={e => setFieldFilters(prev => ({ ...prev, [f.key]: e.target.value }))}>
+              <option value="">{f.label}</option>
+              {distinctValues(allRows, f.key).map(opt => <option key={opt} value={opt}>{opt}</option>)}
+            </select>
+          </div>
+        ))}
+        <span style={{ flex: 1 }} />
+        <div className="pill-search">
+          <span className="pill-search-ic"><Search size={14} /></span>
+          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." />
+        </div>
+      </div>
+
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
         <div className="cards-count">
-          {gridRows.length} record{gridRows.length === 1 ? "" : "s"}
+          {displayRows.length}{displayRows.length !== allRows.length ? ` of ${allRows.length}` : ""} record{allRows.length === 1 ? "" : "s"}
           <span className="ink-muted" style={{ marginInlineStart: "0.6rem" }}>
             — click a cell to select it, arrow keys / Shift+arrows to navigate and select, Ctrl+C / Ctrl+V to copy-paste a range from Excel or Sheets, Ctrl+Z to undo, right-click a row for insert/delete/duplicate.
           </span>
@@ -199,15 +263,15 @@ export default function FuelInvoiceGrid() {
       </div>
 
       <DataSheetGrid
-        value={gridRows}
+        value={displayRows}
         onChange={handleChange}
         columns={columns}
-        rowKey={({ rowData, rowIndex }) => rowData.id ?? `new-${rowIndex}`}
+        rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
         height={window.innerHeight * 0.65}
         rowHeight={38}
         headerRowHeight={42}
-        createRow={() => ({})}
+        createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
       />
     </div>
   );

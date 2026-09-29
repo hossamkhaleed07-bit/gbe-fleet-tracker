@@ -10,8 +10,10 @@ async function fetchAllPages() {
   const rows = [];
   let start = 0;
   for (;;) {
+    // Ascending — the grid should start from day 1 and read downward, not
+    // most-recent-first.
     const { data, error } = await sb.from("fuel_invoice_records").select("*")
-      .order("entry_date", { ascending: false }).order("created_at", { ascending: false })
+      .order("entry_date", { ascending: true }).order("created_at", { ascending: true })
       .range(start, start + PAGE_SIZE - 1);
     if (error) return { data: null, error };
     rows.push(...(data || []));
