@@ -4,6 +4,7 @@ import { useLang } from "../contexts/LanguageContext";
 import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { downloadCsv } from "../lib/csv";
+import HeroPortal from "../components/HeroPortal";
 
 const emptyForm = { plate: "", vendor: "", fuel: "", model: "", rate: "" };
 
@@ -111,17 +112,17 @@ export default function Fleet() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("fleet.breadcrumb")}</b></div>
           <h1 className="page-title">{t("fleet.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
-      <div style={{ marginBottom: "1rem" }}>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-actions" className="fx-page-actions">
         <button className="btn btn-primary" style={{ width: "auto" }} onClick={openAdd}>{t("fleet.addNew")}</button>
-      </div>
-      <div className="local-filters">
+      </HeroPortal>
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("fleet.plateLabel")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
@@ -134,7 +135,7 @@ export default function Fleet() {
             <option value="inactive">{t("fleet.inactiveF")}</option>
           </select>
         </div>
-      </div>
+      </HeroPortal>
       <div className="cards-count">{t("fleet.vehiclesCount", { n: rows.length })}</div>
       <DataTable columns={columns} data={rows} emptyMessage={t("fleet.noVehicles")} />
 

@@ -16,6 +16,7 @@ import { PROJECT_LIST } from "../lib/constants";
 import { FUEL_STATUS_CLASS as STATUS_CLASS, FUEL_STATUS_KEY as STATUS_KEY } from "../lib/fuelStatus";
 import { getPageCache, setPageCache } from "../lib/pageCache";
 import { deriveAttendanceStatus } from "../lib/attendanceCodes";
+import HeroPortal from "../components/HeroPortal";
 
 const CACHE_KEY = "fuelApproval.all";
 
@@ -196,30 +197,19 @@ export default function FuelApproval() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("fuel.approvalBreadcrumb")}</b></div>
           <h1 className="page-title">{t("fuel.approvalBreadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
+      </HeroPortal>
       {error && <div style={{ color: "var(--critical)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</div>}
 
-      <div className="local-filters">
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("common.searchByNameOrId")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
-        </div>
-        <div className="field">
-          <label>{t("fuel.colDate")}</label>
-          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
-        </div>
-        <div className="field">
-          <label>{t("common.project")}</label>
-          <select value={project} onChange={e => setProject(e.target.value)}>
-            <option value="">{t("common.allProjects")}</option>
-            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
         </div>
         <div className="field">
           <label>{t("common.status")}</label>
@@ -230,8 +220,19 @@ export default function FuelApproval() {
             <option value="rejected">{t("fuel.statusRejected")}</option>
           </select>
         </div>
+        <div className="field">
+          <label>{t("common.project")}</label>
+          <select value={project} onChange={e => setProject(e.target.value)}>
+            <option value="">{t("common.allProjects")}</option>
+            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <div className="field">
+          <label>{t("fuel.colDate")}</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)} />
+        </div>
         <button className="btn" onClick={handleReset}>{t("common.clearFilters")}</button>
-      </div>
+      </HeroPortal>
       <div className="cards-count">{t("compare.recordsCount", { n: filteredRows.length })}</div>
 
       <DataTable

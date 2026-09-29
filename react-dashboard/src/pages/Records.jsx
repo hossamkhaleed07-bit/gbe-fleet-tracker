@@ -10,22 +10,11 @@ import { useUndo } from "../contexts/UndoContext";
 import GlobalFilters from "../components/GlobalFilters";
 import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
-import { compareStatus, buildGroupMetrics, localToday } from "../lib/calc";
+import { compareStatus, buildGroupMetrics, buildMissingRows } from "../lib/calc";
 import { downloadCsv, GROUP_CSV_KEYS, groupToCsvRow } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
-
-function daysInRange(fromStr, toStr) {
-  const start = fromStr || toStr || localToday();
-  const end = toStr || localToday();
-  const days = [];
-  const d = new Date(start + "T00:00:00Z");
-  const endD = new Date(end + "T00:00:00Z");
-  while (d <= endD && days.length < 62) {
-    days.push(d.toISOString().slice(0, 10));
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return days;
-}
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 export default function Records() {
   const {
@@ -41,25 +30,11 @@ export default function Records() {
   const [status, setStatus] = useState(searchParams.get("status") || "");
   const [project, setProject] = useState(searchParams.get("project") || "");
   const [busyDelete, setBusyDelete] = useState(null);
+  useClearFilters(() => { setSearch(""); setStatus(""); setProject(""); });
 
   const missingRows = useMemo(() => {
-    if (status !== "incomplete_or_missing") return [];
-    const days = daysInRange(from, to);
-    const submitted = new Set(allCompareGroups.map(g => `${g.identity_number}|${g.day}`));
-    const rows = [];
-    for (const d of scopedDrivers) {
-      if (!d.is_active) continue;
-      for (const day of days) {
-        if (!submitted.has(`${d.identity_number}|${day}`)) {
-          rows.push({
-            day, identity_number: d.identity_number, full_name: d.full_name,
-            vehicle_plate: d.assigned_vehicle_plate || null, project: d.project || null,
-            start: null, end: null, synthetic: true,
-          });
-        }
-      }
-    }
-    return rows;
+    if (status !== "incomplete_or_missing" && status !== "missing") return [];
+    return buildMissingRows(scopedDrivers, allCompareGroups, from, to);
   }, [status, from, to, allCompareGroups, scopedDrivers]);
 
   const rows = useMemo(() => {
@@ -69,6 +44,7 @@ export default function Records() {
     if (status === "start_only") r = r.filter(g => g.start && !g.end);
     if (status === "end_only") r = r.filter(g => !g.start && g.end);
     if (status === "incomplete_or_missing") r = [...r.filter(g => !(g.start && g.end)), ...missingRows];
+    if (status === "missing") r = missingRows;
     if (project) r = r.filter(g => g.project === project);
     if (search.trim()) {
       const s = search.trim().toLowerCase();
@@ -160,16 +136,16 @@ export default function Records() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("records.breadcrumb")}</b></div>
           <h1 className="page-title">{t("records.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
+      </HeroPortal>
       <GlobalFilters />
 
-      <div className="local-filters">
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("records.searchLabel")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
@@ -183,6 +159,7 @@ export default function Records() {
             <option value="start_only">{t("detailModal.startOnly")}</option>
             <option value="end_only">{t("detailModal.endOnly")}</option>
             <option value="incomplete_or_missing">{t("records.statusIncompleteOrMissing")}</option>
+            <option value="missing">{t("records.statusMissing")}</option>
           </select>
         </div>
         <div className="field">
@@ -192,7 +169,7 @@ export default function Records() {
             {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-      </div>
+      </HeroPortal>
 
       <DataTable columns={columns} data={rows} emptyMessage={t("records.noMatchingRecords")} />
     </>

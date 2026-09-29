@@ -3,6 +3,29 @@ import { sb } from "../lib/supabase";
 import { buildDriverComparison, buildStationReport, buildVehicleEndHistory, summarizeReinforcement, sumAutomaticFuel } from "../lib/calc";
 import { PROJECT_LIST } from "../lib/constants";
 
+const PAGE_SIZE = 1000;
+
+// Fetches every matching row via Supabase's .range() paging, looping until a
+// short page signals the end — replaces a fixed .limit(N) that silently
+// dropped rows (in whatever order the query used) once a table grew past N.
+// A full calendar month across the whole driver roster (Driver Performance's
+// typical query) already exceeds 1000, let alone the flat 5000 caps this
+// used to have, so a bigger fixed number would only postpone the same bug.
+// `buildQuery` must return a FRESH query builder each call (so a distinct
+// .range() can be layered on per page) — pass a function, not a built query.
+async function fetchAllPages(buildQuery, pageSize = PAGE_SIZE) {
+  const rows = [];
+  let start = 0;
+  for (;;) {
+    const { data, error } = await buildQuery().range(start, start + pageSize - 1);
+    if (error) return { data: null, error };
+    rows.push(...(data || []));
+    if (!data || data.length < pageSize) break;
+    start += pageSize;
+  }
+  return { data: rows, error: null };
+}
+
 export function useDashboardData() {
   const [allRows, setAllRows] = useState([]);
   const [allCompareGroups, setAllCompareGroups] = useState([]);
@@ -22,6 +45,7 @@ export function useDashboardData() {
   const [reinforcementRows, setReinforcementRows] = useState([]);
   const [reinforcementSummary, setReinforcementSummary] = useState({ pending: 0, approved: 0, rejected: 0, total: 0, totalCost: 0 });
   const [attendanceRows, setAttendanceRows] = useState([]);
+  const [submissionReasonByKey, setSubmissionReasonByKey] = useState({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
@@ -34,6 +58,16 @@ export function useDashboardData() {
   // currently-selected date range — Off Duty needs "the day before" the
   // range even when that day falls outside it.
   const endHistoryRowsRef = useRef([]);
+  // loadData is called independently from several places that can legitimately
+  // fire close together on first mount — e.g. DataProvider's own
+  // session-ready effect, and a page like Driver Performance that forces its
+  // own month range on every mount. Two in-flight requests race, and without
+  // this guard, whichever NETWORK RESPONSE happens to arrive last silently
+  // wins — even if it was for an older, different (or unbounded) range. A
+  // request whose generation isn't the latest by the time it resolves is
+  // discarded instead of touching state, so only the most recently CALLED
+  // loadData ever wins, regardless of response order.
+  const loadGenerationRef = useRef(0);
 
   const recomputeVehicleDriverMap = useCallback((drivers, rows) => {
     const vDriverMap = {};
@@ -63,29 +97,26 @@ export function useDashboardData() {
   }, []);
 
   const loadData = useCallback(async (from, to) => {
+    const requestId = ++loadGenerationRef.current;
     setLoading(true);
     setError(null);
 
-    // Descending + limit so that when no date range is selected (the
-    // default), a growing table drops OLD rows out of view rather than
-    // recent ones — ascending order here meant every page silently lost
-    // "today" once total row count passed the cap (see the endHistoryQuery
-    // fix above for the same class of bug).
-    let query = sb.from("shift_entries").select("*").order("created_at", { ascending: false }).limit(5000);
-    if (from) query = query.gte("shift_date", from);
-    if (to) query = query.lte("shift_date", to);
+    // Paginated (see fetchAllPages above) so a full month across the whole
+    // roster — Driver Performance's normal query shape — can never silently
+    // lose rows, however many there turn out to be.
+    const shiftEntriesFactory = () => {
+      let q = sb.from("shift_entries").select("*").order("created_at", { ascending: false });
+      if (from) q = q.gte("shift_date", from);
+      if (to) q = q.lte("shift_date", to);
+      return q;
+    };
 
-    // Descending + limit so that if this ever exceeds the cap, the most
-    // RECENT end-of-day readings are the ones kept (those are the only ones
-    // Off Duty ever actually needs) rather than silently dropping them in
-    // favor of old history.
-    const endHistoryQuery = sb.from("shift_entries")
+    const endHistoryFactory = () => sb.from("shift_entries")
       .select("id,vehicle_plate,shift_date,odo_reading,created_at")
       .eq("shift_type", "end")
       .not("vehicle_plate", "is", null)
       .not("odo_reading", "is", null)
-      .order("shift_date", { ascending: false })
-      .limit(5000);
+      .order("shift_date", { ascending: false });
 
     const vehicleRatesQuery = sb.from("vehicles").select("vehicle_plate,avg_per_liter,fuel_type");
     const stationRatesQuery = sb.from("stations").select("station_name,cod_rate,ppd_rate,pickup_rate,diesel_price,petrol_price");
@@ -97,11 +128,18 @@ export function useDashboardData() {
     // outside the selected range), and the Overview needs "today" numbers
     // regardless of whatever range is currently selected. Range-scoping for
     // the Overview's summaries is done client-side (see below), not here.
-    const reinforcementQuery = sb.from("reinforcement_requests")
+    const reinforcementFactory = () => sb.from("reinforcement_requests")
       .select("identity_number,shift_date,amount,loan_adjustment,status,full_name")
       .order("shift_date", { ascending: false });
-    const automaticFuelQuery = sb.from("automatic_fuel_allocations").select("identity_number,allocation_date,amount,project");
-    const attendanceQuery = sb.from("driver_attendance").select("identity_number,attendance_date,status,project");
+    const automaticFuelFactory = () => sb.from("automatic_fuel_allocations").select("identity_number,allocation_date,amount,project")
+      .order("allocation_date", { ascending: false });
+    const attendanceFactory = () => sb.from("driver_attendance").select("identity_number,attendance_date,status,project")
+      .order("attendance_date", { ascending: false });
+    // Unbounded like the three above — an exception note filed for a driver-day
+    // can be looked up regardless of whatever range is currently selected.
+    const submissionReasonsFactory = () => sb.from("submission_reasons")
+      .select("identity_number,shift_date,reason,notes,updated_at")
+      .order("shift_date", { ascending: false });
 
     const [
       { data, error: err },
@@ -113,10 +151,16 @@ export function useDashboardData() {
       { data: reinforcementData },
       { data: automaticFuelData },
       { data: attendanceData },
+      { data: submissionReasonsData },
     ] = await Promise.all([
-      query, endHistoryQuery, vehicleRatesQuery, stationRatesQuery, driversQuery, vehiclesQuery,
-      reinforcementQuery, automaticFuelQuery, attendanceQuery,
+      fetchAllPages(shiftEntriesFactory), fetchAllPages(endHistoryFactory), vehicleRatesQuery, stationRatesQuery, driversQuery, vehiclesQuery,
+      fetchAllPages(reinforcementFactory), fetchAllPages(automaticFuelFactory), fetchAllPages(attendanceFactory), fetchAllPages(submissionReasonsFactory),
     ]);
+
+    // A newer loadData call has since started (see loadGenerationRef above) —
+    // this response is stale, drop it silently rather than let it overwrite
+    // whatever the newer call is about to (or already did) produce.
+    if (requestId !== loadGenerationRef.current) return;
 
     if (err) {
       setError(err.message);
@@ -204,9 +248,24 @@ export function useDashboardData() {
 
     setAttendanceRows(attendanceData || []);
 
+    const srByKey = {};
+    for (const r of submissionReasonsData || []) {
+      if (!r.identity_number || !r.shift_date) continue;
+      srByKey[`${r.identity_number}|${r.shift_date}`] = { reason: r.reason || "", notes: r.notes || "", updated_at: r.updated_at };
+    }
+    setSubmissionReasonByKey(srByKey);
+
     setLastUpdated(new Date());
     setLoading(false);
   }, [recomputeFromRows, recomputeVehicleEndHistory]);
+
+  // Optimistic local patch after a successful submission_reasons upsert —
+  // avoids refetching the whole dashboard dataset just to reflect one edit.
+  const upsertSubmissionReason = useCallback((identityNumber, shiftDate, patch) => {
+    const key = `${identityNumber}|${shiftDate}`;
+    setSubmissionReasonByKey(prev => ({ ...prev, [key]: { ...(prev[key] || { reason: "", notes: "" }), ...patch } }));
+    setLastUpdated(new Date());
+  }, []);
 
   // ---- Local/optimistic updates: patch state in-memory instead of refetching
   // the whole dashboard dataset after every save, so edits feel instant.
@@ -292,8 +351,8 @@ export function useDashboardData() {
   return {
     allRows, allCompareGroups, stationRows, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates,
     driverProjects, vehicleDriverMap, allDrivers, allVehicles, approvedFuelByKey, automaticFuelByKey, automaticFuelRows, automaticFuelTotal,
-    reinforcementRows, reinforcementSummary, attendanceRows, loading, error, lastUpdated,
-    loadData, patchShiftEntries, removeShiftEntries, addShiftEntries, upsertDriver, removeDriver, upsertVehicle,
+    reinforcementRows, reinforcementSummary, attendanceRows, submissionReasonByKey, loading, error, lastUpdated,
+    loadData, patchShiftEntries, removeShiftEntries, addShiftEntries, upsertDriver, removeDriver, upsertVehicle, upsertSubmissionReason,
     PROJECT_LIST,
   };
 }

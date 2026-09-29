@@ -9,6 +9,8 @@ import { downloadCsv } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
 import { FUEL_STATUS_CLASS, FUEL_STATUS_KEY } from "../lib/fuelStatus";
 import { getPageCache, setPageCache } from "../lib/pageCache";
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 const CSV_KEYS = [
   "request_no", "shift_date", "full_name", "identity_number", "project", "vehicle_plate",
@@ -62,6 +64,7 @@ export default function FuelMissingForm() {
     setSearch("");
     setProject("");
   }
+  useClearFilters(handleReset);
 
   function handleExport() {
     if (!missingRows.length) return;
@@ -82,17 +85,17 @@ export default function FuelMissingForm() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("fuel.missingFormBreadcrumb")}</b></div>
           <h1 className="page-title">{t("fuel.missingFormBreadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
-      <p className="sub" style={{ margin: "-0.6rem 0 1rem" }}>{t("fuel.missingFormSubtitle")}</p>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-note" className="fx-hero-note">{t("fuel.missingFormSubtitle")}</HeroPortal>
       <GlobalFilters />
 
-      <div className="local-filters">
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("common.searchByNameOrId")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
@@ -104,8 +107,8 @@ export default function FuelMissingForm() {
             {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <button className="btn" onClick={handleReset}>{t("common.clearFilters")}</button>
-      </div>
+        <button className="btn local-clear-btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+      </HeroPortal>
       <div className="cards-count">{t("compare.recordsCount", { n: missingRows.length })}</div>
 
       {error && <div style={{ color: "var(--critical)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</div>}

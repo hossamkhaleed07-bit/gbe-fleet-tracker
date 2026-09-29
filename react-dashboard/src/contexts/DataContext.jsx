@@ -35,6 +35,21 @@ export function DataProvider({ children }) {
     }, { replace: true });
   }
 
+  // Sets from+to together in one search-params update (calling setFrom then
+  // setTo back-to-back can race — react-router's setSearchParams doesn't
+  // reliably compose two separate calls made in the same tick) and reloads
+  // immediately, for pages with their own single "pick a period" control
+  // (e.g. Driver Performance's month picker) instead of GlobalFilters.
+  function setMonthRange(fromVal, toVal) {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (fromVal) next.set("from", fromVal); else next.delete("from");
+      if (toVal) next.set("to", toVal); else next.delete("to");
+      return next;
+    }, { replace: true });
+    data.loadData(fromVal, toVal);
+  }
+
   function applyFilter() {
     data.loadData(from, to);
   }
@@ -93,7 +108,7 @@ export function DataProvider({ children }) {
   ]);
 
   return (
-    <DataContext.Provider value={{ ...data, ...scoped, from, to, setFrom, setTo, applyFilter, resetFilter, viewingProject, setViewingProject }}>
+    <DataContext.Provider value={{ ...data, ...scoped, from, to, setFrom, setTo, setMonthRange, applyFilter, resetFilter, viewingProject, setViewingProject }}>
       {children}
     </DataContext.Provider>
   );

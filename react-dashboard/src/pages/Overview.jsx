@@ -1,5 +1,9 @@
 import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import {
+  Users, UserCheck, CalendarOff, UserX, FileWarning, Fuel, RefreshCw, BadgeCheck, Wallet,
+  Clock, CircleCheck, CircleX, ListChecks, Calculator, ClipboardList,
+} from "lucide-react";
 import { useDashboard } from "../contexts/DataContext";
 import { useDetailModal } from "../contexts/DetailModalContext";
 import { useLang } from "../contexts/LanguageContext";
@@ -14,10 +18,10 @@ export default function Overview() {
   const {
     scopedRows: allRows, scopedCompareGroups: allCompareGroups, scopedStationRows: stationRows, scopedDrivers: allDrivers,
     scopedVehicles: allVehicles, scopedReinforcementRows, scopedReinforcementSummary, scopedAutomaticFuelRows, scopedAutomaticFuelTotal,
-    scopedAttendanceRows, stationRates, loading, error, lastUpdated,
+    scopedAttendanceRows, stationRates, error,
   } = useDashboard();
   const { openDetail } = useDetailModal();
-  const { t, lang } = useLang();
+  const { t } = useLang();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const today = localToday();
@@ -107,41 +111,35 @@ export default function Overview() {
 
   return (
     <>
-      <div className="content-header">
-        <div>
-          <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("overview.breadcrumb")}</b></div>
-          <h1 className="page-title">{t("overview.breadcrumb")}</h1>
-        </div>
-      </div>
       <div id="status-msg" className={error ? "err" : ""} style={{ display: error ? "block" : "none" }}>{error}</div>
       <GlobalFilters />
-
-      <div className="ov-updated-row">
-        <span className="ov-updated-badge">
-          {loading ? t("common.loading") : lastUpdated ? t("overview.lastUpdatedPrefix") + lastUpdated.toLocaleTimeString(lang === "ar" ? "ar-EG" : "en-US", { hour: "2-digit", minute: "2-digit" }) : ""}
-        </span>
-      </div>
 
       {/* Level 1 — what is happening right now (always today) */}
       <div className="ov-section-title">{t("overview.todaysOpsTitle")}</div>
       <div className="kpi-dot-grid kpi-dot-grid-6">
         <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/drivers", search: searchParams.toString() })}>
-          <span className="dot blue" /><div className="label">{t("overview.kpiDrivers")}</div><div className="num">{activeDrivers.length}</div>
+          <div className="icon-wrap blue"><Users size={19} /></div>
+          <div className="label">{t("overview.kpiDrivers")}</div><div className="num">{activeDrivers.length}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("present")}>
-          <span className="dot green" /><div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
+          <div className="icon-wrap green"><UserCheck size={19} /></div>
+          <div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("leave")}>
-          <span className="dot orange" /><div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
+          <div className="icon-wrap orange"><CalendarOff size={19} /></div>
+          <div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("absent")}>
-          <span className="dot red" /><div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
+          <div className="icon-wrap red"><UserX size={19} /></div>
+          <div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToRecordsToday("incomplete_or_missing")}>
-          <span className="dot orange" /><div className="label">{t("overview.kpiMissingForms")}</div><div className="num">{missingFormsToday.length}</div>
+          <div className="icon-wrap orange"><FileWarning size={19} /></div>
+          <div className="label">{t("overview.kpiMissingForms")}</div><div className="num">{missingFormsToday.length}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approver", search: searchParams.toString() })}>
-          <span className="dot purple" /><div className="label">{t("overview.kpiPendingRequests")}</div><div className="num">{todayPendingCount}</div>
+          <div className="icon-wrap purple"><Fuel size={19} /></div>
+          <div className="label">{t("overview.kpiPendingRequests")}</div><div className="num">{todayPendingCount}</div>
         </div>
       </div>
 
@@ -180,13 +178,13 @@ export default function Overview() {
       <div className="ov-section-title">{t("overview.fuelOverviewTitle")}</div>
       <div className="kpi-dot-grid">
         <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/automatic-fuel", search: searchParams.toString() })}>
-          <span className="dot cyan" /><div className="label">{t("compare.colAutomaticFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedAutomaticFuelTotal.toFixed(0)}</div>
+          <div className="icon-wrap cyan"><RefreshCw size={19} /></div><div className="label">{t("compare.colAutomaticFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedAutomaticFuelTotal.toFixed(0)}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "approved" })}>
-          <span className="dot green" /><div className="label">{t("compare.colActualFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedReinforcementSummary.totalCost.toFixed(0)}</div>
+          <div className="icon-wrap green"><BadgeCheck size={19} /></div><div className="label">{t("compare.colActualFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {scopedReinforcementSummary.totalCost.toFixed(0)}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approval", search: searchParams.toString() })}>
-          <span className="dot blue" /><div className="label">{t("compare.colTotalFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {totalFuelCost.toFixed(0)}</div>
+          <div className="icon-wrap blue"><Wallet size={19} /></div><div className="label">{t("compare.colTotalFuelCost")}</div><div className="num">{t("fuel.amountPrefix")} {totalFuelCost.toFixed(0)}</div>
         </div>
       </div>
 
@@ -194,18 +192,19 @@ export default function Overview() {
       <div className="ov-section-title">{t("overview.reinforcementOverviewTitle")}</div>
       <div className="kpi-dot-grid">
         <div className="kpi-dot-card clickable" onClick={() => navigate({ pathname: "/fuel-approver", search: searchParams.toString() })}>
-          <span className="dot purple" /><div className="label">{t("fuel.statusPending")}</div><div className="num">{scopedReinforcementSummary.pending}</div>
+          <div className="icon-wrap purple"><Clock size={19} /></div><div className="label">{t("fuel.statusPending")}</div><div className="num">{scopedReinforcementSummary.pending}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "approved" })}>
-          <span className="dot green" /><div className="label">{t("fuel.statusApproved")}</div><div className="num">{scopedReinforcementSummary.approved}</div>
+          <div className="icon-wrap green"><CircleCheck size={19} /></div><div className="label">{t("fuel.statusApproved")}</div><div className="num">{scopedReinforcementSummary.approved}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "rejected" })}>
-          <span className="dot red" /><div className="label">{t("fuel.statusRejected")}</div><div className="num">{scopedReinforcementSummary.rejected}</div>
+          <div className="icon-wrap red"><CircleX size={19} /></div><div className="label">{t("fuel.statusRejected")}</div><div className="num">{scopedReinforcementSummary.rejected}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goTo("/fuel-approval", { status: "" })}>
-          <span className="dot blue" /><div className="label">{t("overview.kpiTotalRequests")}</div><div className="num">{scopedReinforcementSummary.total}</div>
+          <div className="icon-wrap blue"><ListChecks size={19} /></div><div className="label">{t("overview.kpiTotalRequests")}</div><div className="num">{scopedReinforcementSummary.total}</div>
         </div>
         <div className="kpi-dot-card no-dot">
+          <div className="icon-wrap orange"><Calculator size={19} /></div>
           <div className="label">{t("overview.kpiAvgReinforcement")}</div><div className="num">{t("fuel.amountPrefix")} {avgReinforcementPerDriver.toFixed(0)}</div>
         </div>
       </div>
@@ -214,15 +213,16 @@ export default function Overview() {
       <div className="ov-section-title">{t("overview.attendanceOverviewTitle")}</div>
       <div className="kpi-dot-grid">
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("present")}>
-          <span className="dot green" /><div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
+          <div className="icon-wrap green"><UserCheck size={19} /></div><div className="label">{t("attendance.present")}</div><div className="num">{todayPresentCount}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("leave")}>
-          <span className="dot orange" /><div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
+          <div className="icon-wrap orange"><CalendarOff size={19} /></div><div className="label">{t("attendance.leave")}</div><div className="num">{todayLeaveCount}</div>
         </div>
         <div className="kpi-dot-card clickable" onClick={() => goToAttendanceToday("absent")}>
-          <span className="dot red" /><div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
+          <div className="icon-wrap red"><UserX size={19} /></div><div className="label">{t("attendance.absent")}</div><div className="num">{todayAbsentCount}</div>
         </div>
         <div className="kpi-dot-card no-dot">
+          <div className="icon-wrap cyan"><ClipboardList size={19} /></div>
           <div className="label">{t("overview.kpiRangeAttendanceMarks")}</div><div className="num">{rangeAttendance.leave + rangeAttendance.absent}</div>
           <div className="sub">{t("overview.kpiRangeAttendanceSub")}</div>
         </div>

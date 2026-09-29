@@ -19,14 +19,22 @@ const Records = lazy(() => import("./pages/Records"));
 const Attendance = lazy(() => import("./pages/Attendance"));
 const FormResponse = lazy(() => import("./pages/FormResponse"));
 const Compare = lazy(() => import("./pages/Compare"));
+const DriverPerformance = lazy(() => import("./pages/DriverPerformance"));
+const DriverPerformanceProject = lazy(() => import("./pages/DriverPerformanceProject"));
+const DriverPerformanceDriver = lazy(() => import("./pages/DriverPerformanceDriver"));
 const Stations = lazy(() => import("./pages/Stations"));
 const ProjectPerformance = lazy(() => import("./pages/ProjectPerformance"));
+const ProjectPerformanceRCAPage = lazy(() => import("./pages/ProjectPerformanceRCAPage"));
 const Fleet = lazy(() => import("./pages/Fleet"));
 const Drivers = lazy(() => import("./pages/Drivers"));
 const FuelApprover = lazy(() => import("./pages/FuelApprover"));
 const FuelApproval = lazy(() => import("./pages/FuelApproval"));
 const FuelMissingForm = lazy(() => import("./pages/FuelMissingForm"));
 const AutomaticFuel = lazy(() => import("./pages/AutomaticFuel"));
+const FuelInvoiceEntries = lazy(() => import("./pages/FuelInvoiceEntries"));
+const FuelInvoiceDataBase = lazy(() => import("./pages/FuelInvoiceDataBase"));
+// Visual prototype — standalone full-screen page (no sidebar), mock data only.
+const FormResponseDemo = lazy(() => import("./pages/FormResponseDemo"));
 
 function RequireAuth({ children }) {
   const { session, loading } = useAuth();
@@ -59,20 +67,27 @@ export default function App() {
           <Suspense fallback={null}>
             <Routes>
               <Route path="/login" element={<Login />} />
+              <Route path="/form-response-demo" element={<RequireAuth><FormResponseDemo /></RequireAuth>} />
               <Route element={<RequireAuth><DashboardShell /></RequireAuth>}>
                 <Route path="/overview" element={<Overview />} />
                 <Route path="/records" element={<Records />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/form-response" element={<FormResponse />} />
                 <Route path="/compare" element={<Compare />} />
+                <Route path="/driver-performance" element={<DriverPerformance />} />
+                <Route path="/driver-performance/:project" element={<DriverPerformanceProject />} />
+                <Route path="/driver-performance/:project/:identityNumber" element={<DriverPerformanceDriver />} />
                 <Route path="/stations" element={<Stations />} />
                 <Route path="/project-performance" element={<ProjectPerformance />} />
+                <Route path="/project-performance/rca" element={<ProjectPerformanceRCAPage />} />
                 <Route path="/fleet" element={<Fleet />} />
                 <Route path="/drivers" element={<Drivers />} />
                 <Route path="/fuel-approver" element={<FuelApprover />} />
                 <Route path="/fuel-approval" element={<FuelApproval />} />
                 <Route path="/fuel-missing-form" element={<FuelMissingForm />} />
                 <Route path="/automatic-fuel" element={<AutomaticFuel />} />
+                <Route path="/fuel-invoice/entries" element={<FuelInvoiceEntries />} />
+                <Route path="/fuel-invoice/database" element={<FuelInvoiceDataBase />} />
               </Route>
               <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>

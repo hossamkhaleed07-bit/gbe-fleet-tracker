@@ -1,6 +1,14 @@
+import { deriveAttendanceStatus, OFF_CODES } from "./attendanceCodes";
+
 export function localToday() {
   const d = new Date();
   return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+}
+
+export function yesterday() {
+  const d = new Date(localToday() + "T00:00:00Z");
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
 }
 
 // created_at is stored in UTC; display it in Egypt local time (Africa/Cairo,
@@ -52,6 +60,47 @@ export function buildDriverComparison(rows, driverProjects) {
     if (r.shift_type === "end") g.end = r;
   }
   return Object.values(groups).sort((a, b) => b.day.localeCompare(a.day) || (a.full_name || "").localeCompare(b.full_name || ""));
+}
+
+// Calendar days to check for "did this active driver submit ANYTHING at all"
+// — defaults to just today when no range is picked (matches this app's
+// existing no-filter behavior elsewhere), capped defensively at 62 days.
+function daysToCheck(fromStr, toStr) {
+  const start = fromStr || toStr || localToday();
+  const end = toStr || localToday();
+  const days = [];
+  const d = new Date(start + "T00:00:00Z");
+  const endD = new Date(end + "T00:00:00Z");
+  while (d <= endD && days.length < 62) {
+    days.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return days;
+}
+
+// Synthetic rows (no underlying shift_entries at all) for every active
+// driver-day in range with zero submissions — the "Non Submitted" figure.
+// Single source of truth shared by Records.jsx, ProjectPerformance.jsx (its
+// clickable Non Submitted count) and ProjectPerformanceExceptions.jsx (the
+// drill-through records), so the count shown always matches the rows landed
+// on — never recompute this independently on a details page.
+export function buildMissingRows(drivers, compareGroups, from, to) {
+  const days = daysToCheck(from, to);
+  const submitted = new Set(compareGroups.map(g => `${g.identity_number}|${g.day}`));
+  const rows = [];
+  for (const d of drivers) {
+    if (!d.is_active) continue;
+    for (const day of days) {
+      if (!submitted.has(`${d.identity_number}|${day}`)) {
+        rows.push({
+          day, identity_number: d.identity_number, full_name: d.full_name,
+          vehicle_plate: d.assigned_vehicle_plate || null, project: d.project || null,
+          start: null, end: null, synthetic: true,
+        });
+      }
+    }
+  }
+  return rows;
 }
 
 export function buildStationReport(rows) {
@@ -230,6 +279,87 @@ export function compareStatus(g) {
   if (g.start && g.end) return "complete";
   if (g.start) return "start_only";
   return "end_only";
+}
+
+// Calendar days from fromStr to toStr inclusive (YYYY-MM-DD), capped
+// defensively so an unbounded filter never triggers a huge loop.
+export function enumerateDays(fromStr, toStr) {
+  if (!fromStr && !toStr) return [];
+  const start = fromStr || toStr;
+  const end = toStr || fromStr;
+  const days = [];
+  const d = new Date(start + "T00:00:00Z");
+  const endD = new Date(end + "T00:00:00Z");
+  while (d <= endD && days.length < 62) {
+    days.push(d.toISOString().slice(0, 10));
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+  return days;
+}
+
+// Per-driver monthly rollup for the Driver Report's "Monthly Summary" view —
+// one row per driver instead of one row per shift-day. Reuses buildGroupMetrics
+// (the single source of truth, see above) so these totals always agree with
+// the per-day figures shown elsewhere on the same page, and reuses the exact
+// same attendance-derivation logic as the Attendance page so "days off" here
+// means the same thing it does there.
+export function buildDriverMonthlySummary(drivers, compareGroups, attendanceRows, from, to, ctx) {
+  const groupsByDriver = {};
+  for (const g of compareGroups) (groupsByDriver[g.identity_number] ||= []).push(g);
+
+  const attByKey = {};
+  for (const r of attendanceRows) {
+    if (from && r.attendance_date < from) continue;
+    if (to && r.attendance_date > to) continue;
+    attByKey[`${r.identity_number}|${r.attendance_date}`] = r.status;
+  }
+
+  const days = enumerateDays(from, to);
+  const today = localToday();
+
+  return drivers.map(d => {
+    const groups = (groupsByDriver[d.identity_number] || []).slice().sort((a, b) => a.day.localeCompare(b.day));
+
+    let totalDist = 0, totalLiters = 0, totalDelivered = 0;
+    const readings = []; // every odometer reading this driver logged, in day order
+    for (const g of groups) {
+      if (g.start?.odo_reading != null) readings.push({ day: g.day, odo: g.start.odo_reading });
+      if (g.end?.odo_reading != null) readings.push({ day: g.day, odo: g.end.odo_reading });
+      const m = buildGroupMetrics(g, ctx);
+      if (typeof m.dist === "number") totalDist += m.dist;
+      if (m.fuelLiters !== "—") totalLiters += Number(m.fuelLiters);
+      if (m.delivered !== "—") totalDelivered += Number(m.delivered);
+    }
+    const startOdo = readings.length ? readings[0].odo : null;
+    const endOdo = readings.length ? readings[readings.length - 1].odo : null;
+
+    // Days off = days in the selected range whose (explicit or derived) status
+    // is leave/absent — the same rule the Attendance page itself uses.
+    let daysOff = 0;
+    if (days.length) {
+      const shiftDaySet = new Set(groups.filter(g => g.start || g.end).map(g => g.day));
+      for (const day of days) {
+        const st = deriveAttendanceStatus({
+          explicitStatus: attByKey[`${d.identity_number}|${day}`],
+          hasShiftEntry: shiftDaySet.has(day),
+          day, today,
+        });
+        if (OFF_CODES.has(st)) daysOff++;
+      }
+    }
+
+    return {
+      identity_number: d.identity_number,
+      full_name: d.full_name,
+      project: d.project,
+      startOdo,
+      endOdo,
+      totalDist,
+      totalLiters: Number(totalLiters.toFixed(1)),
+      totalDelivered,
+      daysOff,
+    };
+  });
 }
 
 // Single source of truth for the odometer/fuel/delivery figures shown for a

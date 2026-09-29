@@ -55,7 +55,8 @@ export default function NotificationCenter() {
   const rootRef = useRef(null);
 
   useEffect(() => {
-    setHeaderEl(document.querySelector(".content-header"));
+    // Prefer the bell slot in the Layout hero nav; fall back to the page header.
+    setHeaderEl(document.getElementById("fx-bell-slot") || document.querySelector(".content-header"));
   }, [location.pathname]);
 
   useEffect(() => {

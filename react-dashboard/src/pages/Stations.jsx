@@ -4,6 +4,7 @@ import { useLang } from "../contexts/LanguageContext";
 import GlobalFilters from "../components/GlobalFilters";
 import DataTable from "../components/DataTable";
 import { downloadCsv } from "../lib/csv";
+import HeroPortal from "../components/HeroPortal";
 
 export default function Stations() {
   const { scopedStationRows: stationRows } = useDashboard();
@@ -33,13 +34,13 @@ export default function Stations() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("stations.breadcrumb")}</b></div>
           <h1 className="page-title">{t("stations.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
+      </HeroPortal>
       <GlobalFilters />
       <DataTable columns={columns} data={stationRows} emptyMessage={t("common.loading")} />
     </>

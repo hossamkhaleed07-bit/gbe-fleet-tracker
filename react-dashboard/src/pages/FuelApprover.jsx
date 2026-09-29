@@ -14,6 +14,7 @@ import { sb } from "../lib/supabase";
 import { compareStatus, formatRequestCode, formatLocalDateTime, localToday } from "../lib/calc";
 import { getPageCache, setPageCache } from "../lib/pageCache";
 import { OFF_CODES, attendanceLabel, deriveAttendanceStatus } from "../lib/attendanceCodes";
+import HeroPortal from "../components/HeroPortal";
 
 const CACHE_KEY = "fuelApprover.pending";
 
@@ -130,12 +131,12 @@ export default function FuelApprover() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("fuel.approverBreadcrumb")}</b></div>
           <h1 className="page-title">{t("fuel.approverBreadcrumb")}</h1>
         </div>
-      </div>
+      </HeroPortal>
       {error && <div style={{ color: "var(--critical)", fontSize: "0.85rem", marginBottom: "1rem" }}>{error}</div>}
 
       <div className="fuel-layout">

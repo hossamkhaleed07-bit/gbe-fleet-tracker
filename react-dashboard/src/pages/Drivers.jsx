@@ -10,6 +10,8 @@ import { compareStatus } from "../lib/calc";
 import { downloadCsv } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
 import DataTable from "../components/DataTable";
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 const AVATAR_BG = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
 const emptyForm = {
@@ -105,6 +107,7 @@ export default function Drivers() {
     setStatus("");
     setShiftStatusFilter("");
   }
+  useClearFilters(handleReset);
 
   function openAdd() {
     setIsNew(true);
@@ -198,24 +201,18 @@ export default function Drivers() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("drivers.breadcrumb")}</b></div>
           <h1 className="page-title">{t("drivers.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
+      </HeroPortal>
       <GlobalFilters />
-      <div className="pill-bar">
+      <HeroPortal className="pill-bar">
         <div className="pill-search">
           <span className="pill-search-ic">🔍</span>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.searchByNameOrId")} />
-        </div>
-        <div className="pill-select-wrap">
-          <select value={project} onChange={e => setProject(e.target.value)}>
-            <option value="">{t("common.allProjects")}</option>
-            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
         </div>
         <div className="pill-select-wrap">
           <select value={status} onChange={e => setStatus(e.target.value)}>
@@ -234,13 +231,21 @@ export default function Drivers() {
             <option value="complete">{t("common.complete")}</option>
           </select>
         </div>
-        <button className="btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+        <div className="pill-select-wrap">
+          <select value={project} onChange={e => setProject(e.target.value)}>
+            <option value="">{t("common.allProjects")}</option>
+            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <button className="btn local-clear-btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-actions" className="fx-page-actions">
         <div className="view-toggle">
           <button className={"view-btn" + (view === "gallery" ? " active" : "")} title={t("common.galleryView")} onClick={() => setView("gallery")}>🖼️</button>
           <button className={"view-btn" + (view === "table" ? " active" : "")} title={t("common.gridView")} onClick={() => setView("table")}>📋</button>
         </div>
         <button className="btn btn-primary pill-add-btn" onClick={openAdd}>{t("drivers.addNew")}</button>
-      </div>
+      </HeroPortal>
       <div className="cards-count">{t("drivers.driversCount", { n: rows.length })}</div>
       {view === "gallery" ? (
       <div className="cards-grid">

@@ -7,6 +7,8 @@ import GlobalFilters from "../components/GlobalFilters";
 import DataTable from "../components/DataTable";
 import { downloadCsv } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 const CSV_KEYS = ["allocation_date", "full_name", "identity_number", "project", "vehicle_plate", "amount", "source", "status"];
 
@@ -33,6 +35,7 @@ export default function AutomaticFuel() {
     setSearch("");
     setProject("");
   }
+  useClearFilters(handleReset);
 
   function handleExport() {
     if (!filteredRows.length) return;
@@ -51,17 +54,17 @@ export default function AutomaticFuel() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("automaticFuel.breadcrumb")}</b></div>
           <h1 className="page-title">{t("automaticFuel.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
-      <p className="sub" style={{ margin: "-0.6rem 0 1rem" }}>{t("automaticFuel.subtitle")}</p>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-note" className="fx-hero-note">{t("automaticFuel.subtitle")}</HeroPortal>
       <GlobalFilters />
 
-      <div className="local-filters">
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("common.searchByNameOrId")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
@@ -73,8 +76,8 @@ export default function AutomaticFuel() {
             {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-        <button className="btn" onClick={handleReset}>{t("common.clearFilters")}</button>
-      </div>
+        <button className="btn local-clear-btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+      </HeroPortal>
       <div className="cards-count">{t("automaticFuel.rowsCount", { n: filteredRows.length })} · {t("compare.colAutomaticFuelCost")}: {totalAmount.toFixed(2)}</div>
 
       <DataTable

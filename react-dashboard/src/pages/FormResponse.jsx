@@ -10,6 +10,8 @@ import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { formatLocalDateTime } from "../lib/calc";
 import { PROJECT_LIST } from "../lib/constants";
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 export default function FormResponse() {
   const { scopedRows, driverProjects, removeShiftEntries, addShiftEntries } = useDashboard();
@@ -21,6 +23,7 @@ export default function FormResponse() {
   const [project, setProject] = useState("");
   const [type, setType] = useState("");
   const [busyDelete, setBusyDelete] = useState(null);
+  useClearFilters(() => { setSearch(""); setProject(""); setType(""); });
 
   const rows = useMemo(() => {
     let r = scopedRows || [];
@@ -119,16 +122,16 @@ export default function FormResponse() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("formResponse.breadcrumb")}</b></div>
           <h1 className="page-title">{t("formResponse.breadcrumb")}</h1>
         </div>
-      </div>
-      <p className="sub" style={{ margin: "-0.6rem 0 1rem" }}>{t("formResponse.subtitle")}</p>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-note" className="fx-hero-note">{t("formResponse.subtitle")}</HeroPortal>
       <GlobalFilters />
 
-      <div className="local-filters">
+      <HeroPortal className="local-filters">
         <div className="field">
           <label>{t("records.searchLabel")}</label>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.typeHere")} />
@@ -148,7 +151,7 @@ export default function FormResponse() {
             {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
           </select>
         </div>
-      </div>
+      </HeroPortal>
 
       <DataTable columns={columns} data={rows} emptyMessage={t("records.noMatchingRecords")} />
     </>

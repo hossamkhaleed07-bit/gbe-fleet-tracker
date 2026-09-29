@@ -8,6 +8,7 @@ import { PROJECT_LIST } from "../lib/constants";
 import { localToday } from "../lib/calc";
 import DataTable from "../components/DataTable";
 import { ATTENDANCE_CODES, ATTENDANCE_CODE_MAP, LEAVE_CODES, ABSENT_CODES, DEFAULT_ATTENDANCE_CODE, deriveAttendanceStatus } from "../lib/attendanceCodes";
+import HeroPortal from "../components/HeroPortal";
 
 const WEEKDAY = {
   ar: ["أحد", "اثنين", "ثلاثاء", "أربعاء", "خميس", "جمعة", "سبت"],
@@ -56,8 +57,13 @@ export default function Attendance() {
     const [attRes, shiftRes] = await Promise.all([
       sb.from("driver_attendance").select("identity_number,status,attendance_date")
         .gte("attendance_date", dayList[0]).lte("attendance_date", dayList[dayList.length - 1]),
+      // Without an explicit order + limit, Supabase silently caps the result at its
+      // default row limit with no guaranteed ordering — for a busy month this can
+      // (and did) drop the newest rows, making drivers who just submitted today's
+      // shift start show as "NM" instead of "P". Same fix as useDashboardData.js.
       sb.from("shift_entries").select("identity_number,shift_date")
-        .gte("shift_date", dayList[0]).lte("shift_date", dayList[dayList.length - 1]),
+        .gte("shift_date", dayList[0]).lte("shift_date", dayList[dayList.length - 1])
+        .order("shift_date", { ascending: false }).limit(5000),
     ]);
     setLoading(false);
     if (attRes.error) { setError(t("attendance.loadFailed") + attRes.error.message); return; }
@@ -160,13 +166,13 @@ export default function Attendance() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("attendance.breadcrumb")}</b></div>
           <h1 className="page-title">{t("attendance.breadcrumb")}</h1>
           <p style={{ color: "var(--ink-muted)", fontSize: "0.85rem", marginTop: "0.2rem" }}>{t("attendance.pageSub")}</p>
         </div>
-      </div>
+      </HeroPortal>
 
       <div className="att-legend">
         {ATTENDANCE_CODES.map(c => (
@@ -177,7 +183,7 @@ export default function Attendance() {
         ))}
       </div>
 
-      <div className="pill-bar">
+      <HeroPortal className="pill-bar">
         <div className="pill-search">
           <span className="pill-search-ic">🔍</span>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.searchByNameOrId")} />
@@ -198,7 +204,7 @@ export default function Attendance() {
           <input type="month" value={month} onChange={e => setMonth(e.target.value)} />
           <button className="btn" onClick={() => setMonth(m => addMonths(m, 1))}>›</button>
         </div>
-      </div>
+      </HeroPortal>
 
       {error && <div style={{ color: "var(--critical)", fontSize: "0.85rem", marginBottom: "0.8rem" }}>{error}</div>}
       <div className="cards-count">{loading ? t("common.loading") : t("attendance.driversCount", { n: rows.length })}</div>

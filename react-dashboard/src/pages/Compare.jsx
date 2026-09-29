@@ -10,6 +10,8 @@ import DataTable from "../components/DataTable";
 import { compareStatus, buildGroupMetrics, formatLocalTime } from "../lib/calc";
 import { downloadCsv, GROUP_CSV_KEYS, groupToCsvRow } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
+import HeroPortal from "../components/HeroPortal";
+import { useClearFilters } from "../hooks/useClearFilters";
 
 export default function Compare() {
   const { scopedCompareGroups: allCompareGroups, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates, approvedFuelByKey, automaticFuelByKey } = useDashboard();
@@ -38,6 +40,7 @@ export default function Compare() {
     setProject("");
     setShiftStatus("");
   }
+  useClearFilters(handleReset);
 
   function handleExport() {
     if (!rows.length) return;
@@ -112,25 +115,19 @@ export default function Compare() {
 
   return (
     <>
-      <div className="content-header">
+      <HeroPortal target="fx-hero-actions" className="content-header">
         <div>
           <div className="breadcrumb">{t("common.dashboard")} &gt; <b>{t("compare.breadcrumb")}</b></div>
           <h1 className="page-title">{t("compare.breadcrumb")}</h1>
         </div>
         <button className="btn" onClick={handleExport}>{t("common.exportCsv")}</button>
-      </div>
+      </HeroPortal>
       <GlobalFilters />
 
-      <div className="pill-bar">
+      <HeroPortal className="pill-bar">
         <div className="pill-search">
           <span className="pill-search-ic">🔍</span>
           <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder={t("common.searchByNameOrId")} />
-        </div>
-        <div className="pill-select-wrap">
-          <select value={project} onChange={e => setProject(e.target.value)}>
-            <option value="">{t("common.allProjects")}</option>
-            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
-          </select>
         </div>
         <div className="pill-select-wrap">
           <select value={shiftStatus} onChange={e => setShiftStatus(e.target.value)}>
@@ -141,12 +138,20 @@ export default function Compare() {
             <option value="end_only">{t("detailModal.endOnly")}</option>
           </select>
         </div>
-        <button className="btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+        <div className="pill-select-wrap">
+          <select value={project} onChange={e => setProject(e.target.value)}>
+            <option value="">{t("common.allProjects")}</option>
+            {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
+          </select>
+        </div>
+        <button className="btn local-clear-btn" onClick={handleReset}>{t("common.clearFilters")}</button>
+      </HeroPortal>
+      <HeroPortal target="fx-hero-actions" className="fx-page-actions">
         <div className="view-toggle">
           <button className={"view-btn" + (view === "gallery" ? " active" : "")} title={t("common.galleryView")} onClick={() => setView("gallery")}>🖼️</button>
           <button className={"view-btn" + (view === "table" ? " active" : "")} title={t("common.gridView")} onClick={() => setView("table")}>📋</button>
         </div>
-      </div>
+      </HeroPortal>
       <div className="cards-count">{t("compare.recordsCount", { n: rows.length })}</div>
 
       {view === "gallery" ? (
