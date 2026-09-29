@@ -292,13 +292,8 @@ export default function FuelInvoiceGrid() {
         </div>
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "0.6rem" }}>
-        <div className="cards-count">
-          {displayRows.length}{displayRows.length !== allRows.length ? ` of ${allRows.length}` : ""} record{allRows.length === 1 ? "" : "s"}
-          <span className="ink-muted" style={{ marginInlineStart: "0.6rem" }}>
-            — click a cell to select it, arrow keys / Shift+arrows to navigate and select, Ctrl+C / Ctrl+V to copy-paste a range from Excel or Sheets, Ctrl+Z to undo, right-click a row for insert/delete/duplicate.
-          </span>
-        </div>
+      <div className="cards-count" style={{ marginBottom: "0.6rem" }}>
+        {displayRows.length}{displayRows.length !== allRows.length ? ` of ${allRows.length}` : ""} record{allRows.length === 1 ? "" : "s"}
       </div>
 
       <DataSheetGrid
