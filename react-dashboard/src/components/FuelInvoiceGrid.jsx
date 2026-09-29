@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { Type, Hash, DollarSign, CalendarDays, CircleDot, AlignLeft, IdCard, Layers, Search } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import VirtualizedGrid from "./VirtualizedGrid";
@@ -7,7 +7,8 @@ import FuelInvoiceRecordModal from "./FuelInvoiceRecordModal";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
 import {
-  FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, emptyFuelInvoiceForm, money, fieldColorKey, computeAmountVat,
+  FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, PASTE_FIELD_ORDER, distinctValues, emptyFuelInvoiceForm, money, fieldColorKey,
+  computeAmountVat, parsePastedDate, parsePastedNumber,
 } from "../lib/fuelInvoice";
 
 const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
@@ -38,7 +39,7 @@ const FIELD_TYPE_ICON = {
 // new record with just this one field, Airtable-"+"-row style — the row
 // then shows up as a real row elsewhere, and this same blank slot stays
 // ready for the next new entry).
-function InlineTextCell({ value, inputType = "text", multiline, onCommit }) {
+function InlineTextCell({ value, inputType = "text", multiline, onCommit, onFocus }) {
   const [draft, setDraft] = useState(value ?? "");
   const [dirty, setDirty] = useState(false);
   const shown = dirty ? draft : (value ?? "");
@@ -52,6 +53,7 @@ function InlineTextCell({ value, inputType = "text", multiline, onCommit }) {
   const props = {
     value: shown,
     onChange: e => { setDraft(e.target.value); setDirty(true); },
+    onFocus,
     onBlur: commit,
     onKeyDown: e => { if (e.key === "Enter" && !multiline) e.currentTarget.blur(); },
     className: "notes-cell-input",
@@ -60,12 +62,13 @@ function InlineTextCell({ value, inputType = "text", multiline, onCommit }) {
   return multiline ? <textarea rows={1} {...props} /> : <input type={inputType} inputMode={inputType === "number" ? "decimal" : undefined} {...props} />;
 }
 
-function InlineDateCell({ value, onCommit }) {
+function InlineDateCell({ value, onCommit, onFocus }) {
   return (
     <input
       type="date"
       className="notes-cell-input"
       value={value || ""}
+      onFocus={onFocus}
       onChange={e => onCommit(e.target.value || null)}
     />
   );
@@ -73,8 +76,12 @@ function InlineDateCell({ value, onCommit }) {
 
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
-  const { records, loading, error, createRecord, updateRecord, deleteRecords } = useFuelInvoiceRecords();
+  const { records, loading, error, createRecord, updateRecord, deleteRecords, bulkUpsert } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
+  // Which cell last had focus — read (not reacted to) only when a paste
+  // event fires, so tracking it never triggers a re-render on every click.
+  const activeCellRef = useRef(null);
+  const [pasting, setPasting] = useState(false);
 
   const [search, setSearch] = useState("");
   const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
@@ -176,6 +183,61 @@ export default function FuelInvoiceGrid() {
     setSelectedIds(new Set());
   }
 
+  // Bulk paste from Excel/Google Sheets: a multi-cell copy arrives as
+  // tab-separated columns / newline-separated rows. Pasting from the blank
+  // "+" row creates every pasted row fresh; pasting onto an existing row
+  // updates it and every row below it (by current position), creating new
+  // rows only for whatever overflows past the end — matching a real
+  // spreadsheet's paste behavior. One single network call either way
+  // (bulkUpsert) regardless of how many rows were pasted.
+  async function handleGridPaste(e) {
+    const target = e.target;
+    if (!target.closest?.(".notes-cell-input, .reason-pill-select")) return;
+    const text = e.clipboardData.getData("text/plain");
+    if (!text || !/[\t\n]/.test(text)) return; // a single value — let the normal single-cell paste happen
+    const active = activeCellRef.current;
+    if (!active) return;
+    const startCol = PASTE_FIELD_ORDER.indexOf(active.fieldKey);
+    if (startCol === -1) return;
+
+    e.preventDefault();
+
+    const lines = text.replace(/\r/g, "").split("\n");
+    while (lines.length && lines[lines.length - 1] === "") lines.pop();
+    const grid2d = lines.map(line => line.split("\t"));
+
+    let baseRows = [];
+    if (!active.isDraft) {
+      const idx = rows.findIndex(r => r.id === active.recId);
+      if (idx !== -1) baseRows = rows.slice(idx);
+    }
+
+    const payloads = grid2d.map((line, r) => {
+      const existing = baseRows[r];
+      const payload = existing ? { id: existing.id } : { entry_date: active.isDraft ? (active.draftDate || today()) : null };
+      for (let c = 0; c < line.length; c++) {
+        const fieldKey = PASTE_FIELD_ORDER[startCol + c];
+        // amount/vat/da_name are always derived, never taken from pasted
+        // text directly — recomputed below from cost/nid instead, so a
+        // paste of the full 17-column sheet range (which includes these
+        // formula columns) still ends up correct rather than stale.
+        if (!fieldKey || fieldKey === "amount" || fieldKey === "vat" || fieldKey === "da_name") continue;
+        const raw = line[c];
+        if (fieldKey === "entry_date") { const d = parsePastedDate(raw); if (d) payload.entry_date = d; }
+        else if (fieldKey === "cost") payload.cost = parsePastedNumber(raw);
+        else payload[fieldKey] = raw?.trim() || null;
+      }
+      if (payload.cost != null) Object.assign(payload, computeAmountVat(payload.cost));
+      if (payload.nid) payload.da_name = lookupDaName(payload.nid);
+      return payload;
+    });
+
+    setPasting(true);
+    const { error: err } = await bulkUpsert(payloads);
+    setPasting(false);
+    if (err) window.alert("Paste failed: " + err.message);
+  }
+
   const columns = useMemo(() => {
     const cols = [
       {
@@ -193,6 +255,7 @@ export default function FuelInvoiceGrid() {
           const rec = row.original;
           const v = rec[f.key];
           const editable = canEdit;
+          const focusInfo = () => { activeCellRef.current = { recId: rec.id, isDraft: !!rec.__isDraft, draftDate: rec.__draftDate, fieldKey: f.key }; };
 
           if (f.type === "select") {
             return (
@@ -201,6 +264,7 @@ export default function FuelInvoiceGrid() {
                 options={distinctValues(records, f.key)}
                 colorFor={val => fieldColorKey(f.key, val)}
                 disabled={!canEdit}
+                onFocus={focusInfo}
                 onChange={newVal => commitField(rec, f.key, newVal)}
               />
             );
@@ -212,10 +276,10 @@ export default function FuelInvoiceGrid() {
             if (f.type === "longtext") return <span title={v || ""} style={{ display: "inline-block", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", verticalAlign: "bottom" }}>{v || "—"}</span>;
             return v ?? "—";
           }
-          if (f.type === "date") return <InlineDateCell value={v} onCommit={val => commitField(rec, f.key, val)} />;
-          if (f.type === "currency") return <InlineTextCell value={v} inputType="number" onCommit={val => commitField(rec, f.key, val)} />;
-          if (f.type === "longtext") return <InlineTextCell value={v} multiline onCommit={val => commitField(rec, f.key, val)} />;
-          return <InlineTextCell value={v} onCommit={val => commitField(rec, f.key, val)} />;
+          if (f.type === "date") return <InlineDateCell value={v} onFocus={focusInfo} onCommit={val => commitField(rec, f.key, val)} />;
+          if (f.type === "currency") return <InlineTextCell value={v} inputType="number" onFocus={focusInfo} onCommit={val => commitField(rec, f.key, val)} />;
+          if (f.type === "longtext") return <InlineTextCell value={v} multiline onFocus={focusInfo} onCommit={val => commitField(rec, f.key, val)} />;
+          return <InlineTextCell value={v} onFocus={focusInfo} onCommit={val => commitField(rec, f.key, val)} />;
         },
       });
     }
@@ -258,7 +322,7 @@ export default function FuelInvoiceGrid() {
   }, [rows, groupBy]);
 
   return (
-    <>
+    <div onPaste={handleGridPaste}>
       {/* Airtable-style horizontal chip toolbar: one rounded pill-select per
           filterable field (instead of this app's usual vertical field/label
           blocks), a Group-by pill, then search + New Entry on the far side —
@@ -290,6 +354,8 @@ export default function FuelInvoiceGrid() {
         <div className="cards-count">
           <Layers size={13} style={{ verticalAlign: "-2px", marginRight: "0.3rem" }} />
           {rows.length} record{rows.length === 1 ? "" : "s"}{selectedIds.size ? ` · ${selectedIds.size} selected` : ""}
+          {pasting && " · Pasting…"}
+          <span className="ink-muted" style={{ marginInlineStart: "0.6rem" }}>— click a cell, then paste (Ctrl+V) a range copied from Excel/Sheets</span>
         </div>
         {canEdit && selectedIds.size > 0 && (
           <button className="btn btn-danger" disabled={busyDelete} onClick={handleDeleteSelected}>
@@ -330,6 +396,6 @@ export default function FuelInvoiceGrid() {
           saveError={saveError}
         />
       )}
-    </>
+    </div>
   );
 }

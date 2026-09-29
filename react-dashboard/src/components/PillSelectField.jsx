@@ -9,7 +9,7 @@ const ADD_NEW = "__add_new__";
 // a fixed value→color map — because these fields' option lists aren't fixed,
 // they grow from whatever's typed ("+ Add new value"), per the Fuel & Invoice
 // module's "don't invent company-specific options" requirement.
-export default function PillSelectField({ value, options, onChange, placeholder = "— Select —", disabled, colorFor = stringColorKey }) {
+export default function PillSelectField({ value, options, onChange, placeholder = "— Select —", disabled, colorFor = stringColorKey, onFocus }) {
   const [addingNew, setAddingNew] = useState(false);
   const [draft, setDraft] = useState("");
 
@@ -48,6 +48,7 @@ export default function PillSelectField({ value, options, onChange, placeholder 
       style={style}
       value={value || ""}
       disabled={disabled}
+      onFocus={onFocus}
       onChange={e => {
         if (e.target.value === ADD_NEW) { setAddingNew(true); return; }
         onChange(e.target.value);

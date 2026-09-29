@@ -78,6 +78,19 @@ export function useFuelInvoiceRecords() {
     return { data };
   }
 
+  // One network round-trip for many rows at once (bulk paste) instead of one
+  // request per cell/row — rows with an existing `id` update in place, rows
+  // without one insert fresh (the column's default generates their id).
+  async function bulkUpsert(rowsPayload) {
+    const { data, error: err } = await sb.from("fuel_invoice_records").upsert(rowsPayload).select();
+    if (err) return { error: err };
+    const byId = new Map(recordsRef.current.map(r => [r.id, r]));
+    for (const r of data) byId.set(r.id, r);
+    recordsRef.current = [...byId.values()];
+    setRecords(recordsRef.current);
+    return { data };
+  }
+
   async function deleteRecords(ids) {
     const { error: err } = await sb.from("fuel_invoice_records").delete().in("id", ids);
     if (err) return { error: err };
@@ -87,5 +100,5 @@ export function useFuelInvoiceRecords() {
     return {};
   }
 
-  return { records, loading, error, reload: load, createRecord, updateRecord, deleteRecords };
+  return { records, loading, error, reload: load, createRecord, updateRecord, deleteRecords, bulkUpsert };
 }

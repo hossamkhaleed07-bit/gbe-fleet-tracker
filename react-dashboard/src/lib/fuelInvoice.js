@@ -34,6 +34,39 @@ export const FUEL_INVOICE_FIELDS = [
 
 export const SELECT_FIELD_KEYS = FUEL_INVOICE_FIELDS.filter(f => f.type === "select").map(f => f.key);
 
+// The exact 17-column order of the original source sheet (everything
+// except "Batch", the 18th field discovered only once the real file was
+// inspected, which isn't part of her copy range) — bulk paste maps pasted
+// columns positionally against this list, starting from whichever column
+// the paste's anchor cell is in.
+export const PASTE_FIELD_ORDER = FUEL_INVOICE_FIELDS.filter(f => f.key !== "batch").map(f => f.key);
+
+// Accepts the sheet's own DD/M/YYYY display format (confirmed from the real
+// file — see 047's seed migration) as well as ISO, since a pasted Date
+// column could come from either depending on the cell's own format.
+export function parsePastedDate(raw) {
+  const s = (raw || "").toString().trim();
+  if (!s) return null;
+  let m = /^(\d{4})-(\d{1,2})-(\d{1,2})$/.exec(s);
+  if (m) return `${m[1]}-${m[2].padStart(2, "0")}-${m[3].padStart(2, "0")}`;
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/.exec(s);
+  if (m) {
+    let [, d, mo, y] = m;
+    if (y.length === 2) y = "20" + y;
+    return `${y}-${mo.padStart(2, "0")}-${d.padStart(2, "0")}`;
+  }
+  return null;
+}
+
+// Strips currency symbols/thousands separators a pasted numeric cell might
+// carry (e.g. "1,234.50" or "SAR 100") down to a plain parseable number.
+export function parsePastedNumber(raw) {
+  const s = (raw ?? "").toString().replace(/[^\d.-]/g, "");
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) ? n : null;
+}
+
 export function emptyFuelInvoiceForm() {
   const form = {};
   for (const f of FUEL_INVOICE_FIELDS) form[f.key] = "";
