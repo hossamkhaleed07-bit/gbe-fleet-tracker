@@ -241,7 +241,7 @@ export default function Layout() {
 
       <main id="content">
         {/* ───── Dark hero with floating glass navigation ───── */}
-        <header className="fx-hero">
+        <header className={"fx-hero" + (isOnFuelInvoicePage ? " fx-hero-nonav" : "")}>
           {/* decorations live in their own clipped layer so nav dropdowns can overflow the hero */}
           <div className="fx-hero-fx" aria-hidden="true">
             <div className="fx-hero-overlay" />
