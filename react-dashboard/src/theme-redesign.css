@@ -99,7 +99,7 @@ body {
      collapses back, so collapsed state still gets the full width win. */
   #sidebar:hover ~ #content .fx-sheet-wide,
   #sidebar:has(:focus-visible) ~ #content .fx-sheet-wide {
-    margin-inline-start: 192px; /* 294px expanded edge + gap, minus #content's 108px start padding */
+    margin-inline-start: 200px; /* clears the 294px expanded sidebar edge (100px #content start padding + 200px) */
     transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1);
   }
 
@@ -345,8 +345,8 @@ body {
    this file, e.g. .fx-hero-slot:has(> #global-filters)), rather than
    touching #content's own rule which every other page also relies on. */
 #content:has(.fx-sheet-wide) { padding-inline: 0; }
-@media (min-width: 861px) { #content:has(.fx-sheet-wide) { padding-inline-start: 108px; } }
-.fx-sheet-wide { margin-inline: 22px; transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1); }
+@media (min-width: 861px) { #content:has(.fx-sheet-wide) { padding-inline-start: 100px; } }
+.fx-sheet-wide { margin-inline: 14px; transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1); }
 
 /* page headers: the title now lives in the hero, so the header becomes an action bar */
 .content-header {
@@ -538,3 +538,13 @@ a.media-link, .badge-link, .ov-row-action, .notif-mark-all { color: var(--fx-gre
 /* keep the toolbar's hero visually attached to the grid: same 22px side
    inset as .fx-sheet-wide, and only a small gap underneath */
 .fx-hero:has(.fx-hero-slot .filter-pill) { margin-bottom: 8px; }
+
+/* Compact closed toolbar + wider hero to match the wide grid (same 14px
+   side inset as .fx-sheet-wide so toolbar and grid share both edges). */
+.fx-hero:has(.fx-hero-slot .filter-pill) { margin-inline: 14px; margin-bottom: 6px; padding-bottom: 6px; }
+.fx-hero-content:has(~ .fx-hero-slot .filter-pill) { padding-top: 18px; }
+.fx-hero-slot:has(.filter-pill):not(:empty) { margin: 4px 6px 0; padding: 3px 8px; gap: 4px 5px; border-radius: 14px; }
+.fx-hero-slot:has(.filter-pill) .filter-pill { padding: 0.18rem 0.6rem; font-size: 0.76rem; gap: 0.25rem; }
+.fx-hero-slot:has(.filter-pill) .pill-bar .btn { padding: 0.18rem 0.65rem; font-size: 0.76rem; }
+.fx-hero-slot:has(.filter-pill) .pill-search { padding: 0.18rem 0.65rem; }
+.fx-hero-slot:has(.filter-pill) .pill-search input { font-size: 0.76rem; }

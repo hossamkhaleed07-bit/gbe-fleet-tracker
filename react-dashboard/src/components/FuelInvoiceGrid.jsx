@@ -262,13 +262,26 @@ function DateRangeDropdown({ openKey, setOpenKey, dateFrom, dateTo, setDateFrom,
 // un-maximizing the browser or rotating a tablet). Tracked in state and
 // recomputed on the `resize` event instead, so the grid genuinely stays
 // responsive the way "adjusts to different screen sizes" requires.
-function useViewportHeight() {
-  const [height, setHeight] = useState(() => window.innerHeight);
+// Height the grid can use: from wherever the grid's wrapper starts on the page
+// (so it sits right under the toolbar, whatever the toolbar's height) to the
+// bottom of the window. Re-measured on resize and whenever the layout above it
+// changes size (e.g. the toolbar wrapping to a second row).
+function useGridHeight(wrapRef) {
+  const [height, setHeight] = useState(() => Math.max(420, window.innerHeight * 0.8));
   useEffect(() => {
-    function onResize() { setHeight(window.innerHeight); }
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, []);
+    function measure() {
+      const el = wrapRef.current;
+      if (!el) return;
+      const top = el.getBoundingClientRect().top + window.scrollY;
+      setHeight(Math.max(420, Math.round(window.innerHeight - top - 12)));
+    }
+    measure();
+    window.addEventListener("resize", measure);
+    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    const slot = document.getElementById("fx-hero-slot");
+    if (ro && slot) ro.observe(slot);
+    return () => { window.removeEventListener("resize", measure); ro?.disconnect(); };
+  }, [wrapRef]);
   return height;
 }
 
@@ -276,7 +289,8 @@ export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
   const { showToast } = useToast();
   const [exporting, setExporting] = useState(false);
-  const viewportHeight = useViewportHeight();
+  const gridWrapRef = useRef(null);
+  const gridHeight = useGridHeight(gridWrapRef);
   const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
 
@@ -695,6 +709,24 @@ export default function FuelInvoiceGrid() {
       if (op.type !== "DELETE") continue;
       savedToDelete += current.slice(op.fromRowIndex, op.toRowIndex).filter(r => r.id).length;
     }
+    // Pressing Delete on a selected range doesn't remove rows — it blanks
+    // their cells (an UPDATE). A saved row left with every typed field empty
+    // is a deletion in all but name, so it gets the same confirmation.
+    const TYPED = FUEL_INVOICE_FIELDS.filter(f => !["computed", "lookup"].includes(f.type) && f.key !== "batch").map(f => f.key);
+    let savedToBlank = 0;
+    for (const op of operations) {
+      if (op.type !== "UPDATE") continue;
+      savedToBlank += newValue.slice(op.fromRowIndex, op.toRowIndex)
+        .filter(r => r.id && TYPED.every(k => r[k] === null || r[k] === undefined || r[k] === "")).length;
+    }
+    if (savedToBlank > 0) {
+      const msg = savedToBlank === 1
+        ? "This clears ALL data in 1 saved record. Continue?"
+        : `This clears ALL data in ${savedToBlank.toLocaleString()} saved records. Continue?
+
+This affects everyone.`;
+      if (!window.confirm(msg)) return;
+    }
     if (savedToDelete > 0) {
       const msg = savedToDelete === 1
         ? "Delete 1 saved record from the database?"
@@ -812,7 +844,7 @@ export default function FuelInvoiceGrid() {
   }, [records, canEdit, columnWidths]);
 
   return (
-    <div className="fuel-invoice-grid-wrap">
+    <div className="fuel-invoice-grid-wrap" ref={gridWrapRef}>
       {/* Portaled into the hero's #fx-hero-slot (same mechanism every other
           page's filter bar already uses — see GlobalFilters/Records.jsx) so
           the toolbar sits in the dark header area instead of its own white
@@ -875,7 +907,7 @@ export default function FuelInvoiceGrid() {
         }}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
-        height={viewportHeight * 0.8}
+        height={gridHeight}
         rowHeight={38}
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
