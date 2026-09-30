@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Search, Maximize2, X, ChevronDown } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
+import HeroPortal from "./HeroPortal";
 import { useAuth } from "../contexts/AuthContext";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
@@ -252,8 +253,26 @@ function DateRangeDropdown({ openKey, setOpenKey, dateFrom, dateTo, setDateFrom,
   );
 }
 
+// The grid's height is set from window.innerHeight, but a bare expression
+// read once during render never updates again — the grid would keep
+// whatever pixel height happened to be current at the last unrelated
+// re-render, not the actual live window size, on a real resize (e.g.
+// un-maximizing the browser or rotating a tablet). Tracked in state and
+// recomputed on the `resize` event instead, so the grid genuinely stays
+// responsive the way "adjusts to different screen sizes" requires.
+function useViewportHeight() {
+  const [height, setHeight] = useState(() => window.innerHeight);
+  useEffect(() => {
+    function onResize() { setHeight(window.innerHeight); }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+  return height;
+}
+
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
+  const viewportHeight = useViewportHeight();
   const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
 
@@ -753,40 +772,49 @@ export default function FuelInvoiceGrid() {
 
   return (
     <div className="fuel-invoice-grid-wrap">
-      <div className="pill-bar">
-        {GROUPABLE_FIELDS.map(f => (
-          <FilterDropdown
-            key={f.key}
-            filterKey={f.key}
-            label={f.label}
-            value={fieldFilters[f.key] || ""}
-            options={distinctValues(allRows, f.key)}
+      {/* Portaled into the hero's #fx-hero-slot (same mechanism every other
+          page's filter bar already uses — see GlobalFilters/Records.jsx) so
+          the toolbar sits in the dark header area instead of its own white
+          box above the grid. .fx-hero-slot > .pill-bar is already styled
+          `display: contents` for exactly this (dashboard-base.css), and the
+          slot itself renders empty (no box at all) when nothing is
+          portaled into it, so this never doubles up with anything. */}
+      <HeroPortal>
+        <div className="pill-bar">
+          {GROUPABLE_FIELDS.map(f => (
+            <FilterDropdown
+              key={f.key}
+              filterKey={f.key}
+              label={f.label}
+              value={fieldFilters[f.key] || ""}
+              options={distinctValues(allRows, f.key)}
+              openKey={openFilter}
+              setOpenKey={setOpenFilter}
+              onSelect={opt => setFieldFilters(prev => ({ ...prev, [f.key]: opt }))}
+            />
+          ))}
+          <DateRangeDropdown
             openKey={openFilter}
             setOpenKey={setOpenFilter}
-            onSelect={opt => setFieldFilters(prev => ({ ...prev, [f.key]: opt }))}
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            setDateFrom={setDateFrom}
+            setDateTo={setDateTo}
           />
-        ))}
-        <DateRangeDropdown
-          openKey={openFilter}
-          setOpenKey={setOpenFilter}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          setDateFrom={setDateFrom}
-          setDateTo={setDateTo}
-        />
-        {hasActiveFilters && (
-          <button className="btn pill-add-btn" onClick={handleClearFilters}>Clear</button>
-        )}
-        <button className="btn pill-add-btn" onClick={() => autofitColumns()} title="Fit every column to its content">
-          <Maximize2 size={13} style={{ marginInlineEnd: "0.35rem", verticalAlign: "-2px" }} />
-          AutoFit columns
-        </button>
-        <span style={{ flex: 1 }} />
-        <div className="pill-search">
-          <span className="pill-search-ic"><Search size={14} /></span>
-          <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." />
+          {hasActiveFilters && (
+            <button className="btn pill-add-btn" onClick={handleClearFilters}>Clear</button>
+          )}
+          <button className="btn pill-add-btn" onClick={() => autofitColumns()} title="Fit every column to its content">
+            <Maximize2 size={13} style={{ marginInlineEnd: "0.35rem", verticalAlign: "-2px" }} />
+            AutoFit columns
+          </button>
+          <span style={{ flex: 1 }} />
+          <div className="pill-search">
+            <span className="pill-search-ic"><Search size={14} /></span>
+            <input type="text" value={search} onChange={e => setSearch(e.target.value)} placeholder="Search..." />
+          </div>
         </div>
-      </div>
+      </HeroPortal>
 
       <DataSheetGrid
         value={displayRows}
@@ -802,7 +830,7 @@ export default function FuelInvoiceGrid() {
         }}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
-        height={window.innerHeight * 0.74}
+        height={viewportHeight * 0.8}
         rowHeight={38}
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
