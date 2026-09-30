@@ -507,14 +507,57 @@
   .fuel-invoice-grid-wrap .dsg-context-menu-item:hover { background: var(--plane); }
 
   /* Filter/AutoFit toolbar controls, scoped to this module only (the base
-     .pill-bar/.pill-select-wrap rules above are shared with the Drivers
-     gallery page and must stay untouched) — font size bumped slightly to
-     match the rest of the grid. */
-  .fuel-invoice-grid-wrap .pill-select-wrap select,
-  .fuel-invoice-grid-wrap .pill-search input,
-  .fuel-invoice-grid-wrap .pill-date-wrap input {
+     .pill-bar rules above are shared with the Drivers gallery page and
+     must stay untouched) — font size bumped slightly to match the rest of
+     the grid. */
+  .fuel-invoice-grid-wrap .pill-search input {
     font-size: 0.9rem;
   }
+
+  /* Filter dropdown pills (Data Source, Type of fuel, ..., Date Range) —
+     replace the native <select>/bare date inputs with a click-to-open
+     panel per her "professional dropdown" request. The panel itself is
+     rendered through a React portal straight into <body> (see
+     FuelInvoiceGrid.jsx), so its own CSS lives unscoped here rather than
+     under .fuel-invoice-grid-wrap — the portaled DOM node is a sibling of
+     the page, not a descendant of it. */
+  .filter-pill {
+    display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.55rem 1rem; border-radius: 999px;
+    border: 1px solid var(--border); background-color: var(--surface-1); color: var(--ink-2);
+    font-size: 0.9rem; font-weight: 600; font-family: inherit; cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+  }
+  .filter-pill:hover { border-color: var(--ink-muted); }
+  .filter-pill-active { border-color: var(--blue); color: var(--blue); background: color-mix(in srgb, var(--blue) 6%, var(--surface-1)); }
+  .filter-pill-label { max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  .filter-dropdown-panel {
+    position: fixed; z-index: 90; background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: var(--radius-md); box-shadow: var(--shadow-lg); padding: 0.5rem; max-width: 280px;
+  }
+  .filter-dropdown-search {
+    width: 100%; box-sizing: border-box; border: 1px solid var(--border); border-radius: 8px;
+    padding: 0.45rem 0.6rem; font-size: 0.85rem; font-family: inherit; background: var(--plane); color: var(--ink);
+    margin-bottom: 0.4rem; outline: none;
+  }
+  .filter-dropdown-search:focus { border-color: var(--blue); }
+  .filter-dropdown-list { max-height: 260px; overflow-y: auto; display: flex; flex-direction: column; }
+  .filter-dropdown-option {
+    display: block; width: 100%; text-align: left; border: none; background: none; cursor: pointer;
+    padding: 0.5rem 0.6rem; border-radius: 8px; font-size: 0.85rem; font-family: inherit; color: var(--ink-2);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .filter-dropdown-option:hover { background: var(--plane); }
+  .filter-dropdown-option.selected { background: color-mix(in srgb, var(--blue) 10%, transparent); color: var(--blue); font-weight: 600; }
+  .filter-dropdown-empty { padding: 0.6rem; font-size: 0.8rem; color: var(--ink-muted); text-align: center; }
+  .filter-dropdown-panel-date { display: flex; flex-direction: column; gap: 0.5rem; min-width: 200px; }
+  .filter-dropdown-date-label { display: flex; flex-direction: column; gap: 0.25rem; font-size: 0.78rem; color: var(--ink-muted); font-weight: 600; }
+  .filter-dropdown-date-label input {
+    border: 1px solid var(--border); border-radius: 8px; padding: 0.4rem 0.55rem; font-size: 0.85rem;
+    font-family: inherit; color: var(--ink); background: var(--plane);
+  }
+  .filter-dropdown-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.2rem; }
+  .filter-dropdown-actions .btn { padding: 0.4rem 0.8rem; font-size: 0.8rem; }
 
   /* Row-number gutter cell is now a real button (click opens the row-color
      swatch picker) instead of plain static text. */
