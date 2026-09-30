@@ -149,3 +149,26 @@ export function fieldColorKey(fieldKey, value) {
 export function money(v) {
   return v == null || v === "" ? "—" : `${Number(v).toFixed(2)} SAR`;
 }
+
+// Thousands-grouped variant used only for the grid's Total Cost summary bar
+// (a large running total is much easier to read with grouping — the
+// per-cell `money()` above is left exactly as-is since it isn't part of
+// this request).
+export function moneyGrouped(v) {
+  const n = Number(v) || 0;
+  return `SAR ${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
+// Manual per-row highlight (right-click the row number → pick a color).
+// Reuses the app's existing 7 badge hues (see dashboard-base.css --c-*-bg/
+// ink tokens) instead of introducing new arbitrary colors, so it reads as
+// part of the same design system as every other colored pill in the app.
+export const ROW_COLOR_OPTIONS = [
+  { key: "red", label: "Red" },
+  { key: "orange", label: "Orange" },
+  { key: "green", label: "Green" },
+  { key: "cyan", label: "Cyan" },
+  { key: "blue", label: "Blue" },
+  { key: "purple", label: "Purple" },
+  { key: "pink", label: "Pink" },
+];
