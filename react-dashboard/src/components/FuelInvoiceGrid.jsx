@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Search, Maximize2, X, ChevronDown } from "lucide-react";
+import { Search, Maximize2, X, ChevronDown, Download } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
 import HeroPortal from "./HeroPortal";
 import { useAuth } from "../contexts/AuthContext";
+import { useToast } from "../contexts/ToastContext";
+import { exportFuelInvoiceXlsx } from "../lib/fuelInvoiceExport";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
 import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money, moneyGrouped, ROW_COLOR_OPTIONS } from "../lib/fuelInvoice";
@@ -272,6 +274,8 @@ function useViewportHeight() {
 
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
+  const { showToast } = useToast();
+  const [exporting, setExporting] = useState(false);
   const viewportHeight = useViewportHeight();
   const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
@@ -381,6 +385,24 @@ export default function FuelInvoiceGrid() {
   }, [allRows, fieldFilters, dateFrom, dateTo, search]);
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
+
+  // Exports every row matching the current filters/search (displayRows is the
+  // full filtered set, not just what's virtualised on screen). Read-only:
+  // nothing is written to the database.
+  async function handleExport() {
+    if (exporting) return;
+    setExporting(true);
+    try {
+      const n = await exportFuelInvoiceXlsx(displayRowsRef.current, new Date().toLocaleDateString("en-CA"));
+      if (n === 0) showToast("No records to export", "error");
+      else showToast(`Exported ${n.toLocaleString()} record${n === 1 ? "" : "s"} to Excel`);
+    } catch (err) {
+      console.error("Excel export failed", err);
+      showToast("Export failed: " + (err?.message || "unknown error"), "error");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   // Google-Sheets-style selection summary. `selection` is react-datasheet-
   // grid's own shape: {min: {row, col}, max: {row, col}} — row/col are
@@ -807,6 +829,10 @@ export default function FuelInvoiceGrid() {
           <button className="btn pill-add-btn" onClick={() => autofitColumns()} title="Fit every column to its content">
             <Maximize2 size={13} style={{ marginInlineEnd: "0.35rem", verticalAlign: "-2px" }} />
             AutoFit columns
+          </button>
+          <button className="btn pill-add-btn" onClick={handleExport} disabled={exporting} title="Download the currently filtered records as .xlsx">
+            <Download size={13} style={{ marginInlineEnd: "0.35rem", verticalAlign: "-2px" }} />
+            {exporting ? "Exporting…" : "Export to Excel"}
           </button>
           <span style={{ flex: 1 }} />
           <div className="pill-search">

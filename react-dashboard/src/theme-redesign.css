@@ -516,3 +516,21 @@ a.media-link, .badge-link, .ov-row-action, .notif-mark-all { color: var(--fx-gre
   .app-cursor-glow { display: none; }
   .kpi-dot-card, .driver-card, .compare-card { transform: none !important; }
 }
+
+/* ---------- Fuel & Invoice toolbar: compact, tight to the grid ----------
+   Scoped via :has(.filter-pill) so no other page's hero filters change. */
+.fx-hero:has(.fx-hero-slot .filter-pill) { padding-bottom: 10px; }
+.fx-hero-content:has(~ .fx-hero-slot .filter-pill) { padding-top: 28px; }
+.fx-hero-slot:has(.filter-pill):not(:empty) {
+  margin: 8px 8px 0; padding: 6px 10px; gap: 6px 6px; align-items: center; border-radius: 18px;
+}
+.fx-hero-slot:has(.filter-pill) .filter-pill { padding: 0.3rem 0.75rem; font-size: 0.82rem; gap: 0.35rem; }
+.fx-hero-slot:has(.filter-pill) .pill-bar .btn { padding: 0.3rem 0.8rem; font-size: 0.82rem; }
+.fx-hero-slot:has(.filter-pill) .pill-search { padding: 0.3rem 0.8rem; min-width: 130px; flex: 0 1 200px; }
+.fx-hero-slot:has(.filter-pill) .pill-search input { font-size: 0.82rem; }
+.fx-hero-slot:has(.filter-pill) .pill-bar .btn:disabled { opacity: 0.6; cursor: progress; }
+/* HeroPortal wraps its children in a plain <div>, so the generic
+   ".fx-hero-slot > .pill-bar" flatten rule never reached the Fuel & Invoice
+   toolbar and it kept its white card look inside the dark glass box. */
+.fx-hero-slot:has(.filter-pill) > div,
+.fx-hero-slot:has(.filter-pill) .pill-bar { display: contents; }
