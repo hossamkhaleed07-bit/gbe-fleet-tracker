@@ -136,9 +136,15 @@ export default function FuelInvoiceGrid() {
   const [colorPicker, setColorPicker] = useState(null);
 
   // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count/Count
-  // Numbers) for whatever range of cells is currently selected — null
-  // hides the card (nothing, or just one cell, selected).
+  // Numbers) for whatever range of cells is currently selected — kept up to
+  // date at all times, but only ever DISPLAYED when statsPopupOpen is true
+  // (toggled by clicking the "Total Cost" bar, not shown automatically).
   const [selectionStats, setSelectionStats] = useState(null);
+  const selectionStatsRef = useRef(null);
+  selectionStatsRef.current = selectionStats;
+  // { x, y } of the popup (anchored above the "Total Cost" button that was
+  // clicked to open it), or null when closed.
+  const [statsPopupOpen, setStatsPopupOpen] = useState(null);
 
   // The grid's own local, fully-controlled row state (the FULL set — see
   // displayRows below for the filtered subset actually shown) — seeded once
@@ -216,7 +222,16 @@ export default function FuelInvoiceGrid() {
   // while dragging, so it must never itself trigger a react-datasheet-grid
   // prop-identity change that could revive the width-rendering issue.
   const handleSelectionChange = useMemo(() => ({ selection }) => {
-    if (!selection) { setSelectionStats(null); return; }
+    // `selection` comes back null not just when she deliberately clicks a
+    // single cell, but also whenever the grid itself loses focus — which
+    // includes clicking the "Total Cost" button to open this very popup.
+    // Treating that null the same as "clear the stats" would erase the
+    // range she just selected the instant she clicks the button meant to
+    // reveal it. So: a real single-cell click (an actual 1x1 selection
+    // object) clears the stats; the grid blurring entirely (null) just
+    // leaves whatever was last computed on screen, like a spreadsheet's own
+    // status bar does.
+    if (!selection) return;
     const { min, max } = selection;
     const rowCount = max.row - min.row + 1;
     const colCount = max.col - min.col + 1;
@@ -344,6 +359,14 @@ export default function FuelInvoiceGrid() {
     return () => document.removeEventListener("click", onDocClick);
   }, [colorPicker]);
 
+  // Close the selection-stats popup on any outside click, same pattern.
+  useEffect(() => {
+    if (!statsPopupOpen) return;
+    function onDocClick() { setStatsPopupOpen(false); }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [statsPopupOpen]);
+
   // Record count moved next to the grid's own native "Add N rows" control
   // (same bottom bar, not a separate line above the grid) — stable
   // (empty deps) for the same reason as gutterColumn above, reading the
@@ -356,7 +379,30 @@ export default function FuelInvoiceGrid() {
         <div className="cards-count">
           {displayRowsRef.current.length}{displayRowsRef.current.length !== allRowsRef.current.length ? ` of ${allRowsRef.current.length}` : ""} record{allRowsRef.current.length === 1 ? "" : "s"}
         </div>
-        <div className="fuel-invoice-total-cost">Total Cost: {moneyGrouped(totalCostRef.current)}</div>
+        <button
+          type="button"
+          className="fuel-invoice-total-cost"
+          title="Click for selection stats (Sum/Avg/Min/Max/Count)"
+          // Clicking a plain <button> moves focus to it by default, which
+          // blurs the grid and clears its current cell selection (so the
+          // very stats we're about to show would already be gone) —
+          // preventDefault on mousedown keeps focus (and the selection)
+          // right where it was, same trick used for toolbar buttons next to
+          // a text selection.
+          onMouseDown={e => e.preventDefault()}
+          onClick={e => {
+            e.stopPropagation();
+            // Read the rect synchronously here, not inside the setState
+            // updater below — by the time that callback runs, the
+            // synthetic event's currentTarget has already been cleared.
+            const rect = e.currentTarget.getBoundingClientRect();
+            setStatsPopupOpen(prev => (prev
+              ? null
+              : { right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.top + 6 }));
+          }}
+        >
+          Total Cost: {moneyGrouped(totalCostRef.current)}
+        </button>
         <span style={{ flex: 1 }} />
         <button type="button" className="dsg-add-row-btn" onClick={() => addRows(value)}>Add</button>
         <input
@@ -606,14 +652,24 @@ export default function FuelInvoiceGrid() {
         onSelectionChange={handleSelectionChange}
       />
 
-      {selectionStats && (
-        <div className="selection-stats-card">
-          <div><span>Sum</span><b>{selectionStats.sum.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></div>
-          <div><span>Avg</span><b>{selectionStats.avg != null ? selectionStats.avg.toLocaleString("en-US", { maximumFractionDigits: 8 }) : "—"}</b></div>
-          <div><span>Min</span><b>{selectionStats.min ?? "—"}</b></div>
-          <div><span>Max</span><b>{selectionStats.max ?? "—"}</b></div>
-          <div><span>Count</span><b>{selectionStats.count.toLocaleString("en-US")}</b></div>
-          <div><span>Count Numbers</span><b>{selectionStats.countNumbers.toLocaleString("en-US")}</b></div>
+      {statsPopupOpen && (
+        <div
+          className="selection-stats-card"
+          style={{ position: "fixed", right: statsPopupOpen.right, bottom: statsPopupOpen.bottom }}
+          onClick={e => e.stopPropagation()}
+        >
+          {selectionStats ? (
+            <>
+              <div><span>Sum</span><b>{selectionStats.sum.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></div>
+              <div><span>Avg</span><b>{selectionStats.avg != null ? selectionStats.avg.toLocaleString("en-US", { maximumFractionDigits: 8 }) : "—"}</b></div>
+              <div><span>Min</span><b>{selectionStats.min ?? "—"}</b></div>
+              <div><span>Max</span><b>{selectionStats.max ?? "—"}</b></div>
+              <div><span>Count</span><b>{selectionStats.count.toLocaleString("en-US")}</b></div>
+              <div><span>Count Numbers</span><b>{selectionStats.countNumbers.toLocaleString("en-US")}</b></div>
+            </>
+          ) : (
+            <div className="selection-stats-empty">Select a range of cells to see stats</div>
+          )}
         </div>
       )}
 
