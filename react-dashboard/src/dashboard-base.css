@@ -588,6 +588,20 @@
   .dsg-resize-guide {
     position: fixed; top: 0; bottom: 0; width: 2px; background: var(--blue); z-index: 80; pointer-events: none;
   }
+
+  /* Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count/Count
+     Numbers), shown while a multi-cell range is selected. */
+  .selection-stats-card {
+    position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 70;
+    background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-md);
+    box-shadow: var(--shadow-lg); padding: 0.7rem 1rem; font-size: 0.82rem; min-width: 170px;
+  }
+  .selection-stats-card > div {
+    display: flex; align-items: center; justify-content: space-between; gap: 1.2rem; padding: 0.2rem 0;
+  }
+  .selection-stats-card > div + div { border-top: 1px solid var(--border); }
+  .selection-stats-card span { color: var(--ink-muted); }
+  .selection-stats-card b { color: var(--ink); font-weight: 700; }
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
   a.media-link { color: var(--blue); text-decoration: none; }
