@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Maximize2, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Search, Maximize2, X, ChevronDown } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
 import { useAuth } from "../contexts/AuthContext";
@@ -105,6 +106,152 @@ function ResizableHeader({ label, colKey, width, onResize, onAutofit }) {
   );
 }
 
+// A shared "only one open at a time, close on outside click or Escape"
+// popover pattern for the filter toolbar — module scope so its identity
+// never changes across FuelInvoiceGrid renders (same reasoning as
+// ResizableHeader above). `openKey`/`setOpenKey` live in the parent so
+// opening one filter closes whichever other one was open.
+function useFilterPopover(filterKey, openKey, setOpenKey) {
+  const btnRef = useRef(null);
+  const panelRef = useRef(null);
+  const [pos, setPos] = useState(null);
+  const isOpen = openKey === filterKey;
+
+  useEffect(() => {
+    if (isOpen && btnRef.current) {
+      const r = btnRef.current.getBoundingClientRect();
+      // Clamp so the panel (max 280px, see .filter-dropdown-panel) never
+      // runs past the right edge of the viewport for a button sitting near
+      // it — "not clipped by the toolbar/table/page boundaries" was an
+      // explicit requirement.
+      const left = Math.min(r.left, Math.max(8, window.innerWidth - 288));
+      setPos({ left, top: r.bottom + 6, minWidth: r.width });
+    }
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    function onDocMouseDown(e) {
+      if (panelRef.current?.contains(e.target) || btnRef.current?.contains(e.target)) return;
+      setOpenKey(null);
+    }
+    function onKeyDown(e) {
+      if (e.key === "Escape") { e.stopPropagation(); setOpenKey(null); }
+    }
+    document.addEventListener("mousedown", onDocMouseDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", onDocMouseDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [isOpen, setOpenKey]);
+
+  function toggle() { setOpenKey(isOpen ? null : filterKey); }
+  return { btnRef, panelRef, pos, isOpen, toggle };
+}
+
+// Single-select filter pill — click opens a portal-rendered options panel
+// (search box included once there are more than a handful of options)
+// instead of a native <select>, per her "professional dropdown" request.
+// Selecting an option (or "All ...") applies it immediately and closes the
+// panel, same semantics as the native select it replaces — no multi-select,
+// preserving the existing single-value-per-field filter logic exactly.
+function FilterDropdown({ filterKey, label, value, options, openKey, setOpenKey, onSelect }) {
+  const { btnRef, panelRef, pos, isOpen, toggle } = useFilterPopover(filterKey, openKey, setOpenKey);
+  const [search, setSearch] = useState("");
+  useEffect(() => { if (isOpen) setSearch(""); }, [isOpen]);
+
+  const filtered = search.trim()
+    ? options.filter(o => o.toLowerCase().includes(search.trim().toLowerCase()))
+    : options;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={"filter-pill" + (value ? " filter-pill-active" : "")}
+        onClick={toggle}
+      >
+        <span className="filter-pill-label">{value || label}</span>
+        <ChevronDown size={13} />
+      </button>
+      {isOpen && pos && createPortal(
+        <div ref={panelRef} className="filter-dropdown-panel" style={{ left: pos.left, top: pos.top, minWidth: Math.max(pos.minWidth, 160) }}>
+          {options.length > 8 && (
+            <input
+              autoFocus
+              className="filter-dropdown-search"
+              placeholder={`Search ${label}...`}
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          )}
+          <div className="filter-dropdown-list">
+            <button
+              type="button"
+              className={"filter-dropdown-option" + (!value ? " selected" : "")}
+              onClick={() => { onSelect(""); setOpenKey(null); }}
+            >
+              All {label}
+            </button>
+            {filtered.map(opt => (
+              <button
+                key={opt}
+                type="button"
+                className={"filter-dropdown-option" + (opt === value ? " selected" : "")}
+                onClick={() => { onSelect(opt); setOpenKey(null); }}
+              >
+                {opt}
+              </button>
+            ))}
+            {filtered.length === 0 && <div className="filter-dropdown-empty">No matches</div>}
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
+// Date-range filter as the same click-to-open pill, instead of two
+// always-visible bare date inputs.
+function DateRangeDropdown({ openKey, setOpenKey, dateFrom, dateTo, setDateFrom, setDateTo }) {
+  const { btnRef, panelRef, pos, isOpen, toggle } = useFilterPopover("__date_range", openKey, setOpenKey);
+  const active = dateFrom || dateTo;
+
+  return (
+    <>
+      <button
+        ref={btnRef}
+        type="button"
+        className={"filter-pill" + (active ? " filter-pill-active" : "")}
+        onClick={toggle}
+      >
+        <span className="filter-pill-label">{active ? `${dateFrom || "…"} – ${dateTo || "…"}` : "Date Range"}</span>
+        <ChevronDown size={13} />
+      </button>
+      {isOpen && pos && createPortal(
+        <div ref={panelRef} className="filter-dropdown-panel filter-dropdown-panel-date" style={{ left: pos.left, top: pos.top }}>
+          <label className="filter-dropdown-date-label">
+            From
+            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} />
+          </label>
+          <label className="filter-dropdown-date-label">
+            To
+            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} />
+          </label>
+          <div className="filter-dropdown-actions">
+            <button type="button" className="btn" onClick={() => { setDateFrom(""); setDateTo(""); }}>Clear</button>
+            <button type="button" className="btn btn-primary" onClick={() => setOpenKey(null)}>Apply</button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </>
+  );
+}
+
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
   const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
@@ -165,6 +312,9 @@ export default function FuelInvoiceGrid() {
   const [fieldFilters, setFieldFilters] = useState({}); // { [key]: value }
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
+  // Which filter dropdown (a field key, or "__date_range") is currently
+  // open — only one at a time, opening another closes the previous one.
+  const [openFilter, setOpenFilter] = useState(null);
 
   const hasActiveFilters = search.trim() !== "" || dateFrom !== "" || dateTo !== "" || Object.values(fieldFilters).some(Boolean);
   function handleClearFilters() {
@@ -605,18 +755,25 @@ export default function FuelInvoiceGrid() {
     <div className="fuel-invoice-grid-wrap">
       <div className="pill-bar">
         {GROUPABLE_FIELDS.map(f => (
-          <div className="pill-select-wrap" key={f.key}>
-            <select value={fieldFilters[f.key] || ""} onChange={e => setFieldFilters(prev => ({ ...prev, [f.key]: e.target.value }))}>
-              <option value="">{f.label}</option>
-              {distinctValues(allRows, f.key).map(opt => <option key={opt} value={opt}>{opt}</option>)}
-            </select>
-          </div>
+          <FilterDropdown
+            key={f.key}
+            filterKey={f.key}
+            label={f.label}
+            value={fieldFilters[f.key] || ""}
+            options={distinctValues(allRows, f.key)}
+            openKey={openFilter}
+            setOpenKey={setOpenFilter}
+            onSelect={opt => setFieldFilters(prev => ({ ...prev, [f.key]: opt }))}
+          />
         ))}
-        <div className="pill-date-wrap">
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} title="From date" />
-          <span className="ink-muted">–</span>
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} title="To date" />
-        </div>
+        <DateRangeDropdown
+          openKey={openFilter}
+          setOpenKey={setOpenFilter}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          setDateFrom={setDateFrom}
+          setDateTo={setDateTo}
+        />
         {hasActiveFilters && (
           <button className="btn pill-add-btn" onClick={handleClearFilters}>Clear</button>
         )}
@@ -645,7 +802,7 @@ export default function FuelInvoiceGrid() {
         }}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
-        height={window.innerHeight * 0.65}
+        height={window.innerHeight * 0.74}
         rowHeight={38}
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
