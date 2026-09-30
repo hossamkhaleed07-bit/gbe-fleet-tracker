@@ -433,8 +433,8 @@
   .fuel-invoice-grid-wrap {
     --dsg-border-color: var(--border);
     --dsg-selection-border-color: var(--blue);
-    --dsg-selection-background-color: color-mix(in srgb, var(--blue) 6%, transparent);
-    --dsg-header-text-color: var(--ink-muted);
+    --dsg-selection-background-color: color-mix(in srgb, var(--blue) 8%, transparent);
+    --dsg-header-text-color: var(--ink-2);
     --dsg-header-active-text-color: var(--ink);
     --dsg-cell-background-color: var(--surface-1);
     --dsg-cell-disabled-background-color: var(--plane);
@@ -444,15 +444,29 @@
     box-shadow: var(--shadow-sm);
     font-family: inherit;
   }
-  .fuel-invoice-grid-wrap .dsg-cell-header-container { font-weight: 700; font-size: 0.78rem; }
+  /* Header: distinct background (not just the same white as cells) so
+     column headers read clearly above the data, per her "more visible and
+     readable" request — plus a slightly stronger bottom border to anchor it. */
+  .fuel-invoice-grid-wrap .dsg-cell.dsg-cell-header {
+    background: var(--plane);
+    box-shadow: 0 1px var(--dsg-border-color) inset, 0 -1px color-mix(in srgb, var(--ink) 10%, transparent) inset;
+  }
+  .fuel-invoice-grid-wrap .dsg-cell-header-container { font-weight: 700; font-size: 0.84rem; width: 100%; height: 100%; }
   .fuel-invoice-grid-wrap .dsg-input,
   .fuel-invoice-grid-wrap .dsg-select-input,
   .fuel-invoice-grid-wrap .dsg-select-display,
   .fuel-invoice-grid-wrap .dsg-readonly-cell {
-    font-family: inherit; font-size: 0.85rem;
+    font-family: inherit; font-size: 0.92rem;
+  }
+  /* Subtle alternating row stripe, distinct enough from the disabled
+     (Amount/VAT/DA Name) columns' own background to still read as a
+     separate signal, not just more gray. Skipped on the gutter (kept
+     neutral so the click target for row-color stays visually consistent). */
+  .fuel-invoice-grid-wrap .dsg-row-alt .dsg-cell:not(.dsg-cell-disabled):not(.dsg-cell-gutter) {
+    background: color-mix(in srgb, var(--ink) 3%, var(--dsg-cell-background-color));
   }
   .fuel-invoice-grid-wrap .dsg-cell:not(.dsg-cell-disabled):not(.dsg-cell-header):not(.dsg-cell-gutter):hover {
-    background: color-mix(in srgb, var(--blue) 3%, var(--dsg-cell-background-color));
+    background: color-mix(in srgb, var(--blue) 5%, var(--dsg-cell-background-color));
   }
   /* All cell content centered, per her explicit request. */
   .fuel-invoice-grid-wrap .dsg-input { text-align: center; }
@@ -469,7 +483,7 @@
      Airtable/Monday-style reference she pointed to. */
   .fuel-invoice-grid-wrap .dsg-pill {
     display: inline-flex; align-items: center; justify-content: center;
-    padding: 0.2rem 0.7rem; border-radius: 999px; font-weight: 600; font-size: 0.78rem;
+    padding: 0.2rem 0.7rem; border-radius: 999px; font-weight: 600; font-size: 0.82rem;
     max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     background: var(--plane); color: var(--ink-2);
   }
@@ -481,10 +495,99 @@
   .fuel-invoice-grid-wrap .dsg-add-row-input {
     background: var(--plane); border-color: var(--border); border-radius: 999px; font-family: inherit;
   }
+  .fuel-invoice-total-cost { font-size: 0.85rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
   .fuel-invoice-grid-wrap .dsg-context-menu {
-    border-radius: var(--radius-sm); box-shadow: var(--shadow-md); font-family: inherit; font-size: 0.85rem;
+    border-radius: var(--radius-sm); box-shadow: var(--shadow-md); font-family: inherit; font-size: 0.9rem;
   }
   .fuel-invoice-grid-wrap .dsg-context-menu-item:hover { background: var(--plane); }
+
+  /* Filter/AutoFit toolbar controls, scoped to this module only (the base
+     .pill-bar/.pill-select-wrap rules above are shared with the Drivers
+     gallery page and must stay untouched) — font size bumped slightly to
+     match the rest of the grid. */
+  .fuel-invoice-grid-wrap .pill-select-wrap select,
+  .fuel-invoice-grid-wrap .pill-search input,
+  .fuel-invoice-grid-wrap .pill-date-wrap input {
+    font-size: 0.9rem;
+  }
+
+  /* Row-number gutter cell is now a real button (click opens the row-color
+     swatch picker) instead of plain static text. */
+  .fuel-invoice-grid-wrap .gutter-row-btn {
+    width: 100%; height: 100%; border: none; background: none; cursor: pointer;
+    font-family: inherit; font-size: 0.82rem; color: var(--ink-muted); font-weight: 600;
+    display: flex; align-items: center; justify-content: center; padding: 0;
+  }
+  .fuel-invoice-grid-wrap .dsg-cell-gutter:hover .gutter-row-btn { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+  .fuel-invoice-grid-wrap .gutter-row-btn:disabled,
+  .fuel-invoice-grid-wrap .gutter-row-btn[title=""] { cursor: default; }
+
+  /* Manual row highlighting (048 migration, `row_color`) — reuses the app's
+     existing 7 badge hues rather than inventing new colors. Applied to every
+     cell in the row (higher specificity than the alt-row stripe / disabled
+     background above, so it always wins), and as a small solid dot behind
+     the row number so a colored row is recognizable even before scrolling
+     to see the rest of it. */
+  .fuel-invoice-grid-wrap .dsg-row.row-color-red .dsg-cell { background: var(--c-red-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-orange .dsg-cell { background: var(--c-orange-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-green .dsg-cell { background: var(--c-green-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-cyan .dsg-cell { background: var(--c-cyan-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-blue .dsg-cell { background: var(--c-blue-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-purple .dsg-cell { background: var(--c-purple-bg); }
+  .fuel-invoice-grid-wrap .dsg-row.row-color-pink .dsg-cell { background: var(--c-pink-bg); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-red { color: var(--c-red-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-orange { color: var(--c-orange-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-green { color: var(--c-green-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-cyan { color: var(--c-cyan-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-blue { color: var(--c-blue-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-purple { color: var(--c-purple-ink); }
+  .fuel-invoice-grid-wrap .gutter-row-btn.row-color-pink { color: var(--c-pink-ink); }
+
+  .row-color-popover {
+    z-index: 60; display: flex; gap: 0.35rem; padding: 0.45rem; background: var(--surface-1);
+    border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-md);
+  }
+  .row-color-swatch {
+    width: 22px; height: 22px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--ink) 10%, transparent);
+    cursor: pointer; padding: 0; transition: transform 0.1s ease;
+  }
+  .row-color-swatch:hover { transform: scale(1.12); }
+  .row-color-swatch-none { background: var(--surface-1); color: var(--ink-muted); display: flex; align-items: center; justify-content: center; }
+  .row-color-swatch-red { background: var(--c-red-ink); }
+  .row-color-swatch-orange { background: var(--c-orange-ink); }
+  .row-color-swatch-green { background: var(--c-green-ink); }
+  .row-color-swatch-cyan { background: var(--c-cyan-ink); }
+  .row-color-swatch-blue { background: var(--c-blue-ink); }
+  .row-color-swatch-purple { background: var(--c-purple-ink); }
+  .row-color-swatch-pink { background: var(--c-pink-ink); }
+
+  /* Resizable column header (AutoFit + manual drag — see ResizableHeader in
+     FuelInvoiceGrid.jsx; the library itself has no resize/autofit support).
+     The handle is positioned absolutely against `.dsg-cell-header` itself,
+     which the library already makes `position: absolute` for its own
+     horizontal layout — not touching that here, just relying on it as the
+     containing block (any `position: absolute` ancestor works, not only
+     `relative`). */
+  .dsg-resizable-header {
+    width: 100%; height: 100%; display: flex; align-items: center; box-sizing: border-box;
+    padding-inline: 8px 14px; overflow: hidden;
+  }
+  /* flex items don't shrink below their content's intrinsic width by
+     default, which silently disables text-overflow:ellipsis inside a flex
+     container — min-width:0 is what actually lets it truncate instead of
+     just overflowing the cell uncropped. */
+  .dsg-header-label { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .dsg-resize-handle {
+    position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none;
+  }
+  .dsg-resize-handle:hover, .dsg-resize-handle:active { background: color-mix(in srgb, var(--blue) 25%, transparent); }
+  /* Vertical guideline shown while dragging a resize handle — appended
+     directly to <body> (not inside the grid) so it floats above everything
+     including the grid's own scroll clipping, and tracks the pointer via
+     inline `left` only (see ResizableHeader's onPointerDown). */
+  .dsg-resize-guide {
+    position: fixed; top: 0; bottom: 0; width: 2px; background: var(--blue); z-index: 80; pointer-events: none;
+  }
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
   a.media-link { color: var(--blue); text-decoration: none; }
