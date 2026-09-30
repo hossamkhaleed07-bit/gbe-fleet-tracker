@@ -495,7 +495,12 @@
   .fuel-invoice-grid-wrap .dsg-add-row-input {
     background: var(--plane); border-color: var(--border); border-radius: 999px; font-family: inherit;
   }
-  .fuel-invoice-total-cost { font-size: 0.85rem; font-weight: 700; color: var(--ink); white-space: nowrap; }
+  .fuel-invoice-total-cost {
+    font-size: 0.85rem; font-weight: 700; color: var(--ink); white-space: nowrap;
+    background: none; border: 1px solid transparent; border-radius: 999px; padding: 0.3rem 0.6rem; cursor: pointer;
+    font-family: inherit; transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .fuel-invoice-total-cost:hover { background: var(--plane); border-color: var(--border); }
   .fuel-invoice-grid-wrap .dsg-context-menu {
     border-radius: var(--radius-sm); box-shadow: var(--shadow-md); font-family: inherit; font-size: 0.9rem;
   }
@@ -592,7 +597,7 @@
   /* Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count/Count
      Numbers), shown while a multi-cell range is selected. */
   .selection-stats-card {
-    position: fixed; right: 1.2rem; bottom: 1.2rem; z-index: 70;
+    z-index: 70;
     background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-md);
     box-shadow: var(--shadow-lg); padding: 0.7rem 1rem; font-size: 0.82rem; min-width: 170px;
   }
@@ -602,6 +607,7 @@
   .selection-stats-card > div + div { border-top: 1px solid var(--border); }
   .selection-stats-card span { color: var(--ink-muted); }
   .selection-stats-card b { color: var(--ink); font-weight: 700; }
+  .selection-stats-empty { color: var(--ink-muted); font-size: 0.8rem; max-width: 180px; }
   .row-actions button { font-size: 0.78rem; padding: 0.35rem 0.6rem; margin-inline-start: 0.3rem; }
   .empty-row td { text-align: center; color: var(--ink-muted); padding: 2rem; }
   a.media-link { color: var(--blue); text-decoration: none; }
