@@ -328,7 +328,7 @@ export default function Layout() {
         </header>
 
         {/* ───── Content sheet overlapping the hero ───── */}
-        <div className="fx-sheet">
+        <div className={"fx-sheet" + (isOnFuelInvoicePage ? " fx-sheet-wide" : "")}>
           {isAdmin && viewingProject && (
             <div className="scope-banner">{t("layout.scopeBannerPrefix")} <b>{viewingProject}</b> {t("layout.scopeBannerSuffix")}</div>
           )}
