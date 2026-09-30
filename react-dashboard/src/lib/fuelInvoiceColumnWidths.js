@@ -4,7 +4,9 @@
 // (same technique browsers/Excel-alikes use) and clamps to sensible bounds.
 
 const MIN_WIDTH = 70;
-const MAX_WIDTH = 320;
+// User Name (and other long-text columns) routinely need more than this —
+// e.g. "SUP - Sadam Abdel Fadeel Mir..." was still clipping at 320.
+const MAX_WIDTH = 420;
 const CELL_HORIZONTAL_PADDING = 28; // ~14px each side, matches .dsg-cell content padding
 // Headers need a bigger buffer than plain data cells: the resize handle
 // reserves ~22px of the header's own width (see .dsg-resizable-header /
