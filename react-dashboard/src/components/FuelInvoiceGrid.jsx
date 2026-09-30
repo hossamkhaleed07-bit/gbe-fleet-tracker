@@ -1,15 +1,40 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search } from "lucide-react";
+import { Search, Maximize2, X } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
 import { useAuth } from "../contexts/AuthContext";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
-import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money } from "../lib/fuelInvoice";
+import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money, moneyGrouped, ROW_COLOR_OPTIONS } from "../lib/fuelInvoice";
 import { makeSelectDsgColumn, makeReadOnlyDsgColumn, dsgDateColumn } from "./fuelInvoiceDsgColumns";
+import { computeAutofitWidth, loadStoredColumnWidths, saveStoredColumnWidths, MIN_WIDTH, MAX_WIDTH } from "../lib/fuelInvoiceColumnWidths";
 
 const NID_TEXT_COLUMN = createTextColumn(); // plain text — never coerced to a number, so leading zeros survive
 const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
+
+// Column labels/minimums + how each one's displayed text is derived, shared
+// between building the actual react-datasheet-grid columns and AutoFit's
+// measurement pass (so AutoFit measures exactly what's rendered).
+const COLUMN_DEFS = [
+  { key: "data_source", title: "Data Source", minWidth: 130 },
+  { key: "invoice_number", title: "Invoice Number", minWidth: 130 },
+  { key: "internal_number", title: "Internal number", minWidth: 150 },
+  { key: "fuel_type", title: "Type of fuel", minWidth: 110 },
+  { key: "cost", title: "Cost", minWidth: 100 },
+  { key: "amount", title: "Amount", minWidth: 110, format: r => money(r.amount) },
+  { key: "vat", title: "VAT", minWidth: 100, format: r => money(r.vat) },
+  { key: "user_name", title: "User Name", minWidth: 220 },
+  { key: "entry_date", title: "Date", minWidth: 140 },
+  { key: "card_type", title: "Card Type", minWidth: 130 },
+  { key: "status", title: "Status", minWidth: 140 },
+  { key: "use_type", title: "Use type", minWidth: 130 },
+  { key: "branch", title: "Branch", minWidth: 120 },
+  { key: "nid", title: "NID", minWidth: 130 },
+  { key: "da_name", title: "DA Name", minWidth: 220 },
+  { key: "deduction_code", title: "Deduction code", minWidth: 150 },
+  { key: "remarks", title: "Remarks", minWidth: 200 },
+];
+for (const def of COLUMN_DEFS) if (!def.format) def.format = r => r[def.key] ?? "";
 
 // A stable per-row key that exists from the moment a row is created — even
 // before it's ever been saved (and so has no database `id` yet). Needed so
@@ -20,10 +45,95 @@ function rowKey(row) {
   return row.id ?? row.__tempId;
 }
 
+// Column header: label + a drag handle at the right edge (manual resize,
+// Excel-style) and double-click-to-autofit-this-column. Defined once at
+// module scope (not inside FuelInvoiceGrid) so its identity never changes
+// across renders — if it were recreated per-render, React would remount it
+// on any unrelated state change, which would abort an in-progress drag
+// (the pointermove/pointerup listeners are attached to `document` for the
+// duration of the gesture).
+function ResizableHeader({ label, colKey, width, onResize, onAutofit }) {
+  // react-datasheet-grid's own column-width virtualizer does not reliably
+  // pick up a live basis change while it's mounted (confirmed by direct DOM
+  // inspection: correct `basis` values reach the columns prop every time,
+  // but the rendered inline width stays stuck at the library's internal
+  // 100px default) — the grid has to actually remount to recompute real
+  // widths (see the `key` on <DataSheetGrid> in FuelInvoiceGrid). So the
+  // drag only shows a lightweight guideline while moving and commits the
+  // real width (one state update, one remount) on release, rather than
+  // resizing the live grid every frame.
+  function onPointerDown(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    const cell = e.currentTarget.closest(".dsg-cell");
+    const cellLeft = cell.getBoundingClientRect().left;
+    const startX = e.clientX;
+    const startWidth = width;
+    const guide = document.createElement("div");
+    guide.className = "dsg-resize-guide";
+    document.body.appendChild(guide);
+    function place(px) {
+      guide.style.left = `${cellLeft + px}px`;
+    }
+    place(startWidth);
+    let latest = startWidth;
+    function onMove(ev) {
+      const delta = ev.clientX - startX;
+      latest = Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, Math.round(startWidth + delta)));
+      place(latest);
+    }
+    function onUp() {
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      guide.remove();
+      if (latest !== startWidth) onResize(colKey, latest);
+    }
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }
+  return (
+    <div className="dsg-resizable-header">
+      <span className="dsg-header-label">{label}</span>
+      <span
+        className="dsg-resize-handle"
+        onPointerDown={onPointerDown}
+        onClick={e => e.stopPropagation()}
+        onDoubleClick={e => { e.stopPropagation(); onAutofit(colKey); }}
+        title="Drag to resize — double-click to fit content"
+      />
+    </div>
+  );
+}
+
 export default function FuelInvoiceGrid() {
   const { isAdmin } = useAuth();
-  const { records, loading, deleteRecords, bulkUpsert } = useFuelInvoiceRecords();
+  const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
+
+  // Per-column widths (px) — null/absent means "use that column's default
+  // minWidth". Persisted per-browser (not per-user/synced) since it's a
+  // personal layout preference, same idea as a spreadsheet app remembering
+  // your last column sizing.
+  //
+  // Known limitation: react-datasheet-grid doesn't always re-render an
+  // already-mounted column at its new width the instant `columnWidths`
+  // changes (confirmed the correct value does reach its `columns` prop
+  // every time — this is the library's own rendering, not a stale value on
+  // our side). The new width is still saved immediately either way, so
+  // nothing is ever lost — worst case, a resize/AutoFit needs a page
+  // refresh to visibly apply. Forcing a remount to work around it was
+  // tried and made things worse (routinely collapsed every column to the
+  // library's internal fallback width instead), so it's deliberately not
+  // done here.
+  const [columnWidths, setColumnWidths] = useState(() => loadStoredColumnWidths());
+  const columnWidthsRef = useRef({});
+  columnWidthsRef.current = columnWidths;
+  const autofitDoneRef = useRef(false);
+
+  // Manual per-row highlight color (see 048 migration, `row_color` column).
+  // { key, x, y } of the currently-open swatch popover, anchored to
+  // whichever row-number gutter cell was clicked.
+  const [colorPicker, setColorPicker] = useState(null);
 
   // The grid's own local, fully-controlled row state (the FULL set — see
   // displayRows below for the filtered subset actually shown) — seeded once
@@ -70,6 +180,8 @@ export default function FuelInvoiceGrid() {
   }, [records, loading]);
 
   const canEdit = isAdmin;
+  const canEditRef = useRef(false);
+  canEditRef.current = canEdit;
 
   // The filtered view actually handed to <DataSheetGrid>. Its row order is
   // whatever `allRows` already holds (fetched date-ascending, day 1 first —
@@ -90,6 +202,54 @@ export default function FuelInvoiceGrid() {
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
 
+  // Sum of the Cost column across whatever's currently filtered/searched —
+  // displayRows already IS that filtered set (client-side, all rows are
+  // loaded up front by the hook, no pagination to worry about), so this
+  // recomputes for free whenever a filter changes or a row is edited/added/
+  // deleted/pasted. Invalid/empty Cost values are excluded rather than
+  // treated as 0-affecting NaN.
+  const totalCost = useMemo(() => {
+    let sum = 0;
+    for (const row of displayRows) {
+      const n = Number(row.cost);
+      if (Number.isFinite(n)) sum += n;
+    }
+    return sum;
+  }, [displayRows]);
+  const totalCostRef = useRef(0);
+  totalCostRef.current = totalCost;
+
+  // AutoFit: measure real text width (header + every row's displayed value)
+  // per column and clamp to a sensible range — see lib/fuelInvoiceColumnWidths.
+  // `single` autofits just one column (double-click its resize handle);
+  // omitted, it autofits every column (the toolbar button, and once
+  // automatically on first load if she has no saved widths yet).
+  function autofitColumns(single) {
+    const rows = allRowsRef.current;
+    const defs = single ? COLUMN_DEFS.filter(d => d.key === single) : COLUMN_DEFS;
+    setColumnWidths(prev => {
+      const next = { ...prev };
+      for (const def of defs) next[def.key] = computeAutofitWidth(def.title, rows, def.format, def.minWidth);
+      saveStoredColumnWidths(next);
+      return next;
+    });
+  }
+  useEffect(() => {
+    if (!autofitDoneRef.current && !loading && allRows.length && Object.keys(columnWidthsRef.current).length === 0) {
+      autofitDoneRef.current = true;
+      autofitColumns();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, allRows.length]);
+
+  function handleColumnResize(key, px) {
+    setColumnWidths(prev => {
+      const next = { ...prev, [key]: px };
+      saveStoredColumnWidths(next);
+      return next;
+    });
+  }
+
   // The row-number gutter must show each row's stable position in the FULL,
   // date-ordered list — not its position within whatever's currently
   // filtered. react-datasheet-grid's default gutter is just `rowIndex + 1`
@@ -105,9 +265,40 @@ export default function FuelInvoiceGrid() {
   const gutterColumn = useMemo(() => ({
     component: ({ rowData }) => {
       const idx = allRowsRef.current.findIndex(r => rowKey(r) === rowKey(rowData));
-      return idx === -1 ? "" : idx + 1;
+      return (
+        <button
+          type="button"
+          className={"gutter-row-btn" + (rowData?.row_color ? ` row-color-${rowData.row_color}` : "")}
+          title={canEditRef.current ? "Click to set row color" : undefined}
+          onClick={e => {
+            e.stopPropagation();
+            if (!canEditRef.current) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            setColorPicker({ key: rowKey(rowData), x: rect.left, y: rect.bottom + 4 });
+          }}
+        >
+          {idx === -1 ? "" : idx + 1}
+        </button>
+      );
     },
   }), []);
+
+  async function applyRowColor(key, color) {
+    setAllRows(cur => cur.map(r => rowKey(r) === key ? { ...r, row_color: color } : r));
+    setColorPicker(null);
+    const row = allRowsRef.current.find(r => rowKey(r) === key);
+    if (!row?.id) return; // never-saved row — color is kept in local state and will save with it
+    const { error } = await updateRecord(row.id, { row_color: color });
+    if (error) window.alert("Failed to save row color: " + error.message);
+  }
+
+  // Close the swatch popover on any outside click.
+  useEffect(() => {
+    if (!colorPicker) return;
+    function onDocClick() { setColorPicker(null); }
+    document.addEventListener("click", onDocClick);
+    return () => document.removeEventListener("click", onDocClick);
+  }, [colorPicker]);
 
   // Record count moved next to the grid's own native "Add N rows" control
   // (same bottom bar, not a separate line above the grid) — stable
@@ -121,6 +312,7 @@ export default function FuelInvoiceGrid() {
         <div className="cards-count">
           {displayRowsRef.current.length}{displayRowsRef.current.length !== allRowsRef.current.length ? ` of ${allRowsRef.current.length}` : ""} record{allRowsRef.current.length === 1 ? "" : "s"}
         </div>
+        <div className="fuel-invoice-total-cost">Total Cost: {moneyGrouped(totalCostRef.current)}</div>
         <span style={{ flex: 1 }} />
         <button type="button" className="dsg-add-row-btn" onClick={() => addRows(value)}>Add</button>
         <input
@@ -141,6 +333,7 @@ export default function FuelInvoiceGrid() {
     for (const key of [
       "data_source", "invoice_number", "internal_number", "fuel_type", "cost", "user_name",
       "entry_date", "card_type", "status", "use_type", "branch", "nid", "deduction_code", "remarks",
+      "row_color",
     ]) {
       payload[key] = row[key] ?? null;
     }
@@ -270,28 +463,53 @@ export default function FuelInvoiceGrid() {
   });
 
   const columns = useMemo(() => {
-    const cols = [
-      { ...keyColumn("data_source", makeSelectDsgColumn("data_source", () => distinctValues(records, "data_source"))), title: "Data Source", minWidth: 130 },
-      { ...keyColumn("invoice_number", textColumn), title: "Invoice Number", minWidth: 130 },
-      { ...keyColumn("internal_number", textColumn), title: "Internal number", minWidth: 150 },
-      { ...keyColumn("fuel_type", makeSelectDsgColumn("fuel_type", () => distinctValues(records, "fuel_type"))), title: "Type of fuel", minWidth: 110 },
-      { ...keyColumn("cost", floatColumn), title: "Cost", minWidth: 100 },
-      { ...keyColumn("amount", makeReadOnlyDsgColumn(money)), title: "Amount", minWidth: 110 },
-      { ...keyColumn("vat", makeReadOnlyDsgColumn(money)), title: "VAT", minWidth: 100 },
-      { ...keyColumn("user_name", textColumn), title: "User Name", minWidth: 220 },
-      { ...keyColumn("entry_date", dsgDateColumn), title: "Date", minWidth: 140 },
-      { ...keyColumn("card_type", makeSelectDsgColumn("card_type", () => distinctValues(records, "card_type"))), title: "Card Type", minWidth: 130 },
-      { ...keyColumn("status", makeSelectDsgColumn("status", () => distinctValues(records, "status"))), title: "Status", minWidth: 140 },
-      { ...keyColumn("use_type", makeSelectDsgColumn("use_type", () => distinctValues(records, "use_type"))), title: "Use type", minWidth: 130 },
-      { ...keyColumn("branch", makeSelectDsgColumn("branch", () => distinctValues(records, "branch"))), title: "Branch", minWidth: 120 },
-      { ...keyColumn("nid", NID_TEXT_COLUMN), title: "NID", minWidth: 130 },
-      { ...keyColumn("da_name", makeReadOnlyDsgColumn()), title: "DA Name", minWidth: 220 },
-      { ...keyColumn("deduction_code", textColumn), title: "Deduction code", minWidth: 150 },
-      { ...keyColumn("remarks", textColumn), title: "Remarks", minWidth: 200 },
-    ];
+    const colFactories = {
+      data_source: () => makeSelectDsgColumn("data_source", () => distinctValues(records, "data_source")),
+      invoice_number: () => textColumn,
+      internal_number: () => textColumn,
+      fuel_type: () => makeSelectDsgColumn("fuel_type", () => distinctValues(records, "fuel_type")),
+      cost: () => floatColumn,
+      amount: () => makeReadOnlyDsgColumn(money),
+      vat: () => makeReadOnlyDsgColumn(money),
+      user_name: () => textColumn,
+      entry_date: () => dsgDateColumn,
+      card_type: () => makeSelectDsgColumn("card_type", () => distinctValues(records, "card_type")),
+      status: () => makeSelectDsgColumn("status", () => distinctValues(records, "status")),
+      use_type: () => makeSelectDsgColumn("use_type", () => distinctValues(records, "use_type")),
+      branch: () => makeSelectDsgColumn("branch", () => distinctValues(records, "branch")),
+      nid: () => NID_TEXT_COLUMN,
+      da_name: () => makeReadOnlyDsgColumn(),
+      deduction_code: () => textColumn,
+      remarks: () => textColumn,
+    };
+    // AutoFit + manual resize: basis is the actual target width (from
+    // columnWidths, falling back to that column's default minWidth before
+    // any autofit/resize has happened), grow/shrink 0 so columns never
+    // stretch/shrink to fill the container — total width can exceed the
+    // viewport, which is what makes horizontal scroll kick in naturally.
+    const cols = COLUMN_DEFS.map(def => {
+      const width = columnWidths[def.key] ?? def.minWidth;
+      return {
+        ...keyColumn(def.key, colFactories[def.key]()),
+        title: (
+          <ResizableHeader
+            label={def.title}
+            colKey={def.key}
+            width={width}
+            onResize={handleColumnResize}
+            onAutofit={autofitColumns}
+          />
+        ),
+        basis: width,
+        grow: 0,
+        shrink: 0,
+        minWidth: MIN_WIDTH,
+        maxWidth: MAX_WIDTH,
+      };
+    });
     if (!canEdit) return cols.map(c => ({ ...c, disabled: true }));
     return cols;
-  }, [records, canEdit]);
+  }, [records, canEdit, columnWidths]);
 
   return (
     <div className="fuel-invoice-grid-wrap">
@@ -312,6 +530,10 @@ export default function FuelInvoiceGrid() {
         {hasActiveFilters && (
           <button className="btn pill-add-btn" onClick={handleClearFilters}>Clear</button>
         )}
+        <button className="btn pill-add-btn" onClick={() => autofitColumns()} title="Fit every column to its content">
+          <Maximize2 size={13} style={{ marginInlineEnd: "0.35rem", verticalAlign: "-2px" }} />
+          AutoFit columns
+        </button>
         <span style={{ flex: 1 }} />
         <div className="pill-search">
           <span className="pill-search-ic"><Search size={14} /></span>
@@ -325,6 +547,12 @@ export default function FuelInvoiceGrid() {
         columns={columns}
         gutterColumn={gutterColumn}
         addRowsComponent={addRowsComponent}
+        rowClassName={({ rowData, rowIndex }) => {
+          const classes = [];
+          if (rowIndex % 2 === 1) classes.push("dsg-row-alt");
+          if (rowData?.row_color) classes.push(`row-color-${rowData.row_color}`);
+          return classes.join(" ") || undefined;
+        }}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
         lockRows={!canEdit}
         height={window.innerHeight * 0.65}
@@ -332,6 +560,27 @@ export default function FuelInvoiceGrid() {
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
       />
+
+      {colorPicker && (
+        <div
+          className="row-color-popover"
+          style={{ position: "fixed", left: colorPicker.x, top: colorPicker.y }}
+          onClick={e => e.stopPropagation()}
+        >
+          <button type="button" className="row-color-swatch row-color-swatch-none" title="Clear color" onClick={() => applyRowColor(colorPicker.key, null)}>
+            <X size={12} />
+          </button>
+          {ROW_COLOR_OPTIONS.map(opt => (
+            <button
+              key={opt.key}
+              type="button"
+              className={`row-color-swatch row-color-swatch-${opt.key}`}
+              title={opt.label}
+              onClick={() => applyRowColor(colorPicker.key, opt.key)}
+            />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
