@@ -685,6 +685,25 @@ export default function FuelInvoiceGrid() {
     }
   }
 
+  // Deleting saved rows is permanent (Ctrl+Z restores them, but only in this
+  // session), so ask first. The grid is controlled: if the user cancels we
+  // simply don't apply the change, and the rows stay exactly as they were.
+  function guardedHandleChange(newValue, operations) {
+    const current = displayRowsRef.current;
+    let savedToDelete = 0;
+    for (const op of operations) {
+      if (op.type !== "DELETE") continue;
+      savedToDelete += current.slice(op.fromRowIndex, op.toRowIndex).filter(r => r.id).length;
+    }
+    if (savedToDelete > 0) {
+      const msg = savedToDelete === 1
+        ? "Delete 1 saved record from the database?"
+        : `Delete ${savedToDelete.toLocaleString()} saved records from the database?\n\nThis removes them for everyone.`;
+      if (!window.confirm(msg)) return;
+    }
+    return handleChange(newValue, operations);
+  }
+
   // Ctrl+Z: restore the previous full-row-list snapshot, then reconcile
   // that reversal with the database — rows that only exist in the CURRENT
   // state (created by the change being undone) get deleted; rows whose
@@ -844,7 +863,7 @@ export default function FuelInvoiceGrid() {
 
       <DataSheetGrid
         value={displayRows}
-        onChange={handleChange}
+        onChange={guardedHandleChange}
         columns={columns}
         gutterColumn={gutterColumn}
         addRowsComponent={addRowsComponent}
