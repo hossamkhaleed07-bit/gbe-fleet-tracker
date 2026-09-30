@@ -83,6 +83,26 @@ body {
   #sidebar::-webkit-scrollbar { display: none; }
   #sidebar:hover, #sidebar:has(:focus-visible) { width: 272px; box-shadow: 0 30px 80px rgba(8,14,12,0.45); }
 
+  /* The sidebar is `position: fixed` — an overlay, not a flex sibling that
+     pushes #content — so expanding it to 272px (22px inset + 272px =
+     reaches x=294px) always sits on top of whatever's underneath. Every
+     page's normal 108px #content padding (line 71 above) already leaves
+     only 22px of clearance from that expanded edge, which is usually fine
+     since ordinary page content rarely has anything meaningful right at
+     that edge. .fx-sheet-wide (the Fuel & Invoice pages) deliberately
+     narrows that padding to make room for the grid, which removes that
+     clearance entirely and lets the hover-expanded sidebar cover the
+     grid's first column. Fix: push .fx-sheet-wide further right ONLY while
+     the sidebar is actually hovered/focused (sibling selector, real
+     state — not a permanent arbitrary margin), clearing the full 294px
+     expanded edge; it reverts to the narrow margin the instant the sidebar
+     collapses back, so collapsed state still gets the full width win. */
+  #sidebar:hover ~ #content .fx-sheet-wide,
+  #sidebar:has(:focus-visible) ~ #content .fx-sheet-wide {
+    margin-inline-start: 300px;
+    transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1);
+  }
+
   /* labels fade in only while open */
   #sidebar .side-label, #sidebar .sidebar-brand > div, #sidebar .branch-switcher-text,
   #sidebar .branch-switcher-chevron, #sidebar .side-group-chevron {
@@ -287,6 +307,17 @@ body {
 .fx-hero-slot .pill-search input { color: #fff; }
 .fx-hero-slot .pill-select-wrap select { border-radius: 999px; color: rgba(255,255,255,0.85); }
 .fx-hero-slot input::placeholder { color: rgba(255,255,255,0.45); }
+/* Fuel & Invoice filter dropdown pills — same dark-glass treatment as the
+   rest of this box. The panel that opens below them is portaled straight
+   to <body> (not into the hero), so it keeps its normal light theme —
+   that's intentional, it reads as a floating popup, not part of the dark
+   header. */
+.fx-hero-slot .filter-pill {
+  color-scheme: dark; color: rgba(255,255,255,0.85); background-color: rgba(255,255,255,0.08);
+  border: 1px solid rgba(255,255,255,0.16);
+}
+.fx-hero-slot .filter-pill:hover { border-color: rgba(255,255,255,0.32); color: #fff; }
+.fx-hero-slot .filter-pill-active { border-color: rgba(185,215,193,0.7); color: #fff; background: rgba(185,215,193,0.16); }
 .fx-hero-slot .local-filters input:focus, .fx-hero-slot .local-filters select:focus { background-color: rgba(255,255,255,0.14); border-color: rgba(185,215,193,0.7); box-shadow: 0 0 0 4px rgba(185,215,193,0.14); }
 .fx-hero-slot select option { color: #17201e; background: #fff; }
 .fx-hero-slot #global-filters label { color: rgba(255,255,255,0.6); }
@@ -314,7 +345,7 @@ body {
    this file, e.g. .fx-hero-slot:has(> #global-filters)), rather than
    touching #content's own rule which every other page also relies on. */
 #content:has(.fx-sheet-wide) { padding-inline: 0.6rem; }
-.fx-sheet-wide { margin-inline: 8px; }
+.fx-sheet-wide { margin-inline: 8px; transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1); }
 
 /* page headers: the title now lives in the hero, so the header becomes an action bar */
 .content-header {
