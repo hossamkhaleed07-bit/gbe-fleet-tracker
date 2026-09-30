@@ -135,6 +135,11 @@ export default function FuelInvoiceGrid() {
   // whichever row-number gutter cell was clicked.
   const [colorPicker, setColorPicker] = useState(null);
 
+  // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count/Count
+  // Numbers) for whatever range of cells is currently selected — null
+  // hides the card (nothing, or just one cell, selected).
+  const [selectionStats, setSelectionStats] = useState(null);
+
   // The grid's own local, fully-controlled row state (the FULL set — see
   // displayRows below for the filtered subset actually shown) — seeded once
   // from the hook's `records` when they first arrive, then owned locally so
@@ -201,6 +206,45 @@ export default function FuelInvoiceGrid() {
   }, [allRows, fieldFilters, dateFrom, dateTo, search]);
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
+
+  // Google-Sheets-style selection summary. `selection` is react-datasheet-
+  // grid's own shape: {min: {row, col}, max: {row, col}} — row/col are
+  // 0-based indices into displayRows / COLUMN_DEFS (the gutter column is
+  // already excluded from these indices by the library itself). Stable
+  // (empty deps): reads displayRowsRef at call time, same reasoning as the
+  // gutter/AddRows components above — this fires on every selection change
+  // while dragging, so it must never itself trigger a react-datasheet-grid
+  // prop-identity change that could revive the width-rendering issue.
+  const handleSelectionChange = useMemo(() => ({ selection }) => {
+    if (!selection) { setSelectionStats(null); return; }
+    const { min, max } = selection;
+    const rowCount = max.row - min.row + 1;
+    const colCount = max.col - min.col + 1;
+    if (rowCount * colCount <= 1) { setSelectionStats(null); return; }
+    const keys = COLUMN_DEFS.slice(min.col, max.col + 1).map(d => d.key);
+    const rows = displayRowsRef.current.slice(min.row, max.row + 1);
+    let count = 0, countNumbers = 0, sum = 0, lo = Infinity, hi = -Infinity;
+    for (const row of rows) {
+      for (const key of keys) {
+        const v = row[key];
+        if (v === null || v === undefined || v === "") continue;
+        count++;
+        const n = Number(v);
+        if (Number.isFinite(n)) {
+          countNumbers++;
+          sum += n;
+          if (n < lo) lo = n;
+          if (n > hi) hi = n;
+        }
+      }
+    }
+    setSelectionStats({
+      count, countNumbers, sum,
+      avg: countNumbers ? sum / countNumbers : null,
+      min: countNumbers ? lo : null,
+      max: countNumbers ? hi : null,
+    });
+  }, []);
 
   // Sum of the Cost column across whatever's currently filtered/searched —
   // displayRows already IS that filtered set (client-side, all rows are
@@ -559,7 +603,19 @@ export default function FuelInvoiceGrid() {
         rowHeight={38}
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
+        onSelectionChange={handleSelectionChange}
       />
+
+      {selectionStats && (
+        <div className="selection-stats-card">
+          <div><span>Sum</span><b>{selectionStats.sum.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></div>
+          <div><span>Avg</span><b>{selectionStats.avg != null ? selectionStats.avg.toLocaleString("en-US", { maximumFractionDigits: 8 }) : "—"}</b></div>
+          <div><span>Min</span><b>{selectionStats.min ?? "—"}</b></div>
+          <div><span>Max</span><b>{selectionStats.max ?? "—"}</b></div>
+          <div><span>Count</span><b>{selectionStats.count.toLocaleString("en-US")}</b></div>
+          <div><span>Count Numbers</span><b>{selectionStats.countNumbers.toLocaleString("en-US")}</b></div>
+        </div>
+      )}
 
       {colorPicker && (
         <div
