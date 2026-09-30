@@ -306,6 +306,15 @@ body {
 
 /* separate from the hero: same side margins, no overlap */
 .fx-sheet { position: relative; z-index: 10; margin: 0 22px 70px; }
+/* Fuel & Invoice grid pages: the grid is the whole point of the page, so
+   they get thinner side insets than everything else — reclaims real width
+   for the spreadsheet instead of decorative margin. #content itself is a
+   shared ancestor (every page uses it), so this only narrows ITS padding
+   when it contains .fx-sheet-wide, via :has() (already used elsewhere in
+   this file, e.g. .fx-hero-slot:has(> #global-filters)), rather than
+   touching #content's own rule which every other page also relies on. */
+#content:has(.fx-sheet-wide) { padding-inline: 0.6rem; }
+.fx-sheet-wide { margin-inline: 8px; }
 
 /* page headers: the title now lives in the hero, so the header becomes an action bar */
 .content-header {
