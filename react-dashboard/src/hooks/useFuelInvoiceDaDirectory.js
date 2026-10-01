@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { sb } from "../lib/supabase";
+import { cacheGet, cacheSet } from "../lib/fuelInvoiceCache";
 
 const PAGE_SIZE = 1000;
 
@@ -13,6 +14,8 @@ export function useFuelInvoiceDaDirectory() {
 
   useEffect(() => {
     let cancelled = false;
+    // show the last-known directory instantly; the real load below replaces it
+    cacheGet("da-directory").then(c => { if (!cancelled && c && Object.keys(c).length) { setByNid(prev => (Object.keys(prev).length ? prev : c)); setLoading(false); } });
     (async () => {
       const page = (start) => sb.from("fuel_invoice_da_directory")
         .select("national_id,english_name").order("national_id", { ascending: true })
@@ -40,6 +43,7 @@ export function useFuelInvoiceDaDirectory() {
       const map = {};
       for (const r of rows) map[r.national_id] = r.english_name;
       setByNid(map);
+      if (Object.keys(map).length) cacheSet("da-directory", map);
       setLoading(false);
     })();
     return () => { cancelled = true; };

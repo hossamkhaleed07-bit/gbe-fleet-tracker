@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { sb } from "../lib/supabase";
+import { cacheClearAll } from "../lib/fuelInvoiceCache";
 
 const AuthContext = createContext(null);
 
@@ -37,6 +38,7 @@ export function AuthProvider({ children }) {
   }
 
   async function logout() {
+    await cacheClearAll();
     await sb.auth.signOut();
   }
 

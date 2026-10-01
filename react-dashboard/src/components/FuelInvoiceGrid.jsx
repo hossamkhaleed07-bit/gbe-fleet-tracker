@@ -291,7 +291,7 @@ export default function FuelInvoiceGrid() {
   const [exporting, setExporting] = useState(false);
   const gridWrapRef = useRef(null);
   const gridHeight = useGridHeight(gridWrapRef);
-  const { records, loading, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
+  const { records, loading, syncVersion, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
   const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
 
   // Per-column widths (px) — null/absent means "use that column's default
@@ -376,6 +376,16 @@ export default function FuelInvoiceGrid() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [records, loading]);
+
+  // The rows first painted may have come from the local cache; once the real
+  // load lands, swap them for the fresh copy (edits/deletes made elsewhere
+  // since the cache was written show up), keeping any not-yet-saved rows.
+  useEffect(() => {
+    if (!syncVersion || !initializedRef.current) return;
+    setAllRows(prev => [...records, ...prev.filter(r => !r.id)]);
+    undoStackRef.current = [];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [syncVersion]);
 
   const canEdit = isAdmin;
   const canEditRef = useRef(false);
