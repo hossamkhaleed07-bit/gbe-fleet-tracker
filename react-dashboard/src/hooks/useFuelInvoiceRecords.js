@@ -6,20 +6,43 @@ const PAGE_SIZE = 1000;
 // Same "no fixed limit can silently truncate" pagination idiom used
 // elsewhere in this app (useDashboardData.js) — this table starts empty but
 // there's no reason to reintroduce that bug class as it grows.
+async function fetchPage(start) {
+  // Ascending — the grid should start from day 1 and read downward, not
+  // most-recent-first. `id` is a required third tiebreaker: rows bulk
+  // -inserted together (the original 1965-row seed migration, or any
+  // paste/re-paste of a day's data) share the exact same entry_date AND
+  // created_at (one INSERT statement = one now()), so with only two sort
+  // columns Postgres has no guaranteed order among them and can return a
+  // different order on every reload even though nothing changed.
+  return sb.from("fuel_invoice_records").select("*")
+    .order("entry_date", { ascending: true }).order("created_at", { ascending: true }).order("id", { ascending: true })
+    .range(start, start + PAGE_SIZE - 1);
+}
+
+// Pages are fetched in PARALLEL (a cheap head-only count first, then every
+// page at once) instead of one after another, so load time stays roughly one
+// round trip no matter how many pages there are. Falls back to the old
+// sequential walk if the count isn't available. Safe against truncation
+// either way: after the parallel batch, any further full page is still walked.
 async function fetchAllPages() {
+  const { count, error: countErr } = await sb.from("fuel_invoice_records").select("id", { count: "exact", head: true });
   const rows = [];
   let start = 0;
+  if (!countErr && typeof count === "number" && count > PAGE_SIZE) {
+    const starts = [];
+    for (let s = 0; s < count; s += PAGE_SIZE) starts.push(s);
+    const results = await Promise.all(starts.map(fetchPage));
+    for (const r of results) {
+      if (r.error) return { data: null, error: r.error };
+      rows.push(...(r.data || []));
+    }
+    start = starts.length * PAGE_SIZE;
+    // rows added between the count and the pages (or an out-of-date count):
+    // keep walking while pages come back full.
+    if (rows.length < start) return { data: rows, error: null };
+  }
   for (;;) {
-    // Ascending — the grid should start from day 1 and read downward, not
-    // most-recent-first. `id` is a required third tiebreaker: rows bulk
-    // -inserted together (the original 1965-row seed migration, or any
-    // paste/re-paste of a day's data) share the exact same entry_date AND
-    // created_at (one INSERT statement = one now()), so with only two sort
-    // columns Postgres has no guaranteed order among them and can return a
-    // different order on every reload even though nothing changed.
-    const { data, error } = await sb.from("fuel_invoice_records").select("*")
-      .order("entry_date", { ascending: true }).order("created_at", { ascending: true }).order("id", { ascending: true })
-      .range(start, start + PAGE_SIZE - 1);
+    const { data, error } = await fetchPage(start);
     if (error) return { data: null, error };
     rows.push(...(data || []));
     if (!data || data.length < PAGE_SIZE) break;

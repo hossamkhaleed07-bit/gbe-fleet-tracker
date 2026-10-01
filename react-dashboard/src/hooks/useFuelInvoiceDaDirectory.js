@@ -14,12 +14,23 @@ export function useFuelInvoiceDaDirectory() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      const page = (start) => sb.from("fuel_invoice_da_directory")
+        .select("national_id,english_name").order("national_id", { ascending: true })
+        .range(start, start + PAGE_SIZE - 1);
       const rows = [];
       let start = 0;
-      for (;;) {
-        const { data, error } = await sb.from("fuel_invoice_da_directory")
-          .select("national_id,english_name")
-          .range(start, start + PAGE_SIZE - 1);
+      // count first, then every page at once (see useFuelInvoiceRecords)
+      const { count, error: cErr } = await sb.from("fuel_invoice_da_directory").select("national_id", { count: "exact", head: true });
+      if (!cErr && typeof count === "number" && count > PAGE_SIZE) {
+        const starts = [];
+        for (let x = 0; x < count; x += PAGE_SIZE) starts.push(x);
+        const results = await Promise.all(starts.map(page));
+        for (const r of results) if (!r.error && r.data) rows.push(...r.data);
+        start = starts.length * PAGE_SIZE;
+        if (rows.length < start) start = -1; // short result — don't keep walking
+      }
+      while (start >= 0) {
+        const { data, error } = await page(start);
         if (error || !data) break;
         rows.push(...data);
         if (data.length < PAGE_SIZE) break;
