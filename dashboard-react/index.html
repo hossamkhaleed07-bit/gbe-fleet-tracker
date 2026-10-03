@@ -1,24 +1,37 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>Dashboard — Master Fuel Report</title>
-
-    <link rel="manifest" href="/gbe-fleet-tracker/dashboard-react/manifest.json" />
-    <link rel="icon" type="image/svg+xml" href="/gbe-fleet-tracker/dashboard-react/favicon.svg" />
-    <link rel="apple-touch-icon" href="/gbe-fleet-tracker/dashboard-react/apple-touch-icon.png" />
-
-    <meta name="theme-color" content="#2841CD" />
-    <meta name="mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="GBE Dashboard" />
-    <script type="module" crossorigin src="/gbe-fleet-tracker/dashboard-react/assets/index-BEXiHDgn.js"></script>
-    <link rel="modulepreload" crossorigin href="/gbe-fleet-tracker/dashboard-react/assets/DataContext-vCnIBSDZ.js">
-    <link rel="stylesheet" crossorigin href="/gbe-fleet-tracker/dashboard-react/assets/index-D0K2Lv_S.css">
-  </head>
-  <body>
-    <div id="root"></div>
-  </body>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>تم نقل لوحة التحكم — GBE Fleet Tracker</title>
+<meta name="robots" content="noindex">
+<link rel="canonical" href="https://gbe-fleet-tracker.vercel.app/">
+<!-- Fallback if JavaScript is off: goes to the new address (without any #/? part). -->
+<meta http-equiv="refresh" content="5;url=https://gbe-fleet-tracker.vercel.app/">
+<style>
+  body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0f172a; color:#e5e7eb; font-family:system-ui,-apple-system,"Segoe UI",Tahoma,sans-serif; }
+  main { max-width:30rem; margin:1rem; padding:2rem 1.5rem; border:1px solid #334155; border-radius:16px; background:#111c33; text-align:center; }
+  h1 { font-size:1.25rem; margin:0 0 .75rem; }
+  p { margin:.5rem 0; line-height:1.7; color:#cbd5e1; }
+  a.btn { display:inline-block; margin-top:1rem; padding:.7rem 1.4rem; border-radius:999px; background:#4f46e5; color:#fff; text-decoration:none; font-weight:700; }
+  small { display:block; margin-top:1.2rem; color:#94a3b8; word-break:break-all; }
+</style>
+</head>
+<body>
+<main>
+  <h1>تم نقل لوحة التحكم إلى رابط جديد</h1>
+  <p>جاري تحويلك تلقائيًا… لو ما اتحوّلتش خلال ثواني اضغط على الزرار.</p>
+  <p dir="ltr" lang="en">The dashboard has moved to a new address. Redirecting you now — if nothing happens, use the button.</p>
+  <a class="btn" id="go" href="https://gbe-fleet-tracker.vercel.app/">افتح الرابط الجديد / Open the new link</a>
+  <small dir="ltr">https://gbe-fleet-tracker.vercel.app/</small>
+</main>
+<script>
+  // Keeps whatever came after the address (?query and #hash) so deep links still work.
+  (function () {
+    var target = "https://gbe-fleet-tracker.vercel.app/" + location.search + location.hash;
+    document.getElementById("go").href = target;
+    location.replace(target);
+  })();
+</script>
+</body>
 </html>
