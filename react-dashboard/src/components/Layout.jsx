@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FileText, FolderOpen, CalendarDays, GitCompareArrows, MapPin, TrendingUp, Gauge,
   Truck, IdCard, Fuel, ThumbsUp, TriangleAlert, RefreshCw, Globe, LogOut, ChevronDown, Menu, ClipboardList,
-  Receipt,
+  Receipt, BarChart3,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
@@ -42,6 +42,7 @@ export default function Layout() {
 
   const FUEL_INVOICE_LINKS = [
     { to: "/fuel-invoice/invoices", icon: <Receipt size={17} />, label: "Invoices", key: "fuel-invoice-invoices" },
+    { to: "/fuel-invoice/usage-report", icon: <BarChart3 size={17} />, label: "Usage Report", key: "fuel-invoice-usage-report" },
   ];
   const isOnFuelInvoicePage = FUEL_INVOICE_LINKS.some(l => location.pathname === l.to);
   const [fiOpen, setFiOpen] = useState(isOnFuelInvoicePage);
