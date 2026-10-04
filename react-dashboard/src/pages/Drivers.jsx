@@ -12,6 +12,9 @@ import { PROJECT_LIST } from "../lib/constants";
 import DataTable from "../components/DataTable";
 import HeroPortal from "../components/HeroPortal";
 import { useClearFilters } from "../hooks/useClearFilters";
+import { useAuth } from "../contexts/AuthContext";
+import ActiveStatusModal from "../components/ActiveStatusModal";
+import { setActiveStatus, activeStatusErrorKey } from "../lib/activeStatus";
 
 const AVATAR_BG = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
 const emptyForm = {
@@ -24,6 +27,12 @@ const emptyForm = {
 export default function Drivers() {
   const { scopedDrivers: allDrivers, scopedCompareGroups: allCompareGroups, upsertDriver, removeDriver } = useDashboard();
   const { t } = useLang();
+  // Only an admin deletes a driver for good. A fleet manager can only deactivate /
+  // reactivate (with a reason), which the database records and notifies admins about.
+  const { isAdmin } = useAuth();
+  const [statusTarget, setStatusTarget] = useState(null); // { item, activate }
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [searchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [project, setProject] = useState(searchParams.get("project") || "");
@@ -94,12 +103,12 @@ export default function Drivers() {
         <div className="row-actions" onClick={e => e.stopPropagation()}>
           <button className="btn" onClick={() => toggleActive(row.original)}>{row.original.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
           <button className="btn" onClick={() => openEdit(row.original)}>{t("common.edit")}</button>
-          <button className="btn btn-danger" onClick={() => handleDelete(row.original)}>{t("common.delete")}</button>
+          {isAdmin && <button className="btn btn-danger" onClick={() => handleDelete(row.original)}>{t("common.delete")}</button>}
         </div>
       ),
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  ], [t, shiftStatusMap]);
+  ], [t, shiftStatusMap, isAdmin]);
 
   function handleReset() {
     setSearch("");
@@ -167,11 +176,20 @@ export default function Drivers() {
     upsertDriver({ ...payload, identity_number: isNew ? payload.identity_number : editingIdentity });
   }
 
-  async function toggleActive(d) {
-    const is_active = !d.is_active;
-    const { error } = await sb.from("drivers").update({ is_active }).eq("identity_number", d.identity_number);
-    if (error) { window.alert(t("common.saveFailed") + error.message); return; }
-    upsertDriver({ ...d, is_active });
+  function toggleActive(d) {
+    setStatusError("");
+    setStatusTarget({ item: d, activate: !d.is_active });
+  }
+
+  async function confirmSetActive(reason) {
+    const { item, activate } = statusTarget;
+    setStatusSaving(true);
+    setStatusError("");
+    const res = await setActiveStatus("driver", item.identity_number, activate, reason);
+    setStatusSaving(false);
+    if (!res.ok) { setStatusError(t(activeStatusErrorKey(res.code))); return; }
+    setStatusTarget(null);
+    upsertDriver({ ...item, is_active: activate });
   }
 
   async function handleDelete(d) {
@@ -277,7 +295,7 @@ export default function Drivers() {
               <div className="driver-card-actions">
                 <button onClick={() => toggleActive(d)}>{d.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
                 <button onClick={() => openEdit(d)}>{t("common.edit")}</button>
-                <button className="danger" onClick={() => handleDelete(d)}>{t("common.delete")}</button>
+                {isAdmin && <button className="danger" onClick={() => handleDelete(d)}>{t("common.delete")}</button>}
               </div>
             </div>
           );
@@ -325,6 +343,19 @@ export default function Drivers() {
             </div>
           </div>
         </div>
+      )}
+
+      {statusTarget && (
+        <ActiveStatusModal
+          kind="driver"
+          label={statusTarget.item.full_name || statusTarget.item.identity_number}
+          activate={statusTarget.activate}
+          notifyAdmins={!isAdmin}
+          saving={statusSaving}
+          error={statusError}
+          onCancel={() => setStatusTarget(null)}
+          onConfirm={confirmSetActive}
+        />
       )}
     </>
   );

@@ -5,12 +5,19 @@ import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
 import { downloadCsv } from "../lib/csv";
 import HeroPortal from "../components/HeroPortal";
+import { useAuth } from "../contexts/AuthContext";
+import ActiveStatusModal from "../components/ActiveStatusModal";
+import { setActiveStatus, activeStatusErrorKey } from "../lib/activeStatus";
 
 const emptyForm = { plate: "", vendor: "", fuel: "", model: "", rate: "" };
 
 export default function Fleet() {
   const { scopedVehicles: allVehicles, vehicleDriverMap, upsertVehicle } = useDashboard();
   const { t } = useLang();
+  const { isAdmin } = useAuth();
+  const [statusTarget, setStatusTarget] = useState(null); // { item, activate }
+  const [statusSaving, setStatusSaving] = useState(false);
+  const [statusError, setStatusError] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
@@ -68,11 +75,20 @@ export default function Fleet() {
     upsertVehicle({ ...payload, vehicle_plate: isNew ? payload.vehicle_plate : editingPlate });
   }
 
-  async function toggleActive(v) {
-    const is_active = !v.is_active;
-    const { error } = await sb.from("vehicles").update({ is_active }).eq("vehicle_plate", v.vehicle_plate);
-    if (error) { window.alert(t("common.saveFailed") + error.message); return; }
-    upsertVehicle({ ...v, is_active });
+  function toggleActive(v) {
+    setStatusError("");
+    setStatusTarget({ item: v, activate: !v.is_active });
+  }
+
+  async function confirmSetActive(reason) {
+    const { item, activate } = statusTarget;
+    setStatusSaving(true);
+    setStatusError("");
+    const res = await setActiveStatus("vehicle", item.vehicle_plate, activate, reason);
+    setStatusSaving(false);
+    if (!res.ok) { setStatusError(t(activeStatusErrorKey(res.code))); return; }
+    setStatusTarget(null);
+    upsertVehicle({ ...item, is_active: activate });
   }
 
   const columns = useMemo(() => [
@@ -155,6 +171,19 @@ export default function Fleet() {
             </div>
           </div>
         </div>
+      )}
+
+      {statusTarget && (
+        <ActiveStatusModal
+          kind="vehicle"
+          label={statusTarget.item.vehicle_plate}
+          activate={statusTarget.activate}
+          notifyAdmins={!isAdmin}
+          saving={statusSaving}
+          error={statusError}
+          onCancel={() => setStatusTarget(null)}
+          onConfirm={confirmSetActive}
+        />
       )}
     </>
   );

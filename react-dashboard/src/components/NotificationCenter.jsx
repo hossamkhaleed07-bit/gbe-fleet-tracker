@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { sb } from "../lib/supabase";
 import { useLang } from "../contexts/LanguageContext";
 import { formatLocalDateTime } from "../lib/calc";
+import { useAuth } from "../contexts/AuthContext";
 
 const STORAGE_KEY = "gbe-notifications-v1";
 const MAX_STORED = 50;
@@ -46,9 +47,14 @@ function saveStored(list) {
 
 export default function NotificationCenter() {
   const { t } = useLang();
+  const { isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [notifications, setNotifications] = useState(loadStored);
+  // Unread admin notifications kept in the database (a fleet manager deactivated /
+  // reactivated a driver or vehicle). Only admins can read them; marking one read
+  // goes through mark_admin_notifications_read.
+  const [dbNotes, setDbNotes] = useState([]);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [headerEl, setHeaderEl] = useState(null);
@@ -105,6 +111,53 @@ export default function NotificationCenter() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  function dbNoteToItem(r) {
+    const typeLabel = t(r.target_type === "vehicle" ? "notifications.typeVehicle" : "notifications.typeDriver");
+    const name = r.target_label || r.target_key;
+    const by = r.acted_by_email || "—";
+    return {
+      id: `db-${r.id}`,
+      dbId: r.id,
+      type: "active",
+      read: !!r.is_read,
+      time: r.created_at,
+      title: t(r.kind === "deactivate" ? "notifications.activeDeactivated" : "notifications.activeReactivated", { type: typeLabel }),
+      subtitle: r.reason
+        ? t("notifications.activeSubtitleReason", { name, by, reason: r.reason })
+        : t("notifications.activeSubtitle", { name, by }),
+      path: r.target_type === "vehicle" ? "/fleet" : "/drivers",
+    };
+  }
+
+  async function fetchDbNotes() {
+    const { data } = await sb.from("admin_notifications")
+      .select("id,kind,target_type,target_key,target_label,reason,acted_by_email,created_at,is_read")
+      .eq("is_read", false)
+      .order("created_at", { ascending: false })
+      .limit(MAX_STORED);
+    if (data) setDbNotes(data);
+  }
+
+  useEffect(() => {
+    if (!isAdmin) { setDbNotes([]); return undefined; }
+    fetchDbNotes();
+    const channel = sb
+      .channel("notifications_admin_active_status")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "admin_notifications" }, payload => {
+        const r = payload.new;
+        setDbNotes(list => (list.some(x => x.id === r.id) ? list : [r, ...list].slice(0, MAX_STORED)));
+        setToast(dbNoteToItem(r));
+        playNotificationSound();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "admin_notifications" }, payload => {
+        const r = payload.new;
+        setDbNotes(list => (r.is_read ? list.filter(x => x.id !== r.id) : list.map(x => (x.id === r.id ? { ...x, ...r } : x))));
+      })
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAdmin]);
+
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 8000);
@@ -120,14 +173,26 @@ export default function NotificationCenter() {
     return () => document.removeEventListener("mousedown", handleOutside);
   }, [open]);
 
-  const unreadCount = notifications.filter(n => !n.read).length;
+  // Database-backed notes (admins) first, then the local live-event ones, newest first.
+  const items = [...dbNotes.map(dbNoteToItem), ...notifications]
+    .sort((a, b) => new Date(b.time) - new Date(a.time))
+    .slice(0, MAX_STORED);
+  const unreadCount = items.filter(n => !n.read).length;
+
+  async function markDbRead(ids) {
+    setDbNotes(list => (ids ? list.filter(x => !ids.includes(x.id)) : []));
+    const { error } = await sb.rpc("mark_admin_notifications_read", { p_ids: ids });
+    if (error) fetchDbNotes(); // could not save: show what is really still unread
+  }
 
   function markAllRead() {
     setNotifications(list => list.map(n => ({ ...n, read: true })));
+    if (isAdmin && dbNotes.length) markDbRead(null);
   }
 
   function handleItemClick(n) {
-    setNotifications(list => list.map(x => (x.id === n.id ? { ...x, read: true } : x)));
+    if (n.dbId) markDbRead([n.dbId]);
+    else setNotifications(list => list.map(x => (x.id === n.id ? { ...x, read: true } : x)));
     setOpen(false);
     navigate(n.path);
   }
@@ -145,11 +210,11 @@ export default function NotificationCenter() {
             {unreadCount > 0 && <button className="notif-mark-all" onClick={markAllRead}>{t("notifications.markAllRead")}</button>}
           </div>
           <div className="notif-list">
-            {!notifications.length ? (
+            {!items.length ? (
               <div className="notif-empty">{t("notifications.empty")}</div>
-            ) : notifications.map(n => (
+            ) : items.map(n => (
               <button key={n.id} className={"notif-item" + (n.read ? "" : " unread")} onClick={() => handleItemClick(n)}>
-                <span className="notif-item-icon">{n.type === "fuel" ? "⛽" : "📝"}</span>
+                <span className="notif-item-icon">{n.type === "fuel" ? "⛽" : n.type === "active" ? "🔄" : "📝"}</span>
                 <span className="notif-item-body">
                   <span className="notif-item-title">{n.title}</span>
                   <span className="notif-item-subtitle">{n.subtitle}</span>
@@ -168,7 +233,7 @@ export default function NotificationCenter() {
       {headerEl && createPortal(bell, headerEl)}
       {toast && createPortal(
         <div className="reinforcement-toast">
-          <span className="reinforcement-toast-icon">{toast.type === "fuel" ? "⛽" : "📝"}</span>
+          <span className="reinforcement-toast-icon">{toast.type === "fuel" ? "⛽" : toast.type === "active" ? "🔄" : "📝"}</span>
           <span>{toast.title}: {toast.subtitle}</span>
           <button className="btn btn-primary" onClick={() => { navigate(toast.path); setToast(null); }}>{t("fuel.openRequest")}</button>
           <button className="btn" onClick={() => setToast(null)}>{t("common.close")}</button>

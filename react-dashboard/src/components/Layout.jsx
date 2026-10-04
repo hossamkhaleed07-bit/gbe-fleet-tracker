@@ -199,7 +199,7 @@ export default function Layout() {
             </div>
           )}
 
-          {isAdmin && (
+          {(isAdmin || isFleetManager) && (
             <div>
               <button type="button" className="side-link side-group-toggle" onClick={() => setFiOpen(o => !o)}>
                 <span className="ic"><Receipt size={17} /></span> <span className="side-label">Fuel & Invoice Management</span>
@@ -207,7 +207,7 @@ export default function Layout() {
               </button>
               {fiOpen && (
                 <div className="side-subgroup">
-                  {FUEL_INVOICE_LINKS.map(link => (
+                  {FUEL_INVOICE_LINKS.filter(link => isAdmin || link.key === "fuel-invoice-database").map(link => (
                     <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                     </NavLink>

@@ -29,7 +29,7 @@ function addMonths(monthStr, delta) {
 
 export default function Attendance() {
   const { scopedDrivers: allDrivers } = useDashboard();
-  const { session } = useAuth();
+  const { session, canEditAttendance } = useAuth();
   const { t, lang } = useLang();
   const [searchParams] = useSearchParams();
   const linkedDate = searchParams.get("date") === "today" || !searchParams.get("date") ? localToday() : searchParams.get("date");
@@ -106,6 +106,7 @@ export default function Attendance() {
   }, [allDrivers, project, bucketFilter, linkedDate, search, attendanceMap, shiftDaySet]);
 
   async function setStatus(d, day, status) {
+    if (!canEditAttendance) return; // read-only roles (e.g. fleet manager)
     const key = `${d.identity_number}|${day}`;
     setSavingKey(key);
     const payload = {
@@ -151,7 +152,7 @@ export default function Attendance() {
               className="att-cell-select"
               style={{ background: code.bg, color: code.ink }}
               value={st}
-              disabled={savingKey === key}
+              disabled={!canEditAttendance || savingKey === key}
               onChange={e => setStatus(d, day, e.target.value)}
             >
               {ATTENDANCE_CODES.map(c => <option key={c.code} value={c.code}>{c.code}</option>)}
@@ -162,7 +163,7 @@ export default function Attendance() {
     }
     return cols;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [t, lang, days, attendanceMap, shiftDaySet, savingKey]);
+  }, [t, lang, days, attendanceMap, shiftDaySet, savingKey, canEditAttendance]);
 
   return (
     <>

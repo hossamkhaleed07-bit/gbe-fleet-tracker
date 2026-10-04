@@ -10,7 +10,10 @@ const AuthContext = createContext(null);
 // the signed-in user can edit themselves, so it must never be used for access.
 // Nothing here falls back to user_metadata. No session, or a session without a
 // recognised role, gets no privileges at all.
-const NO_ACCESS = { isAdmin: false, isFleetManager: false, currentUserProject: null, canEditShiftEntries: false };
+const NO_ACCESS = {
+  isAdmin: false, isFleetManager: false, isProjectSupervisor: false, currentUserProject: null,
+  canEditShiftEntries: false, canEditAttendance: false, canSetActiveStatus: false,
+};
 
 function scopeFromSession(sess) {
   const meta = sess?.user?.app_metadata;
@@ -21,11 +24,17 @@ function scopeFromSession(sess) {
   const isProjectSupervisor = role === "project_supervisor";
   if (!isAdmin && !isFleetManager && !isProjectSupervisor) return NO_ACCESS;
   const currentUserProject = meta.project || null;
-  // Project-scoped accounts (e.g. fdp.manager@gbe.sa) can edit/delete shift_entries
-  // for their own project's drivers (see migration 032) — anyone with a project
-  // claim, not just fleet managers.
-  const canEditShiftEntries = isAdmin || !!currentUserProject;
-  return { isAdmin, isFleetManager, currentUserProject, canEditShiftEntries };
+  // Write access to shift entries / attendance / submission reasons: admins, and
+  // project supervisors for their own project's drivers (migration 053). A fleet
+  // manager is read-only there, whatever project value they carry.
+  const canWriteOps = isAdmin || (isProjectSupervisor && !!currentUserProject);
+  // Deactivating / reactivating drivers and vehicles (through set_active_status):
+  // admins and fleet managers only.
+  const canSetActiveStatus = isAdmin || isFleetManager;
+  return {
+    isAdmin, isFleetManager, isProjectSupervisor, currentUserProject,
+    canEditShiftEntries: canWriteOps, canEditAttendance: canWriteOps, canSetActiveStatus,
+  };
 }
 
 export function AuthProvider({ children }) {
