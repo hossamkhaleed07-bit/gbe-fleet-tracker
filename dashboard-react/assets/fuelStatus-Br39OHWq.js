@@ -1,1 +1,0 @@
-var e={pending:`end`,approved:`complete`,rejected:`critical`},t={pending:`fuel.statusPending`,approved:`fuel.statusApproved`,rejected:`fuel.statusRejected`};export{t as n,e as t};
