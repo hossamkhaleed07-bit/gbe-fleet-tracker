@@ -347,6 +347,13 @@ body {
 #content:has(.fx-sheet-wide) { padding-inline: 0; }
 @media (min-width: 861px) { #content:has(.fx-sheet-wide) { padding-inline-start: 100px; } }
 .fx-sheet-wide { margin-inline: 14px; transition: margin-inline-start 0.32s cubic-bezier(.2,.8,.2,1); }
+/* The Fuel & Invoice grid should use the whole screen: no bottom margin under it,
+   and a compact hero (title + toolbar only) on desktop. */
+.fx-sheet-wide { margin-bottom: 8px; }
+@media (min-width: 861px) {
+  .fx-hero-nonav .fx-hero-small { display: none; }
+  .fx-hero-nonav .fx-hero-title { font-size: clamp(1.25rem, 1.8vw, 1.6rem); }
+}
 
 /* page headers: the title now lives in the hero, so the header becomes an action bar */
 .content-header {
@@ -547,5 +554,5 @@ a.media-link, .badge-link, .ov-row-action, .notif-mark-all { color: var(--fx-gre
    menu button. */
 @media (min-width: 861px) {
   .fx-hero-nonav .fx-nav { display: none; }
-  .fx-hero-nonav .fx-hero-content { padding-top: 28px; }
+  .fx-hero-nonav .fx-hero-content { padding-top: 18px; }
 }

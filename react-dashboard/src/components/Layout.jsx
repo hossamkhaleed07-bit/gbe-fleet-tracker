@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FileText, FolderOpen, CalendarDays, GitCompareArrows, MapPin, TrendingUp, Gauge,
   Truck, IdCard, Fuel, ThumbsUp, TriangleAlert, RefreshCw, Globe, LogOut, ChevronDown, Menu, ClipboardList,
-  Receipt, Database,
+  Receipt,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
@@ -41,8 +41,7 @@ export default function Layout() {
   const canSeeProjectPerformance = isAdmin || isFleetManager || !!currentUserProject;
 
   const FUEL_INVOICE_LINKS = [
-    { to: "/fuel-invoice/entries", icon: <Receipt size={17} />, label: "Entries", key: "fuel-invoice-entries" },
-    { to: "/fuel-invoice/database", icon: <Database size={17} />, label: "Data Base", key: "fuel-invoice-database" },
+    { to: "/fuel-invoice/invoices", icon: <Receipt size={17} />, label: "Invoices", key: "fuel-invoice-invoices" },
   ];
   const isOnFuelInvoicePage = FUEL_INVOICE_LINKS.some(l => location.pathname === l.to);
   const [fiOpen, setFiOpen] = useState(isOnFuelInvoicePage);
@@ -207,7 +206,7 @@ export default function Layout() {
               </button>
               {fiOpen && (
                 <div className="side-subgroup">
-                  {FUEL_INVOICE_LINKS.filter(link => isAdmin || link.key === "fuel-invoice-database").map(link => (
+                  {FUEL_INVOICE_LINKS.map(link => (
                     <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                     </NavLink>

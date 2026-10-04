@@ -172,3 +172,42 @@ export const ROW_COLOR_OPTIONS = [
   { key: "purple", label: "Purple" },
   { key: "pink", label: "Pink" },
 ];
+
+// ---- Invoices: required fields, the unique key and database-computed columns ----
+
+// A row is only saved to the database once it has all three (migration 054
+// enforces the same with CHECK constraints).
+export const REQUIRED_FIELD_KEYS = ["data_source", "invoice_number", "entry_date"];
+
+// Columns the DATABASE computes. They come back from select("*") but must never
+// be sent on insert/update (Postgres rejects a value for a generated column).
+export const GENERATED_COLUMNS = ["invoice_month"];
+
+export function missingRequiredFields(row) {
+  return REQUIRED_FIELD_KEYS.filter(k => {
+    const v = row?.[k];
+    return v === null || v === undefined || String(v).trim() === "";
+  });
+}
+
+// Fields a user types (everything except the derived ones).
+const TYPED_KEYS = FUEL_INVOICE_FIELDS
+  .filter(f => !["computed", "lookup"].includes(f.type) && f.key !== "batch")
+  .map(f => f.key);
+
+export function isBlankRow(row) {
+  return TYPED_KEYS.every(k => {
+    const v = row?.[k];
+    return v === null || v === undefined || String(v).trim() === "";
+  });
+}
+
+// Same identity the database's unique key uses: data source + invoice number +
+// month of the invoice date. Used to tell which pasted rows were added and which
+// were skipped as duplicates, and to avoid showing a just-inserted row twice.
+export function invoiceKey(row) {
+  const src = String(row?.data_source ?? "").trim();
+  const inv = String(row?.invoice_number ?? "").trim();
+  const month = String(row?.entry_date ?? "").slice(0, 7);
+  return `${src}|${inv}|${month}`;
+}

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, Maximize2, X, ChevronDown, Download } from "lucide-react";
 import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
@@ -8,13 +8,23 @@ import { useAuth } from "../contexts/AuthContext";
 import { useToast } from "../contexts/ToastContext";
 import { exportFuelInvoiceXlsx } from "../lib/fuelInvoiceExport";
 import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
-import { useFuelInvoiceDaDirectory } from "../hooks/useFuelInvoiceDaDirectory";
-import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money, moneyGrouped, ROW_COLOR_OPTIONS } from "../lib/fuelInvoice";
+import { useLang } from "../contexts/LanguageContext";
+import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money, ROW_COLOR_OPTIONS, missingRequiredFields, isBlankRow, invoiceKey } from "../lib/fuelInvoice";
 import { makeSelectDsgColumn, makeReadOnlyDsgColumn, dsgDateColumn } from "./fuelInvoiceDsgColumns";
 import { computeAutofitWidth, loadStoredColumnWidths, saveStoredColumnWidths, MIN_WIDTH, MAX_WIDTH } from "../lib/fuelInvoiceColumnWidths";
 
 const NID_TEXT_COLUMN = createTextColumn(); // plain text — never coerced to a number, so leading zeros survive
 const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
+
+// Fixed strips under the grid: the totals row and the bottom bar. The grid's own
+// height is whatever is left of the window after these two.
+// The fields a user edits and the grid saves (everything else on a row is derived).
+const SAVED_FIELD_KEYS = [
+  "data_source", "invoice_number", "internal_number", "fuel_type", "cost", "user_name",
+  "entry_date", "card_type", "status", "use_type", "branch", "nid", "deduction_code", "remarks", "row_color",
+];
+const TOTALS_ROW_H = 40;
+const BOTTOM_BAR_H = 46;
 
 // Column labels/minimums + how each one's displayed text is derived, shared
 // between building the actual react-datasheet-grid columns and AutoFit's
@@ -96,7 +106,7 @@ function ResizableHeader({ label, colKey, width, onResize, onAutofit }) {
     document.addEventListener("pointerup", onUp);
   }
   return (
-    <div className="dsg-resizable-header">
+    <div className="dsg-resizable-header" data-col-key={colKey}>
       <span className="dsg-header-label">{label}</span>
       <span
         className="dsg-resize-handle"
@@ -266,14 +276,14 @@ function DateRangeDropdown({ openKey, setOpenKey, dateFrom, dateTo, setDateFrom,
 // (so it sits right under the toolbar, whatever the toolbar's height) to the
 // bottom of the window. Re-measured on resize and whenever the layout above it
 // changes size (e.g. the toolbar wrapping to a second row).
-function useGridHeight(wrapRef) {
-  const [height, setHeight] = useState(() => Math.max(420, window.innerHeight * 0.8));
+function useGridHeight(wrapRef, reserve = 0) {
+  const [height, setHeight] = useState(() => Math.max(320, window.innerHeight * 0.8 - reserve));
   useEffect(() => {
     function measure() {
       const el = wrapRef.current;
       if (!el) return;
       const top = el.getBoundingClientRect().top + window.scrollY;
-      setHeight(Math.max(420, Math.round(window.innerHeight - top - 12)));
+      setHeight(Math.max(320, Math.round(window.innerHeight - top - 12 - reserve)));
     }
     measure();
     window.addEventListener("resize", measure);
@@ -281,8 +291,63 @@ function useGridHeight(wrapRef) {
     const slot = document.getElementById("fx-hero-slot");
     if (ro && slot) ro.observe(slot);
     return () => { window.removeEventListener("resize", measure); ro?.disconnect(); };
-  }, [wrapRef]);
+  }, [wrapRef, reserve]);
   return height;
+}
+
+const fmtTotal = n => (Number(n) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// Excel-style total row fixed under the grid. The grid is virtualised and its
+// columns can be resized, so rather than assuming widths this measures where the
+// Cost / Amount / VAT header cells actually are and places each total right under
+// its own column (re-measured on scroll, resize, and whenever `syncKey` changes).
+function TotalsRow({ wrapRef, totals, filtered, syncKey }) {
+  const rowRef = useRef(null);
+  const [pos, setPos] = useState({});
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    if (!wrap) return undefined;
+    let raf = 0;
+    function measure() {
+      const base = rowRef.current?.getBoundingClientRect();
+      if (!base) return;
+      const next = {};
+      for (const key of ["cost", "amount", "vat"]) {
+        const cell = wrap.querySelector(`.dsg-container [data-col-key="${key}"]`)?.closest(".dsg-cell");
+        if (!cell) continue;
+        const r = cell.getBoundingClientRect();
+        next[key] = { left: Math.round(r.left - base.left), width: Math.round(r.width) };
+      }
+      setPos(prev => (JSON.stringify(prev) === JSON.stringify(next) ? prev : next));
+    }
+    function schedule() {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => { measure(); raf = requestAnimationFrame(measure); });
+    }
+    schedule();
+    const scroller = wrap.querySelector(".dsg-container");
+    scroller?.addEventListener("scroll", schedule, { passive: true });
+    window.addEventListener("resize", schedule);
+    const ro = typeof ResizeObserver !== "undefined" && scroller ? new ResizeObserver(schedule) : null;
+    if (ro) ro.observe(scroller);
+    return () => {
+      cancelAnimationFrame(raf);
+      scroller?.removeEventListener("scroll", schedule);
+      window.removeEventListener("resize", schedule);
+      ro?.disconnect();
+    };
+  }, [wrapRef, syncKey]);
+
+  return (
+    <div className="fi-totals-row" ref={rowRef} style={{ height: TOTALS_ROW_H }}>
+      <span className="fi-total-label">Total (SAR){filtered ? " · filtered" : ""}</span>
+      {["cost", "amount", "vat"].map(key => pos[key] && (
+        <div key={key} className="fi-total-cell" style={{ left: pos[key].left, width: pos[key].width }} title={key}>
+          {fmtTotal(totals[key])}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 export default function FuelInvoiceGrid() {
@@ -290,9 +355,17 @@ export default function FuelInvoiceGrid() {
   const { showToast } = useToast();
   const [exporting, setExporting] = useState(false);
   const gridWrapRef = useRef(null);
-  const gridHeight = useGridHeight(gridWrapRef);
-  const { records, loading, syncVersion, deleteRecords, bulkUpsert, updateRecord } = useFuelInvoiceRecords();
-  const { lookup: lookupDaName } = useFuelInvoiceDaDirectory();
+  const { t } = useLang();
+  const tRef = useRef(t);
+  tRef.current = t;
+  const gridHeight = useGridHeight(gridWrapRef, TOTALS_ROW_H + BOTTOM_BAR_H);
+  const { records, loading, syncVersion, deleteRecords, bulkUpsert, updateRecord, insertNewRows } = useFuelInvoiceRecords();
+  // What the database holds right now (used to put a row back if its save is rejected),
+  // and the invoice keys currently being inserted (so a realtime echo of our own
+  // insert is not shown a second time).
+  const serverRowsRef = useRef([]);
+  serverRowsRef.current = records;
+  const pendingKeysRef = useRef(new Set());
 
   // Per-column widths (px) — null/absent means "use that column's default
   // minWidth". Persisted per-browser (not per-user/synced) since it's a
@@ -319,16 +392,10 @@ export default function FuelInvoiceGrid() {
   // whichever row-number gutter cell was clicked.
   const [colorPicker, setColorPicker] = useState(null);
 
-  // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count/Count
-  // Numbers) for whatever range of cells is currently selected — kept up to
-  // date at all times, but only ever DISPLAYED when statsPopupOpen is true
-  // (toggled by clicking the "Total Cost" bar, not shown automatically).
+  // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count) for whatever
+  // range of cells is currently selected, shown in the bottom bar.
   const [selectionStats, setSelectionStats] = useState(null);
-  const selectionStatsRef = useRef(null);
-  selectionStatsRef.current = selectionStats;
-  // { x, y } of the popup (anchored above the "Total Cost" button that was
-  // clicked to open it), or null when closed.
-  const [statsPopupOpen, setStatsPopupOpen] = useState(null);
+  const [addCount, setAddCount] = useState(1);
 
   // The grid's own local, fully-controlled row state (the FULL set — see
   // displayRows below for the filtered subset actually shown) — seeded once
@@ -370,7 +437,7 @@ export default function FuelInvoiceGrid() {
     if (initializedRef.current) {
       setAllRows(prev => {
         const known = new Set(prev.map(r => r.id).filter(Boolean));
-        const missing = records.filter(r => !known.has(r.id));
+        const missing = records.filter(r => !known.has(r.id) && !pendingKeysRef.current.has(invoiceKey(r)));
         return missing.length ? [...prev, ...missing] : prev;
       });
     }
@@ -393,19 +460,23 @@ export default function FuelInvoiceGrid() {
 
   // The filtered view actually handed to <DataSheetGrid>. Its row order is
   // whatever `allRows` already holds (fetched date-ascending, day 1 first —
-  // see useFuelInvoiceRecords), just with non-matching rows left out.
+  // see useFuelInvoiceRecords), just with non-matching rows left out. Rows that
+  // are not saved yet always stay visible, so a row you just added cannot vanish
+  // behind a filter before you have filled it in.
   const displayRows = useMemo(() => {
-    let r = allRows;
-    for (const key of SELECT_FIELD_KEYS) {
-      if (fieldFilters[key]) r = r.filter(row => (row[key] || "") === fieldFilters[key]);
-    }
-    if (dateFrom) r = r.filter(row => (row.entry_date || "") >= dateFrom);
-    if (dateTo) r = r.filter(row => (row.entry_date || "") <= dateTo);
-    if (search.trim()) {
-      const s = search.trim().toLowerCase();
-      r = r.filter(row => FUEL_INVOICE_FIELDS.some(f => (row[f.key] || "").toString().toLowerCase().includes(s)));
-    }
-    return r;
+    const s = search.trim().toLowerCase();
+    const filtering = SELECT_FIELD_KEYS.some(k => fieldFilters[k]) || dateFrom || dateTo || s;
+    if (!filtering) return allRows;
+    return allRows.filter(row => {
+      if (!row.id) return true;
+      for (const key of SELECT_FIELD_KEYS) {
+        if (fieldFilters[key] && (row[key] || "") !== fieldFilters[key]) return false;
+      }
+      if (dateFrom && (row.entry_date || "") < dateFrom) return false;
+      if (dateTo && (row.entry_date || "") > dateTo) return false;
+      if (s && !FUEL_INVOICE_FIELDS.some(f => (row[f.key] || "").toString().toLowerCase().includes(s))) return false;
+      return true;
+    });
   }, [allRows, fieldFilters, dateFrom, dateTo, search]);
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
@@ -476,22 +547,19 @@ export default function FuelInvoiceGrid() {
     });
   }, []);
 
-  // Sum of the Cost column across whatever's currently filtered/searched —
-  // displayRows already IS that filtered set (client-side, all rows are
-  // loaded up front by the hook, no pagination to worry about), so this
-  // recomputes for free whenever a filter changes or a row is edited/added/
-  // deleted/pasted. Invalid/empty Cost values are excluded rather than
-  // treated as 0-affecting NaN.
-  const totalCost = useMemo(() => {
-    let sum = 0;
+  // Totals of Cost / Amount / VAT over whatever is currently filtered/searched —
+  // displayRows already IS that filtered set, so this recomputes whenever a
+  // filter changes or a row is edited/added/deleted/pasted. Empty or invalid
+  // values are skipped.
+  const totals = useMemo(() => {
+    let cost = 0, amount = 0, vat = 0;
     for (const row of displayRows) {
-      const n = Number(row.cost);
-      if (Number.isFinite(n)) sum += n;
+      const c = Number(row.cost); if (Number.isFinite(c)) cost += c;
+      const a = Number(row.amount); if (Number.isFinite(a)) amount += a;
+      const v = Number(row.vat); if (Number.isFinite(v)) vat += v;
     }
-    return sum;
+    return { cost, amount, vat };
   }, [displayRows]);
-  const totalCostRef = useRef(0);
-  totalCostRef.current = totalCost;
 
   // AutoFit: measure real text width (header + every row's displayed value)
   // per column and clamp to a sensible range — see lib/fuelInvoiceColumnWidths.
@@ -539,18 +607,35 @@ export default function FuelInvoiceGrid() {
   const gutterColumn = useMemo(() => ({
     component: ({ rowData }) => {
       const idx = allRowsRef.current.findIndex(r => rowKey(r) === rowKey(rowData));
+      // A row with no database id is not saved yet. Say why next to its number.
+      let flag = null;
+      if (rowData && !rowData.id) {
+        const tt = tRef.current;
+        if (rowData.__saving) {
+          flag = { icon: "…", title: tt("fuelInvoice.rowSaving") };
+        } else if (rowData.__failed) {
+          flag = { icon: "⛔", title: tt("fuelInvoice.rowFailed") };
+        } else {
+          const missing = missingRequiredFields(rowData);
+          if (missing.length) {
+            const names = missing.map(k => COLUMN_DEFS.find(d => d.key === k)?.title || k).join(", ");
+            flag = { icon: "⚠", title: tt("fuelInvoice.rowIncomplete", { fields: names }) };
+          }
+        }
+      }
       return (
         <button
           type="button"
           className={"gutter-row-btn" + (rowData?.row_color ? ` row-color-${rowData.row_color}` : "")}
-          title={canEditRef.current ? "Click to set row color" : undefined}
+          title={flag ? flag.title : (canEditRef.current ? "Click to set row color" : undefined)}
           onClick={e => {
             e.stopPropagation();
-            if (!canEditRef.current) return;
+            if (!canEditRef.current || !rowData?.id) return; // color is stored with the saved row
             const rect = e.currentTarget.getBoundingClientRect();
             setColorPicker({ key: rowKey(rowData), x: rect.left, y: rect.bottom + 4 });
           }}
         >
+          {flag && <span className="gutter-flag">{flag.icon}</span>}
           {idx === -1 ? "" : idx + 1}
         </button>
       );
@@ -574,65 +659,6 @@ export default function FuelInvoiceGrid() {
     return () => document.removeEventListener("click", onDocClick);
   }, [colorPicker]);
 
-  // Close the selection-stats popup on any outside click, same pattern.
-  useEffect(() => {
-    if (!statsPopupOpen) return;
-    function onDocClick() { setStatsPopupOpen(false); }
-    document.addEventListener("click", onDocClick);
-    return () => document.removeEventListener("click", onDocClick);
-  }, [statsPopupOpen]);
-
-  // Record count moved next to the grid's own native "Add N rows" control
-  // (same bottom bar, not a separate line above the grid) — stable
-  // (empty deps) for the same reason as gutterColumn above, reading the
-  // live counts via refs at render time instead of closing over a
-  // per-render value.
-  const addRowsComponent = useMemo(() => function AddRowsWithCount({ addRows }) {
-    const [value, setValueState] = useState(1);
-    return (
-      <div className="dsg-add-row fuel-invoice-add-row">
-        <div className="cards-count">
-          {displayRowsRef.current.length}{displayRowsRef.current.length !== allRowsRef.current.length ? ` of ${allRowsRef.current.length}` : ""} record{allRowsRef.current.length === 1 ? "" : "s"}
-        </div>
-        <button
-          type="button"
-          className="fuel-invoice-total-cost"
-          title="Click for selection stats (Sum/Avg/Min/Max/Count)"
-          // Clicking a plain <button> moves focus to it by default, which
-          // blurs the grid and clears its current cell selection (so the
-          // very stats we're about to show would already be gone) —
-          // preventDefault on mousedown keeps focus (and the selection)
-          // right where it was, same trick used for toolbar buttons next to
-          // a text selection.
-          onMouseDown={e => e.preventDefault()}
-          onClick={e => {
-            e.stopPropagation();
-            // Read the rect synchronously here, not inside the setState
-            // updater below — by the time that callback runs, the
-            // synthetic event's currentTarget has already been cleared.
-            const rect = e.currentTarget.getBoundingClientRect();
-            setStatsPopupOpen(prev => (prev
-              ? null
-              : { right: window.innerWidth - rect.right, bottom: window.innerHeight - rect.top + 6 }));
-          }}
-        >
-          Total Cost: {moneyGrouped(totalCostRef.current)}
-        </button>
-        <span style={{ flex: 1 }} />
-        <button type="button" className="dsg-add-row-btn" onClick={() => addRows(value)}>Add</button>
-        <input
-          className="dsg-add-row-input"
-          type="number"
-          min={1}
-          value={value}
-          onChange={e => setValueState(Math.max(1, Math.round(parseInt(e.target.value) || 0)))}
-          onKeyDown={e => { if (e.key === "Enter") addRows(value); }}
-        />
-        <span> rows</span>
-      </div>
-    );
-  }, []);
-
   function buildSavePayload(row) {
     const payload = row.id ? { id: row.id } : {};
     for (const key of [
@@ -642,10 +668,11 @@ export default function FuelInvoiceGrid() {
     ]) {
       payload[key] = row[key] ?? null;
     }
+    // da_name is filled in by the database (it looks the NID up in the DA
+    // directory), and invoice_month is generated there too: neither is sent.
     const derived = payload.cost != null ? computeAmountVat(payload.cost) : { amount: null, vat: null };
     payload.amount = derived.amount;
     payload.vat = derived.vat;
-    payload.da_name = payload.nid ? lookupDaName(payload.nid) : null;
     if (row.id) payload.updated_at = new Date().toISOString();
     return payload;
   }
@@ -673,16 +700,85 @@ export default function FuelInvoiceGrid() {
     });
   }
 
+  // Why a save was refused, in words the user can act on.
+  function friendlySaveError(error) {
+    const msg = error?.message || "";
+    if (error?.code === "23505" || /duplicate key|unique constraint/i.test(msg)) return tRef.current("fuelInvoice.duplicateExists");
+    if (error?.code === "23514" || /check constraint/i.test(msg)) return tRef.current("fuelInvoice.requiredFields");
+    return msg;
+  }
+
+  // Rows that already exist: update in place. If the database refuses, put the
+  // rows back to what it holds.
+  async function saveExistingRows(rows) {
+    const { data, error } = await bulkUpsert(rows.map(buildSavePayload));
+    if (error) {
+      const server = new Map(serverRowsRef.current.map(r => [r.id, r]));
+      const ids = new Set(rows.map(r => r.id));
+      setAllRows(cur => cur.map(r => (r.id && ids.has(r.id) && server.get(r.id) ? server.get(r.id) : r)));
+      showToast(tRef.current("fuelInvoice.saveFailed", { msg: friendlySaveError(error) }), "error");
+      return;
+    }
+    const byId = new Map(data.map(r => [r.id, r]));
+    setAllRows(cur => cur.map(r => (r.id && byId.has(r.id) ? { ...r, ...byId.get(r.id) } : r)));
+  }
+
+  // New rows: only the complete ones (data source + invoice number + date) are sent,
+  // in one request. The database skips any that already exist. Incomplete rows stay
+  // in the grid, marked, and are saved the moment they are completed.
+  async function saveNewRows(rows) {
+    const candidates = rows.filter(r => !r.__saving);
+    const complete = candidates.filter(r => missingRequiredFields(r).length === 0);
+    const incomplete = candidates.length - complete.length;
+    if (!complete.length) return { added: 0, duplicates: [], incomplete };
+
+    const keys = complete.map(rowKey);
+    const payloads = complete.map(buildSavePayload);
+    const pending = payloads.map(invoiceKey);
+    pending.forEach(k => pendingKeysRef.current.add(k));
+    setAllRows(cur => cur.map(r => (keys.includes(rowKey(r)) ? { ...r, __saving: true, __failed: false } : r)));
+
+    const { results, error } = await insertNewRows(payloads);
+    setTimeout(() => pending.forEach(k => pendingKeysRef.current.delete(k)), 2500);
+
+    if (error) {
+      setAllRows(cur => cur.map(r => (keys.includes(rowKey(r)) ? { ...r, __saving: false, __failed: true } : r)));
+      showToast(tRef.current("fuelInvoice.saveFailed", { msg: friendlySaveError(error) }), "error");
+      return { added: 0, duplicates: [], incomplete };
+    }
+
+    setAllRows(cur => {
+      const out = [];
+      for (const r of cur) {
+        const i = keys.indexOf(rowKey(r));
+        if (i === -1) { out.push(r); continue; }
+        if (results[i].status === "added") {
+          // eslint-disable-next-line no-unused-vars
+          const { __saving, __failed, ...rest } = r;
+          out.push({ ...rest, ...results[i].row }); // id, trimmed values, da_name from the database
+        } // a duplicate is dropped from the grid: it already exists
+      }
+      const seen = new Set(); // a realtime echo may already have added the same saved row
+      return out.filter(r => !r.id || (seen.has(r.id) ? false : (seen.add(r.id), true)));
+    });
+
+    return {
+      added: results.filter(x => x.status === "added").length,
+      duplicates: results.map((x, i) => (x.status === "duplicate" ? payloads[i].invoice_number : null)).filter(Boolean),
+      incomplete,
+    };
+  }
+
   // react-datasheet-grid batches a whole paste (or a whole typed edit) into
   // one contiguous operation per affected range — so a 200-row paste is one
-  // CREATE operation here, saved with a single bulkUpsert call, not 200
-  // separate requests.
+  // CREATE operation here, saved with a single request, not 200 separate ones.
   async function handleChange(newValue, operations) {
     const previousFiltered = displayRowsRef.current;
     undoStackRef.current.push(allRowsRef.current);
     if (undoStackRef.current.length > MAX_UNDO) undoStackRef.current.shift();
     mergeIntoAllRows(newValue, previousFiltered, operations);
 
+    const summary = { added: 0, duplicates: [], incomplete: 0 };
     for (const op of operations) {
       if (op.type === "DELETE") {
         const removedIds = previousFiltered.slice(op.fromRowIndex, op.toRowIndex).map(r => r.id).filter(Boolean);
@@ -694,48 +790,76 @@ export default function FuelInvoiceGrid() {
       }
       // CREATE or UPDATE
       const slice = newValue.slice(op.fromRowIndex, op.toRowIndex);
-      const keys = slice.map(rowKey);
-      const payloads = slice.map(buildSavePayload);
-      if (!payloads.length) continue;
-      const { data, error } = await bulkUpsert(payloads);
-      if (error) { window.alert("Save failed: " + error.message); continue; }
-      // Write the DB-generated id (and server-computed fields) back into
-      // the matching rows (by their stable key, not position — a filter
-      // may have changed what's visible while this save was in flight).
-      setAllRows(cur => cur.map(r => {
-        const i = keys.indexOf(rowKey(r));
-        return i === -1 ? r : { ...r, ...data[i] };
-      }));
+      // Saved rows are only sent if something really changed (pasting the same
+      // values over a row reports a change too).
+      const prevByKey = new Map(previousFiltered.map(r => [rowKey(r), r]));
+      const existing = slice.filter(r => r.id && (() => {
+        const prev = prevByKey.get(rowKey(r));
+        return !prev || SAVED_FIELD_KEYS.some(k => (prev[k] ?? null) !== (r[k] ?? null));
+      })());
+      const fresh = slice.filter(r => !r.id);
+      if (existing.length) await saveExistingRows(existing);
+      if (fresh.length) {
+        const r = await saveNewRows(fresh);
+        summary.added += r.added;
+        summary.duplicates.push(...r.duplicates);
+        summary.incomplete += r.incomplete;
+      }
     }
+
+    // One summary message per change (typing in a half-filled row stays quiet).
+    const dup = summary.duplicates.length;
+    if (summary.added || dup || summary.incomplete >= 2) {
+      const tt = tRef.current;
+      let msg = dup ? tt("fuelInvoice.addedIgnored", { added: summary.added, ignored: dup }) : tt("fuelInvoice.added", { added: summary.added });
+      if (!summary.added && !dup) msg = "";
+      if (dup) msg += `: ${summary.duplicates.slice(0, 5).join(", ")}${dup > 5 ? "…" : ""}`;
+      if (summary.incomplete) msg += (msg ? " — " : "") + tt("fuelInvoice.incompleteRows", { n: summary.incomplete });
+      showToast(msg, summary.added ? "success" : "error");
+    }
+  }
+
+  // Adds blank rows in the grid only. Nothing is saved until a row has its data
+  // source, invoice number and date.
+  function addRows(n) {
+    const count = Math.max(1, Math.min(500, Math.round(n) || 1));
+    undoStackRef.current.push(allRowsRef.current);
+    if (undoStackRef.current.length > MAX_UNDO) undoStackRef.current.shift();
+    setAllRows(cur => [...cur, ...Array.from({ length: count }, () => ({ __tempId: `temp-${crypto.randomUUID()}` }))]);
+    requestAnimationFrame(() => {
+      const scroller = gridWrapRef.current?.querySelector(".dsg-container");
+      if (scroller) scroller.scrollTop = scroller.scrollHeight;
+    });
+  }
+
+  function discardEmptyRows() {
+    setAllRows(cur => cur.filter(r => r.id || !isBlankRow(r)));
   }
 
   // Deleting saved rows is permanent (Ctrl+Z restores them, but only in this
   // session), so ask first. The grid is controlled: if the user cancels we
   // simply don't apply the change, and the rows stay exactly as they were.
   function guardedHandleChange(newValue, operations) {
+    // Read-only users (e.g. a fleet manager): the grid already disables the cells,
+    // but a paste onto one still reports a (no-op) change. Never send anything.
+    if (!canEditRef.current) return;
     const current = displayRowsRef.current;
     let savedToDelete = 0;
     for (const op of operations) {
       if (op.type !== "DELETE") continue;
       savedToDelete += current.slice(op.fromRowIndex, op.toRowIndex).filter(r => r.id).length;
     }
-    // Pressing Delete on a selected range doesn't remove rows — it blanks
-    // their cells (an UPDATE). A saved row left with every typed field empty
-    // is a deletion in all but name, so it gets the same confirmation.
-    const TYPED = FUEL_INVOICE_FIELDS.filter(f => !["computed", "lookup"].includes(f.type) && f.key !== "batch").map(f => f.key);
-    let savedToBlank = 0;
+    // A saved invoice must keep its data source, invoice number and date: the
+    // database would refuse the save anyway, so say so and leave the row as it was.
+    // (To remove an invoice, delete the row.)
+    let invalidSaved = 0;
     for (const op of operations) {
       if (op.type !== "UPDATE") continue;
-      savedToBlank += newValue.slice(op.fromRowIndex, op.toRowIndex)
-        .filter(r => r.id && TYPED.every(k => r[k] === null || r[k] === undefined || r[k] === "")).length;
+      invalidSaved += newValue.slice(op.fromRowIndex, op.toRowIndex).filter(r => r.id && missingRequiredFields(r).length).length;
     }
-    if (savedToBlank > 0) {
-      const msg = savedToBlank === 1
-        ? "This clears ALL data in 1 saved record. Continue?"
-        : `This clears ALL data in ${savedToBlank.toLocaleString()} saved records. Continue?
-
-This affects everyone.`;
-      if (!window.confirm(msg)) return;
+    if (invalidSaved > 0) {
+      showToast(tRef.current("fuelInvoice.requiredSavedRows"), "error");
+      return;
     }
     if (savedToDelete > 0) {
       const msg = savedToDelete === 1
@@ -799,9 +923,7 @@ This affects everyone.`;
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
     // Deliberately no deps array: re-attaches every render so it always
-    // closes over the latest handleUndo/lookupDaName/records (lookupDaName
-    // in particular closes over state that starts empty before the DA
-    // directory finishes loading) — cheap for a single listener.
+    // closes over the latest handleUndo/records — cheap for a single listener.
   });
 
   const columns = useMemo(() => {
@@ -852,6 +974,11 @@ This affects everyone.`;
     if (!canEdit) return cols.map(c => ({ ...c, disabled: true }));
     return cols;
   }, [records, canEdit, columnWidths]);
+
+  // Rows that are not saved yet: partly filled (missing a required field) or
+  // completely blank.
+  const partialCount = allRows.filter(r => !r.id && !r.__saving && !isBlankRow(r) && missingRequiredFields(r).length > 0).length;
+  const blankCount = allRows.filter(r => !r.id && isBlankRow(r)).length;
 
   return (
     <div className="fuel-invoice-grid-wrap" ref={gridWrapRef}>
@@ -908,9 +1035,10 @@ This affects everyone.`;
         onChange={guardedHandleChange}
         columns={columns}
         gutterColumn={gutterColumn}
-        addRowsComponent={addRowsComponent}
+        addRowsComponent={false}
         rowClassName={({ rowData, rowIndex }) => {
           const classes = [];
+          if (rowData && !rowData.id) classes.push(rowData.__failed ? "fi-row-failed" : "fi-row-unsaved");
           if (rowIndex % 2 === 1) classes.push("dsg-row-alt");
           if (rowData?.row_color) classes.push(`row-color-${rowData.row_color}`);
           return classes.join(" ") || undefined;
@@ -924,26 +1052,52 @@ This affects everyone.`;
         onSelectionChange={handleSelectionChange}
       />
 
-      {statsPopupOpen && (
-        <div
-          className="selection-stats-card"
-          style={{ position: "fixed", right: statsPopupOpen.right, bottom: statsPopupOpen.bottom }}
-          onClick={e => e.stopPropagation()}
-        >
-          {selectionStats ? (
-            <>
-              <div><span>Sum</span><b>{selectionStats.sum.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></div>
-              <div><span>Avg</span><b>{selectionStats.avg != null ? selectionStats.avg.toLocaleString("en-US", { maximumFractionDigits: 8 }) : "—"}</b></div>
-              <div><span>Min</span><b>{selectionStats.min ?? "—"}</b></div>
-              <div><span>Max</span><b>{selectionStats.max ?? "—"}</b></div>
-              <div><span>Count</span><b>{selectionStats.count.toLocaleString("en-US")}</b></div>
-              <div><span>Count Numbers</span><b>{selectionStats.countNumbers.toLocaleString("en-US")}</b></div>
-            </>
-          ) : (
-            <div className="selection-stats-empty">Select a range of cells to see stats</div>
-          )}
-        </div>
-      )}
+      <TotalsRow
+        wrapRef={gridWrapRef}
+        totals={totals}
+        filtered={displayRows.length !== allRows.length}
+        syncKey={`${JSON.stringify(columnWidths)}|${displayRows.length}|${gridHeight}|${loading}`}
+      />
+
+      <div className="fi-bottom-bar" style={{ height: BOTTOM_BAR_H }}>
+        <span className="cards-count">
+          {displayRows.length}{displayRows.length !== allRows.length ? ` of ${allRows.length}` : ""} record{allRows.length === 1 ? "" : "s"}
+        </span>
+        {partialCount > 0 && (
+          <span className="fi-incomplete-note" title={t("fuelInvoice.incompleteHint")}>⚠ {t("fuelInvoice.incompleteRows", { n: partialCount })}</span>
+        )}
+        {canEdit && blankCount > 0 && (
+          <button type="button" className="fi-link-btn" onClick={discardEmptyRows}>{t("fuelInvoice.discardEmpty", { n: blankCount })}</button>
+        )}
+        <span style={{ flex: 1 }} />
+        {selectionStats && (
+          <span className="fi-sel-stats" title="Selected cells">
+            {selectionStats.countNumbers > 0 && (
+              <>
+                <span>Sum <b>{selectionStats.sum.toLocaleString("en-US", { maximumFractionDigits: 2 })}</b></span>
+                <span>Avg <b>{selectionStats.avg != null ? selectionStats.avg.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</b></span>
+                <span>Min <b>{selectionStats.min}</b></span>
+                <span>Max <b>{selectionStats.max}</b></span>
+              </>
+            )}
+            <span>Count <b>{selectionStats.count.toLocaleString("en-US")}</b></span>
+          </span>
+        )}
+        {canEdit && (
+          <div className="fi-add-rows">
+            <button type="button" className="dsg-add-row-btn" onClick={() => addRows(addCount)}>Add</button>
+            <input
+              className="dsg-add-row-input"
+              type="number"
+              min={1}
+              value={addCount}
+              onChange={e => setAddCount(Math.max(1, Math.round(parseInt(e.target.value) || 0)))}
+              onKeyDown={e => { if (e.key === "Enter") addRows(addCount); }}
+            />
+            <span> rows</span>
+          </div>
+        )}
+      </div>
 
       {colorPicker && (
         <div

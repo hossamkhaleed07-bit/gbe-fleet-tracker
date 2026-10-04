@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { sb } from "../lib/supabase";
 import { useAuth } from "../contexts/AuthContext";
 import { cacheGet, cacheSet } from "../lib/fuelInvoiceCache";
+import { GENERATED_COLUMNS, invoiceKey } from "../lib/fuelInvoice";
 
 const PAGE_SIZE = 1000;
 
@@ -53,7 +54,24 @@ async function fetchAllPages() {
   return { data: rows, error: null };
 }
 
-// Shared by both the Entries and Data Base pages — each mounts its own copy
+// The database computes some columns itself (invoice_month). Whatever a caller
+// passes, they are never sent — Postgres rejects a value for a generated column.
+function stripGenerated(payload) {
+  if (Array.isArray(payload)) return payload.map(stripGenerated);
+  const out = { ...payload };
+  for (const k of GENERATED_COLUMNS) delete out[k];
+  return out;
+}
+
+// "No unique constraint for ON CONFLICT" — what a database that has not got
+// migration 054 yet answers. Used to fall back to a client-side duplicate check.
+function isMissingConflictTarget(err) {
+  return err?.code === "42P10" || /ON CONFLICT|invoice_month/i.test(err?.message || "");
+}
+
+const CONFLICT_COLUMNS = "data_source,invoice_number,invoice_month";
+
+// Shared by the Invoices page — each mounts its own copy
 // of this hook (simple, no extra provider plumbing needed for what's meant
 // to be a self-contained module), but both read the SAME table and both
 // subscribe to Postgres Realtime on it, so a change made from either page
@@ -134,7 +152,7 @@ export function useFuelInvoiceRecords() {
 
   async function createRecord(payload) {
     mutationsRef.current++;
-    const { data, error: err } = await sb.from("fuel_invoice_records").insert(payload).select().single();
+    const { data, error: err } = await sb.from("fuel_invoice_records").insert(stripGenerated(payload)).select().single();
     if (err) return { error: err };
     // Optimistic — the realtime event will also arrive and is a no-op merge.
     recordsRef.current = [data, ...recordsRef.current];
@@ -144,25 +162,77 @@ export function useFuelInvoiceRecords() {
 
   async function updateRecord(id, payload) {
     mutationsRef.current++;
-    const { data, error: err } = await sb.from("fuel_invoice_records").update(payload).eq("id", id).select().single();
+    const { data, error: err } = await sb.from("fuel_invoice_records").update(stripGenerated(payload)).eq("id", id).select().single();
     if (err) return { error: err };
     recordsRef.current = recordsRef.current.map(r => r.id === id ? data : r);
     setRecords([...recordsRef.current]);
     return { data };
   }
 
-  // One network round-trip for many rows at once (bulk paste) instead of one
-  // request per cell/row — rows with an existing `id` update in place, rows
-  // without one insert fresh (the column's default generates their id).
+  // Saves rows that ALREADY exist (they carry an `id`): updates in place. Also
+  // used to put a row back when a delete is undone.
   async function bulkUpsert(rowsPayload) {
     mutationsRef.current++;
-    const { data, error: err } = await sb.from("fuel_invoice_records").upsert(rowsPayload).select();
+    const { data, error: err } = await sb.from("fuel_invoice_records").upsert(stripGenerated(rowsPayload)).select();
     if (err) return { error: err };
     const byId = new Map(recordsRef.current.map(r => [r.id, r]));
     for (const r of data) byId.set(r.id, r);
     recordsRef.current = [...byId.values()];
     setRecords(recordsRef.current);
     return { data };
+  }
+
+  // Adds NEW rows (no `id`) in one request. A row whose (data_source,
+  // invoice_number, invoice month) already exists is skipped by the database
+  // (ON CONFLICT DO NOTHING), never duplicated and never an error.
+  // Resolves to { results } — one entry per input row, in order:
+  //   { status: "added", row }  the row as stored (id, trimmed values, da_name...)
+  //   { status: "duplicate" }   skipped because it already existed
+  // or { error } if the request itself failed.
+  async function insertNewRows(rowsPayload) {
+    mutationsRef.current++;
+    const clean = stripGenerated(rowsPayload);
+    let inserted;
+    const first = await sb.from("fuel_invoice_records")
+      .upsert(clean, { onConflict: CONFLICT_COLUMNS, ignoreDuplicates: true })
+      .select();
+    if (first.error && isMissingConflictTarget(first.error)) {
+      // Database without the unique key yet: skip the rows we already know about
+      // (and repeats inside this batch), insert the rest.
+      const known = new Set(recordsRef.current.map(invoiceKey));
+      const seen = new Set();
+      const fresh = clean.filter(p => {
+        const k = invoiceKey(p);
+        if (known.has(k) || seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      if (!fresh.length) return { results: clean.map(() => ({ status: "duplicate" })) };
+      const second = await sb.from("fuel_invoice_records").insert(fresh).select();
+      if (second.error) return { error: second.error };
+      inserted = second.data;
+    } else if (first.error) {
+      return { error: first.error };
+    } else {
+      inserted = first.data;
+    }
+
+    const byId = new Map(recordsRef.current.map(r => [r.id, r]));
+    for (const r of inserted) byId.set(r.id, r);
+    recordsRef.current = [...byId.values()];
+    setRecords(recordsRef.current);
+
+    // Pair each input row with what was stored (or note that it was skipped).
+    const storedByKey = new Map();
+    for (const r of inserted) storedByKey.set(invoiceKey(r), r);
+    const results = clean.map(p => {
+      const k = invoiceKey(p);
+      const stored = storedByKey.get(k);
+      if (!stored) return { status: "duplicate" };
+      storedByKey.delete(k); // a second identical row in the same batch is a duplicate
+      return { status: "added", row: stored };
+    });
+    return { results };
   }
 
   async function deleteRecords(ids) {
@@ -175,5 +245,5 @@ export function useFuelInvoiceRecords() {
     return {};
   }
 
-  return { records, loading, error, syncVersion, reload: load, createRecord, updateRecord, deleteRecords, bulkUpsert };
+  return { records, loading, error, syncVersion, reload: load, createRecord, updateRecord, deleteRecords, bulkUpsert, insertNewRows };
 }

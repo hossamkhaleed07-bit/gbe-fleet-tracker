@@ -31,8 +31,7 @@ const FuelApprover = lazy(() => import("./pages/FuelApprover"));
 const FuelApproval = lazy(() => import("./pages/FuelApproval"));
 const FuelMissingForm = lazy(() => import("./pages/FuelMissingForm"));
 const AutomaticFuel = lazy(() => import("./pages/AutomaticFuel"));
-const FuelInvoiceEntries = lazy(() => import("./pages/FuelInvoiceEntries"));
-const FuelInvoiceDataBase = lazy(() => import("./pages/FuelInvoiceDataBase"));
+const FuelInvoices = lazy(() => import("./pages/FuelInvoices"));
 // Visual prototype — standalone full-screen page (no sidebar), mock data only.
 const FormResponseDemo = lazy(() => import("./pages/FormResponseDemo"));
 
@@ -86,8 +85,10 @@ export default function App() {
                 <Route path="/fuel-approval" element={<FuelApproval />} />
                 <Route path="/fuel-missing-form" element={<FuelMissingForm />} />
                 <Route path="/automatic-fuel" element={<AutomaticFuel />} />
-                <Route path="/fuel-invoice/entries" element={<FuelInvoiceEntries />} />
-                <Route path="/fuel-invoice/database" element={<FuelInvoiceDataBase />} />
+                <Route path="/fuel-invoice/invoices" element={<FuelInvoices />} />
+                {/* old addresses keep working */}
+                <Route path="/fuel-invoice/entries" element={<Navigate to="/fuel-invoice/invoices" replace />} />
+                <Route path="/fuel-invoice/database" element={<Navigate to="/fuel-invoice/invoices" replace />} />
               </Route>
               <Route path="*" element={<Navigate to="/overview" replace />} />
             </Routes>

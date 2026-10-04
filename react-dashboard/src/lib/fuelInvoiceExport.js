@@ -54,7 +54,7 @@ export async function exportFuelInvoiceXlsx(rows, dateStamp) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = `Fuel_Invoices_Entries_${dateStamp}.xlsx`;
+  a.download = `Fuel_Invoices_${dateStamp}.xlsx`;
   document.body.appendChild(a);
   a.click();
   a.remove();
