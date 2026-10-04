@@ -1182,10 +1182,15 @@ async function lookupDriverName(identityNumber) {
   hint.textContent = t("lookupSearching");
   successIcon.style.display = "none";
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/drivers?select=full_name&identity_number=eq.${encodeURIComponent(identityNumber)}&limit=1`, { headers: headers() });
-    const rows = await res.json();
-    if (rows[0]?.full_name) {
-      nameField.value = rows[0].full_name;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_driver_name`, {
+      method: "POST",
+      headers: headers({ "Content-Type": "application/json" }),
+      body: JSON.stringify({ p_identity_number: identityNumber }),
+    });
+    if (!res.ok) throw new Error("driver name lookup failed");
+    const fullName = await res.json(); // the name, or null when there is no exact match
+    if (fullName) {
+      nameField.value = fullName;
       hint.textContent = "";
       successIcon.style.display = "block";
     } else {
