@@ -451,6 +451,10 @@ export const translations = {
       requiredFields: "المصدر ورقم الفاتورة والتاريخ مطلوبين.",
       requiredSavedRows: "المصدر ورقم الفاتورة والتاريخ مطلوبين في الفاتورة المحفوظة. لو عايز تشيلها، امسح الصف.",
       saveFailed: "فشل الحفظ: {msg}",
+      saveFailedPart: "اتوقف الحفظ: {msg}. {n} صف لم يُحفظ — عدّل أي خلية فيهم أو الصق تاني (المحفوظ هيتجاهل كمكرر).",
+      copiedWithHeaders: "اتنسخ {n} صف مع العناوين",
+      copyFailed: "تعذر النسخ، جرّب Ctrl+C",
+      headingRowIgnored: "اتجاهل سطر العناوين في اللصق",
     },
     activeStatus: {
       deactivateTitleDriver: "إيقاف السائق",
@@ -938,6 +942,10 @@ export const translations = {
       requiredFields: "Data source, invoice number and date are required.",
       requiredSavedRows: "A saved invoice must keep its data source, invoice number and date. To remove it, delete the row.",
       saveFailed: "Save failed: {msg}",
+      saveFailedPart: "Saving stopped: {msg}. {n} row(s) not saved - edit any cell in them or paste again (rows already saved are skipped as duplicates).",
+      copiedWithHeaders: "Copied {n} row(s) with headers",
+      copyFailed: "Could not copy, try Ctrl+C",
+      headingRowIgnored: "Heading row ignored in the paste",
     },
     activeStatus: {
       deactivateTitleDriver: "Deactivate driver",

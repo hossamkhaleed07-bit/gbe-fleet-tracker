@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Search, Maximize2, X, ChevronDown, Download } from "lucide-react";
-import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn } from "react-datasheet-grid";
+import { DataSheetGrid, keyColumn, textColumn, floatColumn, createTextColumn, createContextMenuComponent, renderContextMenuItem } from "react-datasheet-grid";
 import "react-datasheet-grid/dist/style.css";
 import HeroPortal from "./HeroPortal";
 import { useAuth } from "../contexts/AuthContext";
@@ -11,7 +11,22 @@ import { useFuelInvoiceRecords } from "../hooks/useFuelInvoiceRecords";
 import { useLang } from "../contexts/LanguageContext";
 import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVat, money, ROW_COLOR_OPTIONS, missingRequiredFields, isBlankRow, invoiceKey } from "../lib/fuelInvoice";
 import { makeSelectDsgColumn, makeReadOnlyDsgColumn, dsgDateColumn } from "./fuelInvoiceDsgColumns";
+import { STAT_KEYS, buildClipboardTable, writeClipboard, stripPastedHeadingRow } from "../lib/fuelInvoiceClipboard";
 import { computeAutofitWidth, loadStoredColumnWidths, saveStoredColumnWidths, MIN_WIDTH, MAX_WIDTH } from "../lib/fuelInvoiceColumnWidths";
+
+// Right-click menu: the grid's own items plus "Copy with headers" right after "Copy".
+// The grid renders this component itself, so it reaches the page's copy function
+// through this small holder (set on every render of FuelInvoiceGrid).
+const copyWithHeadersRef = { current: null };
+const BaseContextMenu = createContextMenuComponent(item => (item.type === "COPY_WITH_HEADERS" ? "Copy with headers" : renderContextMenuItem(item)));
+function FiContextMenu(props) {
+  const items = [];
+  for (const it of props.items) {
+    items.push(it);
+    if (it.type === "COPY") items.push({ type: "COPY_WITH_HEADERS", action: () => { copyWithHeadersRef.current?.(); props.close(); } });
+  }
+  return <BaseContextMenu {...props} items={items} />;
+}
 
 const NID_TEXT_COLUMN = createTextColumn(); // plain text — never coerced to a number, so leading zeros survive
 const GROUPABLE_FIELDS = FUEL_INVOICE_FIELDS.filter(f => SELECT_FIELD_KEYS.includes(f.key));
@@ -395,6 +410,11 @@ export default function FuelInvoiceGrid() {
   // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count) for whatever
   // range of cells is currently selected, shown in the bottom bar.
   const [selectionStats, setSelectionStats] = useState(null);
+  const selectionRef = useRef(null);   // the grid's last non-empty selection {min:{row,col}, max:{row,col}}
+  const columnsRef = useRef([]);
+  const pasteRedispatchRef = useRef(false);
+  const showToastRef = useRef(showToast);
+  showToastRef.current = showToast;
   const [addCount, setAddCount] = useState(1);
 
   // The grid's own local, fully-controlled row state (the FULL set — see
@@ -438,7 +458,16 @@ export default function FuelInvoiceGrid() {
       setAllRows(prev => {
         const known = new Set(prev.map(r => r.id).filter(Boolean));
         const missing = records.filter(r => !known.has(r.id) && !pendingKeysRef.current.has(invoiceKey(r)));
-        return missing.length ? [...prev, ...missing] : prev;
+        if (!missing.length) return prev;
+        // a row saved elsewhere goes where its sort_order belongs (normally the end)
+        // among the saved rows; rows still being typed here are never moved
+        let next = prev;
+        for (const row of missing) {
+          const at = row.sort_order == null ? -1 : next.findIndex(r => r.id && r.sort_order != null && Number(r.sort_order) > Number(row.sort_order));
+          if (at === -1) next = [...next, row];
+          else next = [...next.slice(0, at), row, ...next.slice(at)];
+        }
+        return next;
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -518,6 +547,7 @@ export default function FuelInvoiceGrid() {
     // leaves whatever was last computed on screen, like a spreadsheet's own
     // status bar does.
     if (!selection) return;
+    selectionRef.current = selection;
     const { min, max } = selection;
     const rowCount = max.row - min.row + 1;
     const colCount = max.col - min.col + 1;
@@ -530,6 +560,9 @@ export default function FuelInvoiceGrid() {
         const v = row[key];
         if (v === null || v === undefined || v === "") continue;
         count++;
+        // Sum / Avg / Min / Max only over money columns (Cost, Amount, VAT): invoice
+        // numbers, internal numbers and NIDs are digits too but are not quantities.
+        if (!STAT_KEYS.includes(key)) continue;
         const n = Number(v);
         if (Number.isFinite(n)) {
           countNumbers++;
@@ -545,6 +578,63 @@ export default function FuelInvoiceGrid() {
       min: countNumbers ? lo : null,
       max: countNumbers ? hi : null,
     });
+  }, []);
+
+  // Copies the selected cells with a heading line on top: only the selected columns,
+  // in the order and with the names shown in the table. Plain Ctrl+C stays as it is
+  // (cells only) so pasting inside the dashboard never pastes headings as a row.
+  async function copyWithHeaders() {
+    const sel = selectionRef.current;
+    const live = gridWrapRef.current?.querySelector(".dsg-selection-rect, .dsg-active-cell");
+    if (!sel || !live) return;
+    const defs = COLUMN_DEFS.slice(sel.min.col, sel.max.col + 1);
+    const rows = displayRowsRef.current.slice(sel.min.row, sel.max.row + 1);
+    const cols = columnsRef.current.slice(sel.min.col, sel.max.col + 1);
+    const body = rows.map((rowData, i) => defs.map((d, c) => {
+      const v = cols[c]?.copyValue?.({ rowData, rowIndex: sel.min.row + i });
+      return v ?? rowData[d.key] ?? "";
+    }));
+    const { text, html } = buildClipboardTable(defs.map(d => d.title), body);
+    const ok = await writeClipboard(text, html);
+    showToast(ok ? tRef.current("fuelInvoice.copiedWithHeaders", { n: rows.length }) : tRef.current("fuelInvoice.copyFailed"), ok ? "success" : "error");
+  }
+  copyWithHeadersRef.current = copyWithHeaders;
+
+  useEffect(() => {
+    const typing = (t) => t && (t.tagName === "INPUT" || t.tagName === "TEXTAREA" || t.tagName === "SELECT" || t.isContentEditable);
+    function onKeyDown(e) {
+      // physical key (e.code), so it works on an Arabic layout too
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && !e.altKey && e.code === "KeyC" && !typing(e.target)) {
+        e.preventDefault();
+        copyWithHeadersRef.current?.();
+      }
+    }
+    // A paste whose first line is exactly the column headings (a "Copy with headers"
+    // made here or in Excel) loses that line, so it is never pasted as an invoice.
+    // Runs before the grid's own paste handler and hands it the rest.
+    function onPaste(e) {
+      if (pasteRedispatchRef.current || !canEditRef.current || typing(e.target)) return;
+      const text = e.clipboardData?.getData("text/plain");
+      if (!text) return;
+      const rest = stripPastedHeadingRow(text, COLUMN_DEFS.map(d => d.title));
+      if (rest === null) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      showToastRef.current(tRef.current("fuelInvoice.headingRowIgnored"), "success");
+      if (!rest.trim()) return;
+      const dt = new DataTransfer();
+      dt.setData("text/plain", rest);
+      pasteRedispatchRef.current = true;
+      try { document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true })); }
+      finally { pasteRedispatchRef.current = false; }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    document.addEventListener("paste", onPaste, true);
+    return () => {
+      document.removeEventListener("keydown", onKeyDown);
+      document.removeEventListener("paste", onPaste, true);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Totals of Cost / Amount / VAT over whatever is currently filtered/searched —
@@ -673,6 +763,7 @@ export default function FuelInvoiceGrid() {
     const derived = payload.cost != null ? computeAmountVat(payload.cost) : { amount: null, vat: null };
     payload.amount = derived.amount;
     payload.vat = derived.vat;
+    if (row.sort_order != null) payload.sort_order = row.sort_order; // keeps its place (also when Ctrl+Z puts a deleted row back)
     if (row.id) payload.updated_at = new Date().toISOString();
     return payload;
   }
@@ -741,7 +832,7 @@ export default function FuelInvoiceGrid() {
     const { results, error } = await insertNewRows(payloads);
     setTimeout(() => pending.forEach(k => pendingKeysRef.current.delete(k)), 2500);
 
-    if (error) {
+    if (error && !results) {
       setAllRows(cur => cur.map(r => (keys.includes(rowKey(r)) ? { ...r, __saving: false, __failed: true } : r)));
       showToast(tRef.current("fuelInvoice.saveFailed", { msg: friendlySaveError(error) }), "error");
       return { added: 0, duplicates: [], incomplete };
@@ -756,11 +847,15 @@ export default function FuelInvoiceGrid() {
           // eslint-disable-next-line no-unused-vars
           const { __saving, __failed, ...rest } = r;
           out.push({ ...rest, ...results[i].row }); // id, trimmed values, da_name from the database
+        } else if (results[i].status === "failed") {
+          out.push({ ...r, __saving: false, __failed: true }); // a big paste stopped part-way: these were not saved
         } // a duplicate is dropped from the grid: it already exists
       }
       const seen = new Set(); // a realtime echo may already have added the same saved row
       return out.filter(r => !r.id || (seen.has(r.id) ? false : (seen.add(r.id), true)));
     });
+
+    if (error) showToast(tRef.current("fuelInvoice.saveFailedPart", { msg: friendlySaveError(error), n: results.filter(x => x.status === "failed").length }), "error");
 
     return {
       added: results.filter(x => x.status === "added").length,
@@ -974,6 +1069,7 @@ export default function FuelInvoiceGrid() {
     if (!canEdit) return cols.map(c => ({ ...c, disabled: true }));
     return cols;
   }, [records, canEdit, columnWidths]);
+  columnsRef.current = columns;
 
   // Rows that are not saved yet: partly filled (missing a required field) or
   // completely blank.
@@ -1050,6 +1146,7 @@ export default function FuelInvoiceGrid() {
         headerRowHeight={42}
         createRow={() => ({ __tempId: `temp-${crypto.randomUUID()}` })}
         onSelectionChange={handleSelectionChange}
+        contextMenuComponent={FiContextMenu}
       />
 
       <TotalsRow
