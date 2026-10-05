@@ -523,28 +523,6 @@
   }
   .fi-bottom-bar .cards-count { margin: 0; }
 
-  /* ---- Usage Report: mirrors the manual Excel report ---- */
-  .ur-filters { display: flex; gap: 0.8rem 1rem; flex-wrap: wrap; align-items: center; margin-bottom: 0.9rem; font-size: 0.85rem; color: var(--ink-2); }
-  .ur-quick { display: flex; gap: 0.4rem; flex-wrap: wrap; }
-  .ur-chip { font: inherit; font-size: 0.82rem; padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-1); color: var(--ink); cursor: pointer; }
-  .ur-chip:hover:not(:disabled) { background: var(--plane); }
-  .ur-chip.on { background: var(--blue); border-color: var(--blue); color: #fff; }
-  .ur-chip:disabled { opacity: 0.5; cursor: default; }
-  .ur-dd { position: relative; }
-  .ur-dd summary { cursor: pointer; padding: 0.3rem 0.75rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-1); color: var(--ink); list-style: none; }
-  .ur-dd-panel { position: absolute; z-index: 20; top: calc(100% + 4px); inset-inline-start: 0; min-width: 12rem; max-height: 16rem; overflow: auto; display: flex; flex-direction: column; gap: 0.3rem; padding: 0.6rem; background: var(--surface-1); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: 0 6px 18px rgba(0,0,0,0.15); }
-  .ur-table .ur-branches { font-weight: 600; }
-  .ur-table tbody .ur-sub td { background: #ddebf7; font-weight: 700; }
-  .ur-filters label { display: inline-flex; align-items: center; gap: 0.4rem; }
-  .ur-filters input { font: inherit; padding: 0.3rem 0.5rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface-1); color: var(--ink); }
-  .ur-error { color: var(--c-orange-ink, #b45309); margin-bottom: 0.8rem; font-weight: 600; }
-  .ur-wrap { overflow-x: auto; }
-  .ur-table { width: 100%; border-collapse: collapse; text-align: center; font-size: 0.92rem; color: #000; background: #fff; }
-  .ur-table th, .ur-table td, .ur-table tfoot td { border: 1px solid #333; padding: 0.35rem 0.6rem; }
-  .ur-table thead th, .ur-table tfoot td { background: #9dc3e6; font-weight: 700; }
-  .ur-table .ur-title { font-size: 1rem; }
-  .ur-table .ur-source { color: #fff; font-weight: 600; }
-  .ur-table .ur-empty { color: #555; padding: 1.2rem; }
   .fi-incomplete-note { font-size: 0.8rem; font-weight: 600; color: var(--c-orange-ink, #b45309); white-space: nowrap; }
   .fi-link-btn { background: none; border: none; padding: 0; font: inherit; font-size: 0.8rem; color: var(--blue); cursor: pointer; text-decoration: underline; white-space: nowrap; }
   .fi-sel-stats { display: inline-flex; gap: 0.9rem; align-items: center; font-size: 0.8rem; color: var(--ink-muted); white-space: nowrap; }

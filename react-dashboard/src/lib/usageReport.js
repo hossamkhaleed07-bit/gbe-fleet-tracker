@@ -1,15 +1,38 @@
 import { computeAmountVat } from "./fuelInvoice";
 
 export const NO_VALUE = "—";
-export const SOURCE_COLORS = { Futurehub: "#7030a0", PetroApp: "#0070c0" };
+
+export const COLUMNS = [
+  { key: "source", label: "Data Source" },
+  { key: "branch", label: "Branch" },
+  { key: "use", label: "Use type" },
+  { key: "fuel", label: "Type of Fuel" },
+  { key: "count", label: "Count of Invoice", num: true },
+  { key: "amount", label: "Total Amount", num: true, money: true },
+  { key: "vat", label: "VAT 15%", num: true, money: true },
+  { key: "cost", label: "Total Cost", num: true, money: true },
+];
+// Data Source is always shown (it anchors the grouping); the rest can be hidden.
+export const HIDEABLE = COLUMNS.filter(c => c.key !== "source");
+export const visibleColumns = (byBranch, hidden) =>
+  COLUMNS.filter(c => (c.key !== "branch" || byBranch) && (c.key === "source" || !hidden.has(c.key)));
+
+// Colours shared by the screen, the Excel export and the printout.
+export const SOURCE_STYLES = {
+  Futurehub: { badge: "#ede0fa", ink: "#6b21a8", sub: "#ecdffa", branchSub: "#f6effc" },
+  PetroApp: { badge: "#dbeafe", ink: "#1d4ed8", sub: "#dbe9fc", branchSub: "#eef5fe" },
+};
+export const DEFAULT_SOURCE_STYLE = { badge: "#e5e7eb", ink: "#374151", sub: "#e5e7eb", branchSub: "#f3f4f6" };
+export const sourceStyle = (s) => SOURCE_STYLES[s] || DEFAULT_SOURCE_STYLE;
+export const PALETTE = { navy: "#1e2a4a", grand: "#dce6f5", warn: "#fef3c7", warnInk: "#92400e" };
 
 const cmp = (a, b) => a.localeCompare(b, "en", { numeric: true });
 const blank = (v) => (v == null ? "" : String(v)).trim() || NO_VALUE;
 
 export const fmt = (n) => Number(n || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
-// ---- dates (all ISO yyyy-mm-dd strings; "today" is the browser's local day) ----
+// ---- dates (ISO yyyy-mm-dd strings; "today" is the browser's local day) ----
 export const localISO = (d = new Date()) =>
   `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 export const monthStart = (iso) => iso.slice(0, 7) + "-01";
@@ -21,9 +44,30 @@ export function addDays(iso, n) {
   const [y, m, d] = iso.split("-").map(Number);
   return new Date(Date.UTC(y, m - 1, d + n)).toISOString().slice(0, 10);
 }
+export function daysBetween(a, b) {
+  const t = (s) => { const [y, m, d] = s.split("-").map(Number); return Date.UTC(y, m - 1, d); };
+  return Math.round((t(b) - t(a)) / 86400000);
+}
 export function prevMonthRange(iso) {
   const last = addDays(monthStart(iso), -1);
   return { from: monthStart(last), to: last };
+}
+// The period right before [from, to] with the same length: a whole calendar
+// month compares with the previous calendar month, anything else with the
+// same number of days directly before it (one day vs. the day before).
+// A month that has not finished yet (the "This month" button) is compared with
+// the same number of days at the start of the previous month, not the whole of it.
+export function previousPeriod(from, to, today = localISO()) {
+  if (from === monthStart(from) && to === monthEnd(from)) {
+    const prev = prevMonthRange(from);
+    if (to > today && today >= from) {
+      const end = addDays(prev.from, daysBetween(from, today));
+      return { from: prev.from, to: end < prev.to ? end : prev.to };
+    }
+    return prev;
+  }
+  const len = daysBetween(from, to) + 1;
+  return { from: addDays(from, -len), to: addDays(from, -1) };
 }
 const dmy = (iso) => { const [y, m, d] = iso.split("-"); return `${Number(d)}/${Number(m)}/${y}`; };
 const my = (iso) => { const [y, m] = iso.split("-"); return `${Number(m)}/${y}`; };
@@ -40,124 +84,124 @@ export function branchesLabel(selected) {
   return selected ? [...selected].sort(cmp).join(", ") || NO_VALUE : "All";
 }
 
+// ---- summary cards ----
+const inBranches = (r, selectedBranches) => !selectedBranches || selectedBranches.has(blank(r.branch));
+
+export function summarizeRows(rows, selectedBranches) {
+  const t = { count: 0, amount: 0, vat: 0, cost: 0 };
+  for (const r of rows) {
+    if (!inBranches(r, selectedBranches)) continue;
+    const cost = Number(r.cost) || 0;
+    const calc = computeAmountVat(cost);
+    t.count += 1;
+    t.cost += cost;
+    t.amount += r.amount != null && r.amount !== "" ? Number(r.amount) : (calc.amount ?? 0);
+    t.vat += r.vat != null && r.vat !== "" ? Number(r.vat) : (calc.vat ?? 0);
+  }
+  return t;
+}
+
+// % change of cur against prev; null when there is nothing to compare with
+export function pctChange(cur, prev, prevCount) {
+  if (!prevCount || !prev) return null;
+  return ((cur - prev) / prev) * 100;
+}
+
+// invoices missing a use type, a fuel type or a branch
+export function incompleteCount(rows, selectedBranches) {
+  let n = 0;
+  for (const r of rows) {
+    if (!inBranches(r, selectedBranches)) continue;
+    if (blank(r.use_type) === NO_VALUE || blank(r.fuel_type) === NO_VALUE || blank(r.branch) === NO_VALUE) n++;
+  }
+  return n;
+}
+
+export const MISSING_TIPS = { use: "Use type is missing", fuel: "Type of fuel is missing", branch: "Branch is missing" };
+
 // ---- aggregation ----
-// Returns the exact lines both the screen table and the Excel export draw:
-//   { type: "row", source, branch?, use, fuel, count, amount, vat, cost }
-//   { type: "sub", source, branch, count, amount, vat, cost }   (branch breakdown only)
+// Lines drawn identically by the screen table, the Excel export and the printout:
+//   { type: "row", n, source, branch?, use, fuel, count, amount, vat, cost, missing: ["use"|"fuel"|"branch"...] }
+//   { type: "branchTotal", source, branch, count, amount, vat, cost }   (branch breakdown only)
+//   { type: "sourceTotal", source, count, amount, vat, cost }
 //   { type: "grand", count, amount, vat, cost }
-export function buildReport(rows, { byBranch, selectedBranches }) {
+// `sort` ({ key, dir }) orders the groups of that level (sources, branches) or the
+// rows inside each innermost group; `search` keeps only rows containing the text.
+export function buildReport(rows, { byBranch, selectedBranches, search = "", sort = null }) {
   const groups = new Map();
   for (const r of rows) {
+    if (!inBranches(r, selectedBranches)) continue;
     const branch = blank(r.branch);
-    if (selectedBranches && !selectedBranches.has(branch)) continue;
     const source = blank(r.data_source), use = blank(r.use_type), fuel = blank(r.fuel_type);
     const key = (byBranch ? [source, branch, use, fuel] : [source, use, fuel]).join("|");
     let g = groups.get(key);
-    if (!g) groups.set(key, g = { type: "row", source, branch: byBranch ? branch : undefined, use, fuel, count: 0, amount: 0, vat: 0, cost: 0 });
+    if (!g) groups.set(key, g = { type: "row", source, branch: byBranch ? branch : undefined, use, fuel, count: 0, amount: 0, vat: 0, cost: 0, missing: [] });
     const cost = Number(r.cost) || 0;
-    // stored values first; backed out of Cost (the invoices grid's formula) when missing
     const calc = computeAmountVat(cost);
     g.count += 1;
     g.cost += cost;
     g.amount += r.amount != null && r.amount !== "" ? Number(r.amount) : (calc.amount ?? 0);
     g.vat += r.vat != null && r.vat !== "" ? Number(r.vat) : (calc.vat ?? 0);
   }
-  const rowsSorted = [...groups.values()].sort((a, b) =>
-    cmp(a.source, b.source) || (byBranch ? cmp(a.branch, b.branch) : 0) || cmp(a.use, b.use) || cmp(a.fuel, b.fuel));
 
-  const add = (t, g) => { t.count += g.count; t.amount += g.amount; t.vat += g.vat; t.cost += g.cost; };
-  const grand = { type: "grand", count: 0, amount: 0, vat: 0, cost: 0 };
-  const lines = [];
-  let sub = null;
-  const flush = () => { if (sub) lines.push(sub); sub = null; };
-  for (const g of rowsSorted) {
-    if (byBranch && (!sub || sub.source !== g.source || sub.branch !== g.branch)) {
-      flush();
-      sub = { type: "sub", source: g.source, branch: g.branch, count: 0, amount: 0, vat: 0, cost: 0 };
-    }
-    lines.push(g);
-    if (sub) add(sub, g);
-    add(grand, g);
+  const q = search.trim().toLowerCase();
+  let list = [...groups.values()];
+  for (const g of list) {
+    if (g.use === NO_VALUE) g.missing.push("use");
+    if (g.fuel === NO_VALUE) g.missing.push("fuel");
+    if (byBranch && g.branch === NO_VALUE) g.missing.push("branch");
   }
-  flush();
+  if (q) list = list.filter(g => [g.source, g.branch, g.use, g.fuel].some(v => v && v.toLowerCase().includes(q)));
+
+  const dir = sort?.dir === "desc" ? -1 : 1;
+  const cmpBy = (key) => (a, b) => {
+    const x = a[key], y = b[key];
+    const r = typeof x === "number" && typeof y === "number" ? x - y : cmp(String(x), String(y));
+    return r * dir;
+  };
+  const natural = (key) => (a, b) => cmp(String(a[key]), String(b[key]));
+  const order = (key) => (sort?.key === key ? cmpBy(key) : natural(key));
+  const rowCmp = (a, b) => {
+    if (sort && !["source", "branch"].includes(sort.key)) return cmpBy(sort.key)(a, b);
+    return natural("use")(a, b) || natural("fuel")(a, b);
+  };
+
+  const bySource = new Map();
+  for (const g of list) {
+    if (!bySource.has(g.source)) bySource.set(g.source, []);
+    bySource.get(g.source).push(g);
+  }
+  const zero = () => ({ count: 0, amount: 0, vat: 0, cost: 0 });
+  const add = (t, g) => { t.count += g.count; t.amount += g.amount; t.vat += g.vat; t.cost += g.cost; };
+  const grand = { type: "grand", ...zero() };
+  const lines = [];
+  let n = 0;
+  const sources = [...bySource.keys()].sort((a, b) => order("source")({ source: a }, { source: b }));
+  for (const source of sources) {
+    const srcRows = bySource.get(source);
+    const srcTotal = { type: "sourceTotal", source, ...zero() };
+    if (byBranch) {
+      const byBr = new Map();
+      for (const g of srcRows) {
+        if (!byBr.has(g.branch)) byBr.set(g.branch, []);
+        byBr.get(g.branch).push(g);
+      }
+      const branches = [...byBr.keys()].sort((a, b) => order("branch")({ branch: a }, { branch: b }));
+      for (const branch of branches) {
+        const total = { type: "branchTotal", source, branch, ...zero() };
+        for (const g of byBr.get(branch).sort(rowCmp)) { g.n = ++n; lines.push(g); add(total, g); }
+        lines.push(total);
+        add(srcTotal, total);
+      }
+    } else {
+      for (const g of srcRows.sort(rowCmp)) { g.n = ++n; lines.push(g); add(srcTotal, g); }
+    }
+    lines.push(srcTotal);
+    add(grand, srcTotal);
+  }
   lines.push(grand);
   return lines;
 }
 
-// ---- Excel export: same layout as the on-screen table ----
-const BORDER = { style: "thin", color: { argb: "FF333333" } };
-const ALL_BORDERS = { top: BORDER, left: BORDER, bottom: BORDER, right: BORDER };
-const HEADER_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FF9DC3E6" } };
-const SUB_FILL = { type: "pattern", pattern: "solid", fgColor: { argb: "FFDDEBF7" } };
-const argb = (hex) => "FF" + hex.slice(1).toUpperCase();
-
-export async function exportUsageReportXlsx({ lines, byBranch, from, to, selectedBranches }) {
-  const ExcelJS = (await import("exceljs")).default;
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Usage Report");
-  const heads = byBranch
-    ? ["Data Source", "Branch", "Use type", "Type of fuel", "Count of Invoice", "Total Amount", "VAT 15%", "Total Cost"]
-    : ["Data Source", "Use type", "Type of fuel", "Count of Invoice", "Total Amount", "VAT 15%", "Total Cost"];
-  const nCols = heads.length;
-  const labelCols = nCols - 4;           // text columns before the count
-  const period = periodLabel(from, to);
-  ws.columns = heads.map((h, i) => ({ width: i < labelCols ? 18 : 17 }));
-
-  const center = { vertical: "middle", horizontal: "center" };
-  const styleRow = (row, fill, bold = true) => {
-    for (let c = 1; c <= nCols; c++) {
-      const cell = row.getCell(c);
-      cell.border = ALL_BORDERS; cell.alignment = center;
-      if (fill) cell.fill = fill;
-      if (bold) cell.font = { bold: true };
-    }
-  };
-
-  // title + period
-  const t = ws.addRow([]);
-  t.getCell(1).value = "Fuels usage report";
-  t.getCell(nCols - 1).value = period;
-  ws.mergeCells(t.number, 1, t.number, nCols - 2);
-  ws.mergeCells(t.number, nCols - 1, t.number, nCols);
-  styleRow(t, HEADER_FILL); t.height = 22;
-  // selected branches
-  const b = ws.addRow(["Branches: " + branchesLabel(selectedBranches)]);
-  ws.mergeCells(b.number, 1, b.number, nCols);
-  styleRow(b, HEADER_FILL, false);
-  // column heads
-  styleRow(ws.addRow(heads), HEADER_FILL);
-
-  for (const l of lines) {
-    let row;
-    if (l.type === "row") {
-      row = ws.addRow(byBranch
-        ? [l.source, l.branch, l.use, l.fuel, l.count, round2(l.amount), round2(l.vat), round2(l.cost)]
-        : [l.source, l.use, l.fuel, l.count, round2(l.amount), round2(l.vat), round2(l.cost)]);
-      styleRow(row, null, false);
-      const color = SOURCE_COLORS[l.source];
-      if (color) {
-        const c = row.getCell(1);
-        c.fill = { type: "pattern", pattern: "solid", fgColor: { argb: argb(color) } };
-        c.font = { color: { argb: "FFFFFFFF" } };
-      }
-    } else {
-      const label = l.type === "grand" ? "Grand Total" : `${l.branch} total`;
-      row = ws.addRow([label, ...Array(labelCols - 1).fill(null), l.count, round2(l.amount), round2(l.vat), round2(l.cost)]);
-      ws.mergeCells(row.number, 1, row.number, labelCols);
-      styleRow(row, l.type === "grand" ? HEADER_FILL : SUB_FILL);
-    }
-    row.getCell(labelCols + 1).numFmt = "0";
-    for (let c = labelCols + 2; c <= nCols; c++) row.getCell(c).numFmt = "0.00";
-  }
-
-  const buf = await wb.xlsx.writeBuffer();
-  const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `Fuel_Usage_Report_${(period || "report").replace(/[\/\s–]+/g, "-")}.xlsx`;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
+// the label of a subtotal line: "Futurehub Total" / "Riyadh Total"
+export const totalLabel = (l) => l.type === "grand" ? "Grand Total" : l.type === "sourceTotal" ? `${l.source} Total` : `${l.branch === NO_VALUE ? "No branch" : l.branch} Total`;

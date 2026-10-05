@@ -13,10 +13,11 @@ function isoToDate(s) {
   return m ? new Date(Date.UTC(+m[1], +m[2] - 1, +m[3])) : null;
 }
 
-export async function exportFuelInvoiceXlsx(rows, dateStamp) {
-  const ExcelJS = (await import("exceljs")).default;
-  const wb = new ExcelJS.Workbook();
-  const ws = wb.addWorksheet("Entries", { views: [{ state: "frozen", ySplit: 1 }] });
+// Adds the invoices sheet to a workbook: the columns, order, header style and cell formats
+// of the Invoices page export. Used by that export and by the Usage Report's "Invoices"
+// sheet, so both always look the same. Returns how many rows it wrote.
+export function addInvoicesSheet(wb, rows, sheetName = "Entries") {
+  const ws = wb.addWorksheet(sheetName, { views: [{ state: "frozen", ySplit: 1 }] });
 
   ws.columns = EXPORT_FIELDS.map(f => ({ header: f.label, key: f.key, width: WIDTHS[f.key] || 16 }));
   ws.getRow(1).font = { bold: true, color: { argb: "FFFFFFFF" } };
@@ -48,6 +49,13 @@ export async function exportFuelInvoiceXlsx(rows, dateStamp) {
     count++;
   }
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: EXPORT_FIELDS.length } };
+  return count;
+}
+
+export async function exportFuelInvoiceXlsx(rows, dateStamp) {
+  const ExcelJS = (await import("exceljs")).default;
+  const wb = new ExcelJS.Workbook();
+  const count = addInvoicesSheet(wb, rows, "Entries");
 
   const buf = await wb.xlsx.writeBuffer();
   const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
