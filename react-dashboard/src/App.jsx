@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
-import { HashRouter, Routes, Route, Navigate } from "react-router-dom";
+import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { isViewerPath } from "./lib/viewerAccess";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { DataProvider } from "./contexts/DataContext";
@@ -36,14 +37,19 @@ const FuelUsageReport = lazy(() => import("./pages/FuelUsageReport"));
 // Visual prototype — standalone full-screen page (no sidebar), mock data only.
 const FormResponseDemo = lazy(() => import("./pages/FormResponseDemo"));
 
-function RequireAuth({ children }) {
-  const { session, loading } = useAuth();
+function RequireAuth({ children, blockViewer = false }) {
+  const { session, loading, isViewer } = useAuth();
   if (loading) return null;
   if (!session) return <Navigate to="/login" replace />;
+  if (blockViewer && isViewer) return <Navigate to="/overview" replace />;
   return children;
 }
 
 function DashboardShell() {
+  const { isViewer } = useAuth();
+  const { pathname } = useLocation();
+  // A viewer only has a few pages: any other address goes to Overview.
+  if (isViewer && !isViewerPath(pathname)) return <Navigate to="/overview" replace />;
   return (
     <DataProvider>
       <UndoProvider>
@@ -51,7 +57,8 @@ function DashboardShell() {
           <DetailModalProvider>
             <Layout />
             <DetailModal />
-            <NotificationCenter />
+            {/* the bell shows fuel requests and admin notices: not for a read-only viewer */}
+            {!isViewer && <NotificationCenter />}
           </DetailModalProvider>
         </ToastProvider>
       </UndoProvider>
@@ -67,7 +74,7 @@ export default function App() {
           <Suspense fallback={null}>
             <Routes>
               <Route path="/login" element={<Login />} />
-              <Route path="/form-response-demo" element={<RequireAuth><FormResponseDemo /></RequireAuth>} />
+              <Route path="/form-response-demo" element={<RequireAuth blockViewer><FormResponseDemo /></RequireAuth>} />
               <Route element={<RequireAuth><DashboardShell /></RequireAuth>}>
                 <Route path="/overview" element={<Overview />} />
                 <Route path="/records" element={<Records />} />

@@ -5,6 +5,8 @@ import {
   Clock, CircleCheck, CircleX, ListChecks, Calculator, ClipboardList,
 } from "lucide-react";
 import { useDashboard } from "../contexts/DataContext";
+import { useAuth } from "../contexts/AuthContext";
+import { isViewerPath } from "../lib/viewerAccess";
 import { useDetailModal } from "../contexts/DetailModalContext";
 import { useLang } from "../contexts/LanguageContext";
 import { StatusBadge } from "../components/DetailModal";
@@ -22,7 +24,13 @@ export default function Overview() {
   } = useDashboard();
   const { openDetail } = useDetailModal();
   const { t } = useLang();
-  const navigate = useNavigate();
+  const { isViewer } = useAuth();
+  const routerNavigate = useNavigate();
+  // A viewer only has a few pages: cards that lead anywhere else do nothing.
+  const navigate = (to) => {
+    if (isViewer && !isViewerPath(typeof to === "string" ? to : to?.pathname)) return;
+    routerNavigate(to);
+  };
   const [searchParams] = useSearchParams();
   const today = localToday();
 

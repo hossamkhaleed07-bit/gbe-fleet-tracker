@@ -5,13 +5,13 @@ import { cacheClearAll } from "../lib/fuelInvoiceCache";
 const AuthContext = createContext(null);
 
 // Roles live in app_metadata (role: "admin" | "project_supervisor" |
-// "fleet_manager", project: <project name> | null). app_metadata can only be
+// "fleet_manager" | "viewer", project: <project name> | null). app_metadata can only be
 // written server-side (SQL editor / service role) — unlike user_metadata, which
 // the signed-in user can edit themselves, so it must never be used for access.
 // Nothing here falls back to user_metadata. No session, or a session without a
 // recognised role, gets no privileges at all.
 const NO_ACCESS = {
-  isAdmin: false, isFleetManager: false, isProjectSupervisor: false, currentUserProject: null,
+  isAdmin: false, isFleetManager: false, isProjectSupervisor: false, isViewer: false, currentUserProject: null,
   canEditShiftEntries: false, canEditAttendance: false, canSetActiveStatus: false,
 };
 
@@ -22,8 +22,11 @@ function scopeFromSession(sess) {
   const isAdmin = role === "admin";
   const isFleetManager = role === "fleet_manager";
   const isProjectSupervisor = role === "project_supervisor";
-  if (!isAdmin && !isFleetManager && !isProjectSupervisor) return NO_ACCESS;
-  const currentUserProject = meta.project || null;
+  // viewer: read-only, all projects, a fixed list of pages (see lib/viewerAccess.js).
+  // Never has a project of its own, and can write nothing (migration 056).
+  const isViewer = role === "viewer";
+  if (!isAdmin && !isFleetManager && !isProjectSupervisor && !isViewer) return NO_ACCESS;
+  const currentUserProject = isViewer ? null : (meta.project || null);
   // Write access to shift entries / attendance / submission reasons: admins, and
   // project supervisors for their own project's drivers (migration 053). A fleet
   // manager is read-only there, whatever project value they carry.
@@ -32,7 +35,7 @@ function scopeFromSession(sess) {
   // admins and fleet managers only.
   const canSetActiveStatus = isAdmin || isFleetManager;
   return {
-    isAdmin, isFleetManager, isProjectSupervisor, currentUserProject,
+    isAdmin, isFleetManager, isProjectSupervisor, isViewer, currentUserProject,
     canEditShiftEntries: canWriteOps, canEditAttendance: canWriteOps, canSetActiveStatus,
   };
 }

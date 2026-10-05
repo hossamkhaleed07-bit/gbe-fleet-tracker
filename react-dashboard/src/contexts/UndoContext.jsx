@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { useLang } from "./LanguageContext";
+import { useAuth } from "./AuthContext";
 
 const UndoContext = createContext(null);
 
@@ -11,13 +12,16 @@ function isTypingTarget(el) {
 
 export function UndoProvider({ children }) {
   const { t } = useLang();
+  const { isViewer } = useAuth();
   const stackRef = useRef([]);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState(null);
 
+  // A read-only viewer has nothing to undo: nothing is ever pushed, Ctrl+Z does nothing.
   const pushUndo = useCallback((label, undo) => {
+    if (isViewer) return;
     stackRef.current.push({ label, undo });
-  }, []);
+  }, [isViewer]);
 
   const runUndo = useCallback(async () => {
     const action = stackRef.current.pop();
@@ -35,14 +39,14 @@ export function UndoProvider({ children }) {
 
   useEffect(() => {
     function handleKey(e) {
-      if (e.key.toLowerCase() !== "z" || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
+      if (isViewer || e.key.toLowerCase() !== "z" || !(e.ctrlKey || e.metaKey) || e.shiftKey) return;
       if (isTypingTarget(document.activeElement)) return;
       e.preventDefault();
       runUndo();
     }
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
-  }, [runUndo]);
+  }, [runUndo, isViewer]);
 
   useEffect(() => {
     if (!toast) return;

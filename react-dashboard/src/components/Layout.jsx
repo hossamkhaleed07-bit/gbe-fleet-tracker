@@ -12,7 +12,7 @@ import { useFuelInsights } from "../hooks/useFuelInsights";
 import BranchSwitcher from "./BranchSwitcher";
 
 export default function Layout() {
-  const { session, isAdmin, isFleetManager, currentUserProject, logout } = useAuth();
+  const { session, isAdmin, isFleetManager, isViewer, currentUserProject, logout } = useAuth();
   const { viewingProject, loading, lastUpdated } = useDashboard();
   const { t, lang, toggleLang } = useLang();
   const navigate = useNavigate();
@@ -136,7 +136,8 @@ export default function Layout() {
   const email = session?.user?.email || "";
   const initials = (email.split("@")[0] || "GB").replace(/[^a-zA-Z]/g, "").slice(0, 2).toUpperCase() || "GB";
 
-  const subLabel = isFleetManager ? t("layout.subFleetManager")
+  const subLabel = isViewer ? t("layout.subViewer")
+    : isFleetManager ? t("layout.subFleetManager")
     : isAdmin ? t("layout.subAdmin")
     : t("layout.subProject", { project: currentUserProject });
 
@@ -160,17 +161,21 @@ export default function Layout() {
         </div>
         {isAdmin && <BranchSwitcher />}
         <nav>
-          {NAV_ITEMS.map(section => (
+          {NAV_ITEMS.map(section => {
+            const visibleLinks = section.links.filter(isVisible);
+            if (!visibleLinks.length) return null; // e.g. "Management" for a viewer
+            return (
             <div key={section.section}>
               <div className="side-section-label">{section.section}</div>
-              {section.links.filter(isVisible).map(link => (
+              {visibleLinks.map(link => (
                 <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link" + (isActive ? " active" : "")}>
                   <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                   {!!link.badge && <span className="side-badge">{link.badge}</span>}
                 </NavLink>
               ))}
             </div>
-          ))}
+            );
+          })}
           {canSeeProjectPerformance && (
             <div>
               <button type="button" className="side-link side-group-toggle" onClick={() => setPpOpen(o => !o)}>
