@@ -11,7 +11,7 @@ import HeroPortal from "../components/HeroPortal";
 
 export default function ProjectPerformance() {
   const { allRows, allCompareGroups, allDrivers, from, to } = useDashboard();
-  const { currentUserProject } = useAuth();
+  const { currentUserProject, isViewer } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
@@ -33,6 +33,7 @@ export default function ProjectPerformance() {
   }
 
   function goToDrivers(project) {
+    if (isViewer) return; // the Drivers page is not one of a viewer's pages
     const next = new URLSearchParams(searchParams);
     next.set("project", project);
     // "Total Drivers" counts only active drivers, so land on the same subset.

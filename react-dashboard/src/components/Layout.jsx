@@ -38,7 +38,7 @@ export default function Layout() {
   const [ppOpen, setPpOpen] = useState(isOnProjectPerformancePage);
   // Project managers need this too (their own project's RCA follow-up), not
   // just admins — mirrors canSeeFuel's pattern, no new permission concept.
-  const canSeeProjectPerformance = isAdmin || isFleetManager || !!currentUserProject;
+  const canSeeProjectPerformance = isAdmin || isFleetManager || isViewer || !!currentUserProject;
 
   const FUEL_INVOICE_LINKS = [
     { to: "/fuel-invoice/invoices", icon: <Receipt size={17} />, label: "Invoices", key: "fuel-invoice-invoices" },
