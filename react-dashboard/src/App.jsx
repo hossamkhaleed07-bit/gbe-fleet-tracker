@@ -34,6 +34,7 @@ const FuelMissingForm = lazy(() => import("./pages/FuelMissingForm"));
 const AutomaticFuel = lazy(() => import("./pages/AutomaticFuel"));
 const FuelInvoices = lazy(() => import("./pages/FuelInvoices"));
 const FuelUsageReport = lazy(() => import("./pages/FuelUsageReport"));
+const OilChanges = lazy(() => import("./pages/OilChanges"));
 // Visual prototype — standalone full-screen page (no sidebar), mock data only.
 const FormResponseDemo = lazy(() => import("./pages/FormResponseDemo"));
 
@@ -88,6 +89,7 @@ export default function App() {
                 <Route path="/project-performance" element={<ProjectPerformance />} />
                 <Route path="/project-performance/rca" element={<ProjectPerformanceRCAPage />} />
                 <Route path="/fleet" element={<Fleet />} />
+                <Route path="/fleet/oil-changes" element={<OilChanges />} />
                 <Route path="/drivers" element={<Drivers />} />
                 <Route path="/fuel-approver" element={<FuelApprover />} />
                 <Route path="/fuel-approval" element={<FuelApproval />} />

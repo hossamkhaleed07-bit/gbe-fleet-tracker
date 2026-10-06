@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, FileText, FolderOpen, CalendarDays, GitCompareArrows, MapPin, TrendingUp, Gauge,
   Truck, IdCard, Fuel, ThumbsUp, TriangleAlert, RefreshCw, Globe, LogOut, ChevronDown, Menu, ClipboardList,
-  Receipt, BarChart3,
+  Receipt, BarChart3, Droplets,
 } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
@@ -102,13 +102,14 @@ export default function Layout() {
     { section: t("layout.sectionManagement"), links: [
       { to: "/fleet", icon: <Truck size={17} />, label: t("layout.navFleet"), key: "fleet" },
       { to: "/drivers", icon: <IdCard size={17} />, label: t("layout.navDrivers"), key: "drivers" },
+      { to: "/fleet/oil-changes", icon: <Droplets size={17} />, label: "Oil Changes", key: "oil-changes" },
     ]},
   ];
 
   // Role-based visibility for nav links.
   function isVisible(link) {
     if (link.key === "overview" && isFleetManager) return false;
-    if ((link.key === "fleet" || link.key === "drivers") && !canManageFleet) return false;
+    if ((link.key === "fleet" || link.key === "drivers" || link.key === "oil-changes") && !canManageFleet) return false;
     return true;
   }
 

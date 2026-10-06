@@ -5,6 +5,7 @@ import { sb } from "../lib/supabase";
 import { useLang } from "../contexts/LanguageContext";
 import { formatLocalDateTime } from "../lib/calc";
 import { useAuth } from "../contexts/AuthContext";
+import { dmy, fmtKm } from "../lib/oilChanges";
 
 const STORAGE_KEY = "gbe-notifications-v1";
 const MAX_STORED = 50;
@@ -47,7 +48,8 @@ function saveStored(list) {
 
 export default function NotificationCenter() {
   const { t } = useLang();
-  const { isAdmin } = useAuth();
+  const { isAdmin, isFleetManager } = useAuth();
+  const canOil = isAdmin || isFleetManager;
   const navigate = useNavigate();
   const location = useLocation();
   const [notifications, setNotifications] = useState(loadStored);
@@ -55,6 +57,8 @@ export default function NotificationCenter() {
   // reactivated a driver or vehicle). Only admins can read them; marking one read
   // goes through mark_admin_notifications_read.
   const [dbNotes, setDbNotes] = useState([]);
+  // Oil-change alerts (daily job, migration 058): admins and fleet managers.
+  const [oilNotes, setOilNotes] = useState([]);
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState(null);
   const [headerEl, setHeaderEl] = useState(null);
@@ -129,6 +133,55 @@ export default function NotificationCenter() {
     };
   }
 
+  function oilNoteToItem(r) {
+    const left = r.remaining_km == null ? null : Number(r.remaining_km);
+    const when = r.expected_date ? ` · expected ${dmy(r.expected_date)}` : "";
+    const head = r.kind === "overdue" ? "Oil change overdue"
+      : r.kind === "unanswered" ? "Driver notified, no oil change recorded"
+      : "Oil change soon";
+    const detail = r.kind === "overdue" && left != null ? `${fmtKm(Math.abs(left))} km over`
+      : left != null ? `${fmtKm(left)} km left${when}` : "";
+    return {
+      id: `oil-${r.id}`,
+      oilId: r.id,
+      type: "oil",
+      read: !!r.is_read,
+      time: r.created_at,
+      title: head,
+      subtitle: `${r.vehicle_plate}${detail ? " — " + detail : ""}`,
+      path: `/fleet/oil-changes?plate=${encodeURIComponent(r.vehicle_plate)}`,
+    };
+  }
+
+  async function fetchOilNotes() {
+    const { data } = await sb.from("oil_notifications")
+      .select("id,kind,vehicle_plate,remaining_km,expected_date,created_at,is_read")
+      .eq("is_read", false)
+      .order("created_at", { ascending: false })
+      .limit(MAX_STORED);
+    if (data) setOilNotes(data);
+  }
+
+  useEffect(() => {
+    if (!canOil) { setOilNotes([]); return undefined; }
+    fetchOilNotes();
+    const channel = sb
+      .channel("notifications_oil")
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "oil_notifications" }, payload => {
+        const r = payload.new;
+        setOilNotes(list => (list.some(x => x.id === r.id) ? list : [r, ...list].slice(0, MAX_STORED)));
+        setToast(oilNoteToItem(r));
+        playNotificationSound();
+      })
+      .on("postgres_changes", { event: "UPDATE", schema: "public", table: "oil_notifications" }, payload => {
+        const r = payload.new;
+        setOilNotes(list => (r.is_read ? list.filter(x => x.id !== r.id) : list.map(x => (x.id === r.id ? { ...x, ...r } : x))));
+      })
+      .subscribe();
+    return () => { sb.removeChannel(channel); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canOil]);
+
   async function fetchDbNotes() {
     const { data } = await sb.from("admin_notifications")
       .select("id,kind,target_type,target_key,target_label,reason,acted_by_email,created_at,is_read")
@@ -174,7 +227,7 @@ export default function NotificationCenter() {
   }, [open]);
 
   // Database-backed notes (admins) first, then the local live-event ones, newest first.
-  const items = [...dbNotes.map(dbNoteToItem), ...notifications]
+  const items = [...dbNotes.map(dbNoteToItem), ...oilNotes.map(oilNoteToItem), ...notifications]
     .sort((a, b) => new Date(b.time) - new Date(a.time))
     .slice(0, MAX_STORED);
   const unreadCount = items.filter(n => !n.read).length;
@@ -185,13 +238,21 @@ export default function NotificationCenter() {
     if (error) fetchDbNotes(); // could not save: show what is really still unread
   }
 
+  async function markOilRead(ids) {
+    setOilNotes(list => (ids ? list.filter(x => !ids.includes(x.id)) : []));
+    const { error } = await sb.rpc("mark_oil_notifications_read", { p_ids: ids });
+    if (error) fetchOilNotes();
+  }
+
   function markAllRead() {
     setNotifications(list => list.map(n => ({ ...n, read: true })));
     if (isAdmin && dbNotes.length) markDbRead(null);
+    if (canOil && oilNotes.length) markOilRead(null);
   }
 
   function handleItemClick(n) {
     if (n.dbId) markDbRead([n.dbId]);
+    else if (n.oilId) markOilRead([n.oilId]);
     else setNotifications(list => list.map(x => (x.id === n.id ? { ...x, read: true } : x)));
     setOpen(false);
     navigate(n.path);
@@ -214,7 +275,7 @@ export default function NotificationCenter() {
               <div className="notif-empty">{t("notifications.empty")}</div>
             ) : items.map(n => (
               <button key={n.id} className={"notif-item" + (n.read ? "" : " unread")} onClick={() => handleItemClick(n)}>
-                <span className="notif-item-icon">{n.type === "fuel" ? "⛽" : n.type === "active" ? "🔄" : "📝"}</span>
+                <span className="notif-item-icon">{n.type === "fuel" ? "⛽" : n.type === "active" ? "🔄" : n.type === "oil" ? "🛢️" : "📝"}</span>
                 <span className="notif-item-body">
                   <span className="notif-item-title">{n.title}</span>
                   <span className="notif-item-subtitle">{n.subtitle}</span>
@@ -233,7 +294,7 @@ export default function NotificationCenter() {
       {headerEl && createPortal(bell, headerEl)}
       {toast && createPortal(
         <div className="reinforcement-toast">
-          <span className="reinforcement-toast-icon">{toast.type === "fuel" ? "⛽" : toast.type === "active" ? "🔄" : "📝"}</span>
+          <span className="reinforcement-toast-icon">{toast.type === "fuel" ? "⛽" : toast.type === "active" ? "🔄" : toast.type === "oil" ? "🛢️" : "📝"}</span>
           <span>{toast.title}: {toast.subtitle}</span>
           <button className="btn btn-primary" onClick={() => { navigate(toast.path); setToast(null); }}>{t("fuel.openRequest")}</button>
           <button className="btn" onClick={() => setToast(null)}>{t("common.close")}</button>
