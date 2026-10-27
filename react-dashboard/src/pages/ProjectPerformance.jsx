@@ -10,7 +10,7 @@ import { buildMissingRows } from "../lib/calc";
 import HeroPortal from "../components/HeroPortal";
 
 export default function ProjectPerformance() {
-  const { allRows, allCompareGroups, allDrivers, from, to } = useDashboard();
+  const { allRows, allCompareGroups, allDrivers, from, to, loading, error } = useDashboard();
   const { currentUserProject, isViewer } = useAuth();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -149,6 +149,11 @@ export default function ProjectPerformance() {
           : t("projectPerformance.subNoRange")}
       </HeroPortal>
 
+      {error && !loading && (
+        <div role="alert" style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: 10, background: "#fde8e8", color: "#9b1c1c", fontWeight: 600 }}>
+          تعذّر تحديث البيانات: {error}
+        </div>
+      )}
       <DataTable columns={columns} data={rows} emptyMessage={t("common.loading")} />
     </>
   );

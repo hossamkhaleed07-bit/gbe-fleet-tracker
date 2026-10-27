@@ -141,6 +141,20 @@ export function useDashboardData() {
       .select("identity_number,shift_date,reason,notes,updated_at")
       .order("shift_date", { ascending: false });
 
+    let results;
+    try {
+      results = await Promise.all([
+        fetchAllPages(shiftEntriesFactory), fetchAllPages(endHistoryFactory), vehicleRatesQuery, stationRatesQuery, driversQuery, vehiclesQuery,
+        fetchAllPages(reinforcementFactory), fetchAllPages(automaticFuelFactory), fetchAllPages(attendanceFactory), fetchAllPages(submissionReasonsFactory),
+      ]);
+    } catch (e) {
+      // A thrown request (network drop, aborted fetch) used to leave the page on
+      // "loading" forever with the old numbers still showing.
+      if (requestId !== loadGenerationRef.current) return;
+      setError(e?.message || "Request failed");
+      setLoading(false);
+      return;
+    }
     const [
       { data, error: err },
       { data: endHistoryData },
@@ -152,10 +166,7 @@ export function useDashboardData() {
       { data: automaticFuelData },
       { data: attendanceData },
       { data: submissionReasonsData },
-    ] = await Promise.all([
-      fetchAllPages(shiftEntriesFactory), fetchAllPages(endHistoryFactory), vehicleRatesQuery, stationRatesQuery, driversQuery, vehiclesQuery,
-      fetchAllPages(reinforcementFactory), fetchAllPages(automaticFuelFactory), fetchAllPages(attendanceFactory), fetchAllPages(submissionReasonsFactory),
-    ]);
+    ] = results;
 
     // A newer loadData call has since started (see loadGenerationRef above) —
     // this response is stale, drop it silently rather than let it overwrite
