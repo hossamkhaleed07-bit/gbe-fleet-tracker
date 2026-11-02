@@ -36,6 +36,7 @@ const AutomaticFuel = lazy(() => import("./pages/AutomaticFuel"));
 const FuelInvoices = lazy(() => import("./pages/FuelInvoices"));
 const FuelUsageReport = lazy(() => import("./pages/FuelUsageReport"));
 const OilChanges = lazy(() => import("./pages/OilChanges"));
+const WalletOverview = lazy(() => import("./pages/WalletOverview"));
 // Visual prototype — standalone full-screen page (no sidebar), mock data only.
 const FormResponseDemo = lazy(() => import("./pages/FormResponseDemo"));
 
@@ -99,6 +100,7 @@ export default function App() {
                 <Route path="/automatic-fuel" element={<AutomaticFuel />} />
                 <Route path="/fuel-invoice/invoices" element={<FuelInvoices />} />
                 <Route path="/fuel-invoice/usage-report" element={<FuelUsageReport />} />
+                <Route path="/fuel-invoice/wallet" element={<WalletOverview />} />
                 {/* old addresses keep working */}
                 <Route path="/fuel-invoice/entries" element={<Navigate to="/fuel-invoice/invoices" replace />} />
                 <Route path="/fuel-invoice/database" element={<Navigate to="/fuel-invoice/invoices" replace />} />

@@ -3,7 +3,7 @@
 // limits (migration 056); this only keeps the interface honest.
 const EXACT = [
   "/overview", "/form-response", "/records", "/attendance", "/compare", "/stations",
-  "/project-performance", "/project-performance/rca",
+  "/project-performance", "/project-performance/rca", "/fuel-invoice/wallet",
 ];
 
 export function isViewerPath(pathname) {

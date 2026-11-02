@@ -1,3 +1,5 @@
+import { WALLET_I18N } from "./i18nWallet";
+
 export const translations = {
   ar: {
     common: {
@@ -490,6 +492,7 @@ export const translations = {
       activeSubtitle: "{name} — بواسطة {by}",
       activeSubtitleReason: "{name} — بواسطة {by}: {reason}",
     },
+    wallet: WALLET_I18N.ar,
   },
   en: {
     common: {
@@ -982,6 +985,7 @@ export const translations = {
       activeSubtitle: "{name} — by {by}",
       activeSubtitleReason: "{name} — by {by}: {reason}",
     },
+    wallet: WALLET_I18N.en,
   },
 };
 

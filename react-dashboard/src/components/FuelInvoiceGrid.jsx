@@ -13,6 +13,9 @@ import { FUEL_INVOICE_FIELDS, SELECT_FIELD_KEYS, distinctValues, computeAmountVa
 import { makeSelectDsgColumn, makeReadOnlyDsgColumn, dsgDateColumn } from "./fuelInvoiceDsgColumns";
 import { STAT_KEYS, buildClipboardTable, writeClipboard, stripPastedHeadingRow } from "../lib/fuelInvoiceClipboard";
 import { computeAutofitWidth, loadStoredColumnWidths, saveStoredColumnWidths, MIN_WIDTH, MAX_WIDTH } from "../lib/fuelInvoiceColumnWidths";
+import { loadInvoiceWalletState, walletError } from "../lib/wallet";
+import { ReverseInvoiceDialog } from "./WalletDialogs";
+import "../wallet.css";
 
 // Right-click menu: the grid's own items plus "Copy with headers" right after "Copy".
 // The grid renders this component itself, so it reaches the page's copy function
@@ -407,6 +410,15 @@ export default function FuelInvoiceGrid() {
   // whichever row-number gutter cell was clicked.
   const [colorPicker, setColorPicker] = useState(null);
 
+  // Wallet state per saved invoice ({ [id]: { posted, reversal } }); null = wallet not
+  // installed (060 not run), so nothing wallet-related shows.
+  const [walletState, setWalletState] = useState(null);
+  const walletStateRef = useRef(null);
+  walletStateRef.current = walletState;
+  const refreshWallet = () => loadInvoiceWalletState().then(setWalletState);
+  useEffect(() => { refreshWallet(); }, [syncVersion]); // eslint-disable-line react-hooks/exhaustive-deps
+  const [reverseDialog, setReverseDialog] = useState(null); // { id, number, kind }
+
   // Google-Sheets-style selection summary (Sum/Avg/Min/Max/Count) for whatever
   // range of cells is currently selected, shown in the bottom bar.
   const [selectionStats, setSelectionStats] = useState(null);
@@ -492,7 +504,7 @@ export default function FuelInvoiceGrid() {
   // see useFuelInvoiceRecords), just with non-matching rows left out. Rows that
   // are not saved yet always stay visible, so a row you just added cannot vanish
   // behind a filter before you have filled it in.
-  const displayRows = useMemo(() => {
+  const filteredRows = useMemo(() => {
     const s = search.trim().toLowerCase();
     const filtering = SELECT_FIELD_KEYS.some(k => fieldFilters[k]) || dateFrom || dateTo || s;
     if (!filtering) return allRows;
@@ -507,6 +519,12 @@ export default function FuelInvoiceGrid() {
       return true;
     });
   }, [allRows, fieldFilters, dateFrom, dateTo, search]);
+  // Each saved row carries its wallet state as __wallet (never saved; like __saving),
+  // so the grid redraws a row when its state changes.
+  const displayRows = useMemo(() => (!walletState ? filteredRows : filteredRows.map(r => {
+    const w = r.id ? walletState[r.id] : null;
+    return (w || r.__wallet) && r.__wallet !== w ? { ...r, __wallet: w || undefined } : r;
+  })), [filteredRows, walletState]);
   const displayRowsRef = useRef([]);
   displayRowsRef.current = displayRows;
 
@@ -713,11 +731,17 @@ export default function FuelInvoiceGrid() {
           }
         }
       }
+      // wallet: ● charged to the wallet, ⊘ cancelled or rejected (060)
+      const w = rowData?.__wallet;
+      const tt = tRef.current;
+      const walletMark = !w ? null : w.reversal
+        ? { cls: "reversed", icon: "⊘", title: tt(`wallet.invoice.${w.reversal.kind}`) + ": " + (w.reversal.reason || "") }
+        : w.posted ? { cls: "posted", icon: "●", title: tt("wallet.invoice.posted") } : null;
       return (
         <button
           type="button"
           className={"gutter-row-btn" + (rowData?.row_color ? ` row-color-${rowData.row_color}` : "")}
-          title={flag ? flag.title : (canEditRef.current ? "Click to set row color" : undefined)}
+          title={flag ? flag.title : walletMark ? walletMark.title : (canEditRef.current ? "Click to set row color" : undefined)}
           onClick={e => {
             e.stopPropagation();
             if (!canEditRef.current || !rowData?.id) return; // color is stored with the saved row
@@ -726,6 +750,7 @@ export default function FuelInvoiceGrid() {
           }}
         >
           {flag && <span className="gutter-flag">{flag.icon}</span>}
+          {walletMark && <span className={"gutter-wallet " + walletMark.cls} aria-label={walletMark.title}>{walletMark.icon}</span>}
           {idx === -1 ? "" : idx + 1}
         </button>
       );
@@ -794,6 +819,8 @@ export default function FuelInvoiceGrid() {
   // Why a save was refused, in words the user can act on.
   function friendlySaveError(error) {
     const msg = error?.message || "";
+    const w = walletError(error);
+    if (w) return tRef.current(w.key, w.vars);
     if (error?.code === "23505" || /duplicate key|unique constraint/i.test(msg)) return tRef.current("fuelInvoice.duplicateExists");
     if (error?.code === "23514" || /check constraint/i.test(msg)) return tRef.current("fuelInvoice.requiredFields");
     return msg;
@@ -879,7 +906,13 @@ export default function FuelInvoiceGrid() {
         const removedIds = previousFiltered.slice(op.fromRowIndex, op.toRowIndex).map(r => r.id).filter(Boolean);
         if (removedIds.length) {
           const { error } = await deleteRecords(removedIds);
-          if (error) window.alert("Delete failed: " + error.message);
+          if (error) {
+            // nothing was deleted (e.g. an invoice charged to the wallet): put the rows back
+            const before = undoStackRef.current.pop();
+            if (before) setAllRows(before);
+            showToast(tRef.current("fuelInvoice.saveFailed", { msg: friendlySaveError(error) }), "error");
+            return;
+          }
         }
         continue;
       }
@@ -912,6 +945,8 @@ export default function FuelInvoiceGrid() {
       if (summary.incomplete) msg += (msg ? " — " : "") + tt("fuelInvoice.incompleteRows", { n: summary.incomplete });
       showToast(msg, summary.added ? "success" : "error");
     }
+    // new invoices may have been charged to the wallet by the database
+    if (walletStateRef.current) refreshWallet();
   }
 
   // Adds blank rows in the grid only. Nothing is saved until a row has its data
@@ -956,6 +991,16 @@ export default function FuelInvoiceGrid() {
       showToast(tRef.current("fuelInvoice.requiredSavedRows"), "error");
       return;
     }
+    // An invoice charged to the wallet is never deleted: it is cancelled or rejected.
+    let postedToDelete = 0;
+    for (const op of operations) {
+      if (op.type !== "DELETE") continue;
+      postedToDelete += current.slice(op.fromRowIndex, op.toRowIndex).filter(r => r.id && walletStateRef.current?.[r.id]).length;
+    }
+    if (postedToDelete > 0) {
+      showToast(tRef.current("wallet.invoice.deleteBlocked", { n: postedToDelete }), "error");
+      return;
+    }
     if (savedToDelete > 0) {
       const msg = savedToDelete === 1
         ? "Delete 1 saved record from the database?"
@@ -974,7 +1019,6 @@ export default function FuelInvoiceGrid() {
     const restored = undoStackRef.current.pop();
     if (!restored) return;
     const current = allRowsRef.current;
-    setAllRows(restored);
 
     const restoredByKey = new Map(restored.map(r => [rowKey(r), r]));
     const currentKeys = new Set(current.map(rowKey));
@@ -982,6 +1026,14 @@ export default function FuelInvoiceGrid() {
     const toDelete = [];
     const toSave = [];
     for (const key of currentKeys) if (!restoredByKey.has(key) && typeof key === "string" && !key.startsWith("temp-")) toDelete.push(key);
+    // Undoing a paste would delete invoices the wallet has already charged: refuse.
+    const posted = toDelete.filter(id => walletStateRef.current?.[id]).length;
+    if (posted) {
+      undoStackRef.current.push(restored);
+      showToast(tRef.current("wallet.invoice.deleteBlocked", { n: posted }), "error");
+      return;
+    }
+    setAllRows(restored);
     for (const [key, row] of restoredByKey) {
       if (!row.id) continue; // never-saved row — nothing in the DB to restore
       const wasRow = current.find(r => rowKey(r) === key);
@@ -990,11 +1042,11 @@ export default function FuelInvoiceGrid() {
 
     if (toDelete.length) {
       const { error } = await deleteRecords(toDelete);
-      if (error) window.alert("Undo failed: " + error.message);
+      if (error) window.alert("Undo failed: " + friendlySaveError(error));
     }
     if (toSave.length) {
       const { error } = await bulkUpsert(toSave);
-      if (error) window.alert("Undo failed: " + error.message);
+      if (error) window.alert("Undo failed: " + friendlySaveError(error));
     }
   }
 
@@ -1137,6 +1189,7 @@ export default function FuelInvoiceGrid() {
           if (rowData && !rowData.id) classes.push(rowData.__failed ? "fi-row-failed" : "fi-row-unsaved");
           if (rowIndex % 2 === 1) classes.push("dsg-row-alt");
           if (rowData?.row_color) classes.push(`row-color-${rowData.row_color}`);
+          if (rowData?.__wallet?.reversal) classes.push("fi-row-reversed");
           return classes.join(" ") || undefined;
         }}
         rowKey={({ rowData, rowIndex }) => rowKey(rowData) ?? `new-${rowIndex}`}
@@ -1214,7 +1267,36 @@ export default function FuelInvoiceGrid() {
               onClick={() => applyRowColor(colorPicker.key, opt.key)}
             />
           ))}
+          {(() => {
+            const row = allRowsRef.current.find(r => rowKey(r) === colorPicker.key);
+            const w = row?.id && walletState ? walletState[row.id] : null;
+            if (!w) return null;
+            return (
+              <div className="row-wallet-actions">
+                <span className="label">{t("wallet.invoice.walletTitle")}</span>
+                {w.reversal ? (
+                  <span className="state">{t("wallet.invoice.reversedInfo", {
+                    kind: t(`wallet.invoice.${w.reversal.kind}`), by: w.reversal.by || "—",
+                    at: new Date(w.reversal.at).toLocaleString(), reason: w.reversal.reason || "",
+                  })}</span>
+                ) : (
+                  <>
+                    <span className="state">{t("wallet.invoice.posted")}</span>
+                    <button type="button" className="danger" onClick={() => { setReverseDialog({ id: row.id, number: row.invoice_number, kind: "cancelled" }); setColorPicker(null); }}>{t("wallet.invoice.cancel")}</button>
+                    <button type="button" className="danger" onClick={() => { setReverseDialog({ id: row.id, number: row.invoice_number, kind: "rejected" }); setColorPicker(null); }}>{t("wallet.invoice.reject")}</button>
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
+      )}
+      {reverseDialog && (
+        <ReverseInvoiceDialog
+          invoice={reverseDialog}
+          onClose={() => setReverseDialog(null)}
+          onDone={() => { setReverseDialog(null); refreshWallet(); }}
+        />
       )}
     </div>
   );
