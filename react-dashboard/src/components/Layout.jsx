@@ -1,10 +1,13 @@
-import { useEffect, useRef, useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import TransitionNavLink from "./TransitionNavLink";
+import { notifyNavigated } from "../lib/viewTransition";
 import {
   LayoutDashboard, FileText, FolderOpen, CalendarDays, GitCompareArrows, MapPin, TrendingUp, Gauge,
   Truck, IdCard, Fuel, ThumbsUp, TriangleAlert, RefreshCw, Globe, LogOut, ChevronDown, Menu, ClipboardList,
-  Receipt, BarChart3, Droplets,
+  Receipt, BarChart3, Droplets, Sun, Moon,
 } from "lucide-react";
+import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
 import { useDashboard } from "../contexts/DataContext";
 import { useLang } from "../contexts/LanguageContext";
@@ -15,8 +18,11 @@ export default function Layout() {
   const { session, isAdmin, isFleetManager, isViewer, currentUserProject, logout } = useAuth();
   const { viewingProject, loading, lastUpdated } = useDashboard();
   const { t, lang, toggleLang } = useLang();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
+  // lets a pending view transition know the new page is on screen
+  useLayoutEffect(() => { notifyNavigated(); }, [location]);
   const canManageFleet = isAdmin || isFleetManager;
   const canSeeFuel = canManageFleet || !!currentUserProject;
   const { pendingCount, conflictCount } = useFuelInsights();
@@ -169,10 +175,10 @@ export default function Layout() {
             <div key={section.section}>
               <div className="side-section-label">{section.section}</div>
               {visibleLinks.map(link => (
-                <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link" + (isActive ? " active" : "")}>
+                <TransitionNavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link" + (isActive ? " active" : "")}>
                   <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                   {!!link.badge && <span className="side-badge">{link.badge}</span>}
-                </NavLink>
+                </TransitionNavLink>
               ))}
             </div>
             );
@@ -192,13 +198,13 @@ export default function Layout() {
                     // across later navigations; without this, a plain sidebar
                     // click here would keep re-showing whatever date a past
                     // badge click left behind instead of resetting to yesterday.
-                    <NavLink
+                    <TransitionNavLink
                       key={link.key}
                       to={link.key === "project-performance-rca" ? { pathname: link.to } : { pathname: link.to, search }}
                       className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}
                     >
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
-                    </NavLink>
+                    </TransitionNavLink>
                   ))}
                 </div>
               )}
@@ -214,9 +220,9 @@ export default function Layout() {
               {fiOpen && (
                 <div className="side-subgroup">
                   {FUEL_INVOICE_LINKS.map(link => (
-                    <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
+                    <TransitionNavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
-                    </NavLink>
+                    </TransitionNavLink>
                   ))}
                 </div>
               )}
@@ -233,10 +239,10 @@ export default function Layout() {
               {fuelOpen && (
                 <div className="side-subgroup">
                   {FUEL_LINKS.map(link => (
-                    <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
+                    <TransitionNavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                       {!!link.badge && <span className="side-badge">{link.badge}</span>}
-                    </NavLink>
+                    </TransitionNavLink>
                   ))}
                 </div>
               )}
@@ -269,9 +275,9 @@ export default function Layout() {
 
             <div className="fx-nav-links">
               {quickLinks.map(link => (
-                <NavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "fx-nav-link" + (isActive ? " active" : "")}>
+                <TransitionNavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "fx-nav-link" + (isActive ? " active" : "")}>
                   {link.label}
-                </NavLink>
+                </TransitionNavLink>
               ))}
             </div>
 
@@ -281,6 +287,12 @@ export default function Layout() {
               {/* NotificationCenter portals its bell + panel here */}
               <span id="fx-bell-slot" className="fx-bell-slot" />
               <div className="fx-user" ref={userMenuRef}>
+                <button
+                  type="button" className="fx-icon-btn" onClick={(e) => toggleTheme(e.currentTarget)}
+                  title={theme === "dark" ? "Light mode" : "Dark mode"} aria-label={theme === "dark" ? "Light mode" : "Dark mode"}
+                >
+                  {theme === "dark" ? <Sun size={17} /> : <Moon size={17} />}
+                </button>
                 <button
                   type="button" className="fx-icon-btn" onClick={toggleLang}
                   title={t("layout.languageToggle")} aria-label={t("layout.languageToggle")}

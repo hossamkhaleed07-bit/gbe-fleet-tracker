@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { HashRouter, Routes, Route, Navigate, useLocation } from "react-router-dom";
+import { ThemeProvider } from "./contexts/ThemeContext";
 import { isViewerPath } from "./lib/viewerAccess";
 import { LanguageProvider } from "./contexts/LanguageContext";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
@@ -69,6 +70,7 @@ function DashboardShell() {
 
 export default function App() {
   return (
+    <ThemeProvider>
     <LanguageProvider>
       <AuthProvider>
         <HashRouter>
@@ -107,5 +109,6 @@ export default function App() {
         </HashRouter>
       </AuthProvider>
     </LanguageProvider>
+    </ThemeProvider>
   );
 }

@@ -1,0 +1,44 @@
+/* Dark theme: token overrides only. Loaded after theme-redesign.css, so the
+   :root[data-theme="dark"] selector (higher specificity) wins over :root. */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --plane:     #0f1513;
+  --surface-1: #17201d;
+  --ink:       #e8efeb;
+  --ink-2:     #b3c0ba;
+  --ink-muted: #7f8c86;
+  --grid:      #212c28;
+  --border:    rgba(220,240,230,0.10);
+
+  --blue:      #5fb08f;
+  --fx-green:  #3d7a64;
+  --good:      #4ade80;
+  --critical:  #f87171;
+  --warning:   #f5b04c;
+  --warning-bg: #3a2c14;
+
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3), 0 6px 18px rgba(0,0,0,0.25);
+  --shadow-md: 0 18px 44px rgba(0,0,0,0.4);
+  --shadow-lg: 0 30px 70px rgba(0,0,0,0.55);
+
+  --sidebar-bg:   linear-gradient(180deg, #0a0e0d, #111917 60%, #16241f);
+
+  --c-blue-bg:   #1d2c3b; --c-blue-ink:   #8cbce3;
+  --c-green-bg:  #1a3326; --c-green-ink:  #6fd199;
+  --c-purple-bg: #2c2038; --c-purple-ink: #c79be0;
+  --c-orange-bg: #3a2c14; --c-orange-ink: #f0b866;
+  --c-cyan-bg:   #17332f; --c-cyan-ink:   #6fd1c6;
+  --c-pink-bg:   #3a1d29; --c-pink-ink:   #ee8db0;
+  --c-red-bg:    #3a1c1c; --c-red-ink:    #f87171;
+}
+
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(circle at 10% 10%, rgba(40,90,68,0.35), transparent 30%),
+    radial-gradient(circle at 90% 70%, rgba(30,60,48,0.45), transparent 30%),
+    var(--plane);
+}
+
+:root[data-theme="dark"] .fx-nav-link:hover,
+:root[data-theme="dark"] .fx-nav-link.active { color: #eef4f0; background: rgba(255,255,255,0.14); }

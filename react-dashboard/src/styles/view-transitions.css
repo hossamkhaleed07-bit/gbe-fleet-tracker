@@ -1,0 +1,30 @@
+/* Page-to-page crossfade (React Router viewTransition on NavLink/navigate). */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 300ms;
+}
+
+/* Active nav pill glides between tabs. Only ONE element may carry this name. */
+.fx-nav-link.active { view-transition-name: fx-active-tab; }
+::view-transition-group(fx-active-tab) {
+  animation-duration: 300ms;
+  animation-timing-function: ease-in-out;
+}
+
+/* Theme swap only: the circle clip-path is driven from JS, so the default
+   fade and blend must be off. The class is added/removed around the transition. */
+html.theme-transition::view-transition-old(root),
+html.theme-transition::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+html.theme-transition::view-transition-old(root) { z-index: 1; }
+html.theme-transition::view-transition-new(root) { z-index: 2; }
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-group(*),
+  ::view-transition-old(*),
+  ::view-transition-new(*) {
+    animation-duration: 0.01ms !important;
+  }
+}
