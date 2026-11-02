@@ -1,18 +1,39 @@
 /* Dark theme: token overrides only. Loaded after theme-redesign.css, so the
-   :root[data-theme="dark"] selector (higher specificity) wins over :root. */
+   :root[data-theme="dark"] selector (higher specificity) wins over :root.
+   The legacy names (--plane, --ink, --blue …) are aliases defined on :root,
+   so overriding the tokens below is enough for them to follow. */
 :root[data-theme="dark"] {
   color-scheme: dark;
 
-  --plane:     #0f1513;
-  --surface-1: #17201d;
-  --ink:       #e8efeb;
-  --ink-2:     #b3c0ba;
-  --ink-muted: #7f8c86;
-  --grid:      #212c28;
-  --border:    rgba(220,240,230,0.10);
+  --bg:           #0f1513;
+  --surface:      #17201d;
+  --surface-2:    #1e2925;
+  --surface-glass: linear-gradient(135deg, rgba(30,41,37,0.96), rgba(23,32,29,0.92));
+  --surface-glass-border: rgba(220,240,230,0.08);
+  --surface-hover: rgba(220,240,230,0.05);
+  --text:         #e8efeb;
+  --text-2:       #b3c0ba;
+  --text-muted:   #95a29c;
+  --border:       rgba(220,240,230,0.10);
+  --border-strong: rgba(220,240,230,0.18);
+  --accent:       #5fb08f;
+  --accent-strong: #3d7a64;
+  --on-accent:    #ffffff;
+  --btn-primary-bg: #3d7a64;
+  --input-bg:     #1e2925;
+  --focus-ring:   rgba(95,176,143,0.22);
+  --overlay:      rgba(0,0,0,0.6);
 
-  --blue:      #5fb08f;
-  --fx-green:  #3d7a64;
+  --chart-grid:   #26322e;
+  --chart-axis:   #3a4842;
+  --chart-text:   #a3b0aa;
+  --chart-tooltip-bg:     #1e2925;
+  --chart-tooltip-text:   #e8efeb;
+  --chart-tooltip-border: rgba(220,240,230,0.14);
+  --chart-1:      #6fd1c6;
+  --chart-2:      #4ade80;
+  --chart-3:      #e8efeb;
+
   --good:      #4ade80;
   --critical:  #f87171;
   --warning:   #f5b04c;
@@ -37,7 +58,7 @@
   background:
     radial-gradient(circle at 10% 10%, rgba(40,90,68,0.35), transparent 30%),
     radial-gradient(circle at 90% 70%, rgba(30,60,48,0.45), transparent 30%),
-    var(--plane);
+    var(--bg);
 }
 
 :root[data-theme="dark"] .fx-nav-link:hover,

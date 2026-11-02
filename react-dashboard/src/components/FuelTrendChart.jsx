@@ -10,9 +10,9 @@ const PAD_T = 16;
 const PAD_B = 28;
 
 const SERIES = [
-  { key: "automatic", color: "var(--c-cyan-ink, #1487ad)", labelKey: "compare.colAutomaticFuelCost" },
-  { key: "actual", color: "var(--good)", labelKey: "compare.colActualFuelCost" },
-  { key: "total", color: "var(--blue)", labelKey: "compare.colTotalFuelCost" },
+  { key: "automatic", color: "var(--chart-1)", labelKey: "compare.colAutomaticFuelCost" },
+  { key: "actual", color: "var(--chart-2)", labelKey: "compare.colActualFuelCost" },
+  { key: "total", color: "var(--chart-3)", labelKey: "compare.colTotalFuelCost" },
 ];
 
 function formatPeriodLabel(period, granularity, lang) {
@@ -84,6 +84,7 @@ export default function FuelTrendChart({ reinforcementRows, automaticFuelRows })
             {[0, 0.25, 0.5, 0.75, 1].map(f => (
               <line key={f} x1={PAD_L} x2={W - PAD_R} y1={PAD_T + innerH * (1 - f)} y2={PAD_T + innerH * (1 - f)} className="fuel-trend-grid" />
             ))}
+            <line x1={PAD_L} x2={W - PAD_R} y1={PAD_T + innerH} y2={PAD_T + innerH} className="fuel-trend-axis" />
             {[0, 0.5, 1].map(f => (
               <text key={f} x={PAD_L - 6} y={PAD_T + innerH * (1 - f) + 3} className="fuel-trend-axis-label" textAnchor="end">
                 {Math.round(maxVal * f)}
@@ -97,7 +98,7 @@ export default function FuelTrendChart({ reinforcementRows, automaticFuelRows })
               )
             ))}
             {SERIES.map(s => (
-              <path key={s.key} d={linePath(s.key)} fill="none" stroke={s.color} strokeWidth="2.5" />
+              <path key={s.key} d={linePath(s.key)} fill="none" style={{ stroke: s.color }} strokeWidth="2.5" />
             ))}
             {points.map((p, i) => (
               <g key={p.period}>
@@ -108,7 +109,7 @@ export default function FuelTrendChart({ reinforcementRows, automaticFuelRows })
                   onMouseLeave={() => setHover(h => (h === i ? null : h))}
                 />
                 {SERIES.map(s => (
-                  <circle key={s.key} cx={xAt(i)} cy={yAt(p[s.key])} r={hover === i ? 4 : 2.5} fill={s.color} />
+                  <circle key={s.key} cx={xAt(i)} cy={yAt(p[s.key])} r={hover === i ? 4 : 2.5} style={{ fill: s.color }} />
                 ))}
               </g>
             ))}

@@ -24,6 +24,8 @@ export const SOURCE_STYLES = {
 };
 export const DEFAULT_SOURCE_STYLE = { badge: "#e5e7eb", ink: "#374151", sub: "#e5e7eb", branchSub: "#f3f4f6" };
 export const sourceStyle = (s) => SOURCE_STYLES[s] || DEFAULT_SOURCE_STYLE;
+// On screen the same colors come from theme-aware CSS classes (usage-report.css).
+export const sourceClass = (s) => s === "Futurehub" ? "src-futurehub" : s === "PetroApp" ? "src-petroapp" : "src-other";
 export const PALETTE = { navy: "#1e2a4a", grand: "#dce6f5", warn: "#fef3c7", warnInk: "#92400e" };
 
 const cmp = (a, b) => a.localeCompare(b, "en", { numeric: true });
