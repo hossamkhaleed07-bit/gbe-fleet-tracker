@@ -7,7 +7,7 @@ import HeroPortal from "../components/HeroPortal";
 import { useAuth } from "../contexts/AuthContext";
 import { sb } from "../lib/supabase";
 import {
-  HIDEABLE, NO_VALUE, MISSING_TIPS, sourceStyle, fmt, localISO, monthStart, monthEnd, addDays, prevMonthRange, previousPeriod,
+  HIDEABLE, NO_VALUE, MISSING_TIPS, sourceClass, fmt, localISO, monthStart, monthEnd, addDays, prevMonthRange, previousPeriod,
   periodLabel, branchesLabel, buildReport, summarizeRows, pctChange, incompleteCount, visibleColumns, totalLabel,
 } from "../lib/usageReport";
 import { exportUsageReportXlsx, printUsageReport } from "../lib/usageReportExport";
@@ -354,8 +354,7 @@ export default function FuelUsageReport() {
                     {cols.map(c => {
                       if (c.num) return <td key={c.key} className="num">{c.money ? fmt(l[c.key]) : l[c.key]}</td>;
                       if (c.key === "source") {
-                        const s = sourceStyle(l.source);
-                        return <td key={c.key}><span className="urp-badge" style={{ background: s.badge, color: s.ink }}>{l.source}</span></td>;
+                        return <td key={c.key}><span className={"urp-badge " + sourceClass(l.source)}>{l.source}</span></td>;
                       }
                       if (l.missing.includes(c.key)) {
                         return <td key={c.key} className="miss" title={MISSING_TIPS[c.key]}><TriangleAlert size={14} /> {NO_VALUE}</td>;
@@ -364,8 +363,7 @@ export default function FuelUsageReport() {
                     })}
                   </tr>
                 ) : (
-                  <tr key={i} className={"urp-sub " + l.type}
-                    style={{ background: sourceStyle(l.source)[l.type === "sourceTotal" ? "sub" : "branchSub"], color: sourceStyle(l.source).ink }}>
+                  <tr key={i} className={"urp-sub " + l.type + " " + sourceClass(l.source)}>
                     <td colSpan={1 + textCols.length}>{totalLabel(l)}</td>
                     {numCols.map(c => <td key={c.key} className="num">{c.money ? fmt(l[c.key]) : l[c.key]}</td>)}
                   </tr>

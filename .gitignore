@@ -3,3 +3,5 @@
 *.rar
 *.log
 private-data/
+node_modules/
+.claude/launch.json
