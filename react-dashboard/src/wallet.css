@@ -1,0 +1,105 @@
+/* Wallet Overview. Theme tokens only (light and dark); scoped under .wlt. */
+.wlt { font-variant-numeric: tabular-nums; }
+.wlt .num-cell { text-align: end; white-space: nowrap; }
+.wlt .muted { color: var(--text-muted); }
+
+.wlt-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin-bottom: 1rem; }
+.wlt-toolbar .spacer { flex: 1; }
+.wlt-toolbar select, .wlt-field input, .wlt-field select, .wlt-field textarea, .wlt-inline input, .wlt-inline select {
+  font: inherit; font-size: 0.85rem; color: var(--text); background: var(--input-bg);
+  border: 1px solid var(--border-strong); border-radius: 10px; padding: 0.45rem 0.65rem;
+}
+.wlt-toolbar select:focus, .wlt-field :is(input, select, textarea):focus, .wlt-inline :is(input, select):focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.wlt-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.wlt-actions .btn { width: auto; padding: 0.45rem 0.8rem; font-size: 0.8rem; }
+
+.wlt-status { padding: 0.25rem 0.7rem; border-radius: 999px; font-size: 0.75rem; font-weight: 700; }
+.wlt-status.open { background: var(--c-green-bg); color: var(--c-green-ink); }
+.wlt-status.closed { background: var(--surface-2); color: var(--text-2); }
+.wlt-status.none { background: var(--surface-2); color: var(--text-muted); }
+
+.wlt-alerts { display: grid; gap: 0.5rem; margin-bottom: 1rem; }
+.wlt-alert { display: flex; gap: 0.55rem; align-items: flex-start; padding: 0.65rem 0.85rem; border-radius: 14px; font-size: 0.85rem; font-weight: 600; }
+.wlt-alert svg { flex: none; margin-top: 2px; }
+.wlt-alert.danger { background: var(--c-red-bg); color: var(--c-red-ink); }
+.wlt-alert.warning { background: var(--c-orange-bg); color: var(--c-orange-ink); }
+.wlt-alert.info { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+.wlt-alert.neutral { background: var(--surface-2); color: var(--text-2); }
+.wlt-alert button { font: inherit; color: inherit; background: none; border: 0; padding: 0; text-decoration: underline; cursor: pointer; }
+
+.wlt .kpi-dot-card .sub { margin-top: 0.35rem; font-size: 0.75rem; color: var(--text-muted); }
+.wlt .kpi-dot-card .num small { font-size: 0.55em; font-weight: 600; color: var(--text-muted); margin-inline-end: 0.25rem; }
+
+.wlt-recon-row td { vertical-align: top; }
+.wlt-recon-formula { display: block; font-size: 0.72rem; color: var(--text-muted); white-space: normal; max-width: 22rem; }
+.wlt-ok { color: var(--c-green-ink); font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem; }
+.wlt-bad { color: var(--c-red-ink); font-weight: 700; display: inline-flex; align-items: center; gap: 0.25rem; }
+.wlt-recon-row.broken td { background: color-mix(in srgb, var(--c-red-bg) 60%, transparent); }
+
+.wlt .badge.warn { background: var(--c-orange-bg); color: var(--c-orange-ink); }
+.wlt .badge.bad { background: var(--c-red-bg); color: var(--c-red-ink); }
+.wlt .badge.info { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+.wlt .badge.neutral { background: var(--surface-2); color: var(--text-2); }
+.wlt .badge + .badge { margin-inline-start: 0.25rem; }
+.wlt tr.flagged td:first-child { box-shadow: inset 3px 0 0 var(--c-orange-ink); }
+:root[dir="rtl"] .wlt tr.flagged td:first-child { box-shadow: inset -3px 0 0 var(--c-orange-ink); }
+.wlt .neg { color: var(--critical); font-weight: 700; }
+.wlt td.details { white-space: normal; min-width: 14rem; }
+.wlt td.reason { white-space: normal; min-width: 10rem; color: var(--text-2); }
+.wlt .arrow { color: var(--text-muted); padding-inline: 0.25rem; }
+.wlt-note { margin: 0.5rem 0 0; font-size: 0.78rem; color: var(--text-muted); }
+.wlt-empty { padding: 1.2rem; text-align: center; color: var(--text-muted); font-size: 0.85rem; }
+.wlt-section { margin-top: 1.2rem; }
+
+/* not installed / error */
+.wlt-blank { padding: 2rem 1.5rem; text-align: center; }
+.wlt-blank h3 { margin: 0 0 0.5rem; }
+.wlt-blank p { margin: 0 auto; max-width: 36rem; color: var(--text-2); }
+
+/* dialogs */
+.wlt-backdrop { position: fixed; inset: 0; z-index: 400; display: grid; place-items: center; padding: 1rem; background: var(--overlay); overflow-y: auto; }
+.wlt-modal {
+  width: 100%; max-width: 30rem; max-height: calc(100vh - 2rem); overflow: auto; background: var(--surface); color: var(--text);
+  border: 1px solid var(--border); border-radius: 18px; box-shadow: var(--shadow-lg);
+}
+.wlt-modal.wide { max-width: 52rem; }
+.wlt-modal-head { position: sticky; top: 0; z-index: 1; display: flex; justify-content: space-between; align-items: center; gap: 0.5rem;
+  padding: 0.9rem 1.1rem; background: var(--surface); border-bottom: 1px solid var(--border); }
+.wlt-modal-head h2 { margin: 0; font-size: 1rem; }
+.wlt-modal-head .muted { font-size: 0.8rem; font-weight: 500; }
+.wlt-x { display: grid; place-items: center; width: 2rem; height: 2rem; border: 0; border-radius: 8px; background: transparent; color: var(--text); cursor: pointer; }
+.wlt-x:hover { background: var(--surface-hover); }
+.wlt-modal-body { padding: 1rem 1.1rem 1.1rem; display: grid; gap: 0.8rem; font-size: 0.85rem; }
+.wlt-help { margin: 0; color: var(--text-2); font-size: 0.8rem; }
+.wlt-field { display: grid; gap: 0.3rem; }
+.wlt-field > span { font-size: 0.75rem; font-weight: 700; color: var(--text-muted); }
+.wlt-field small { color: var(--text-muted); font-size: 0.75rem; }
+.wlt-field textarea { min-height: 4.5rem; resize: vertical; }
+.wlt-row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; }
+@media (max-width: 560px) { .wlt-row2 { grid-template-columns: 1fr; } }
+.wlt-error { padding: 0.55rem 0.8rem; border-radius: 10px; background: var(--c-red-bg); color: var(--c-red-ink); font-weight: 600; }
+.wlt-modal-foot { display: flex; justify-content: flex-end; gap: 0.5rem; }
+.wlt-modal-foot .btn { width: auto; padding: 0.5rem 1rem; }
+
+.wlt-inline { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; }
+.wlt-inline input, .wlt-inline select { padding: 0.35rem 0.55rem; min-width: 0; }
+.wlt-inline .btn { width: auto; padding: 0.4rem 0.8rem; font-size: 0.8rem; }
+.wlt-settings h3 { margin: 0.4rem 0 0.2rem; font-size: 0.92rem; }
+.wlt-settings table { font-size: 0.8rem; }
+.wlt-link-btn { font: inherit; font-size: 0.78rem; color: var(--critical); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; }
+
+/* invoices grid: wallet state next to the row number and in the row popover */
+.fi-row-reversed .dsg-cell:not(.dsg-cell-gutter) { color: var(--text-muted); text-decoration: line-through; }
+.gutter-wallet { font-size: 0.6rem; margin-inline-end: 2px; }
+.gutter-wallet.posted { color: var(--c-green-ink); }
+.gutter-wallet.reversed { color: var(--c-red-ink); }
+.row-color-popover:has(.row-wallet-actions) { flex-wrap: wrap; max-width: 17rem; }
+.row-wallet-actions { flex-basis: 100%; display: grid; gap: 0.3rem; margin-top: 0.1rem; padding-top: 0.45rem; border-top: 1px solid var(--border); }
+.row-wallet-actions .label { font-size: 0.7rem; font-weight: 700; color: var(--text-muted); }
+.row-wallet-actions .state { font-size: 0.75rem; color: var(--text-2); white-space: normal; max-width: 16rem; }
+.row-wallet-actions button { font: inherit; font-size: 0.78rem; text-align: start; padding: 0.3rem 0.5rem; border-radius: 8px; border: 1px solid var(--border-strong);
+  background: var(--surface); color: var(--text); cursor: pointer; }
+.row-wallet-actions button:hover { background: var(--surface-hover); }
+.row-wallet-actions button.danger { color: var(--c-red-ink); }

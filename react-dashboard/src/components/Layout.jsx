@@ -5,7 +5,7 @@ import { notifyNavigated } from "../lib/viewTransition";
 import {
   LayoutDashboard, FileText, FolderOpen, CalendarDays, GitCompareArrows, MapPin, TrendingUp, Gauge,
   Truck, IdCard, Fuel, ThumbsUp, TriangleAlert, RefreshCw, Globe, LogOut, ChevronDown, Menu, ClipboardList,
-  Receipt, BarChart3, Droplets, Sun, Moon,
+  Receipt, BarChart3, Droplets, Sun, Moon, Wallet,
 } from "lucide-react";
 import { useTheme } from "../contexts/ThemeContext";
 import { useAuth } from "../contexts/AuthContext";
@@ -49,7 +49,10 @@ export default function Layout() {
   const FUEL_INVOICE_LINKS = [
     { to: "/fuel-invoice/invoices", icon: <Receipt size={17} />, label: "Invoices", key: "fuel-invoice-invoices" },
     { to: "/fuel-invoice/usage-report", icon: <BarChart3 size={17} />, label: "Usage Report", key: "fuel-invoice-usage-report" },
+    { to: "/fuel-invoice/wallet", icon: <Wallet size={17} />, label: t("wallet.nav"), key: "fuel-invoice-wallet" },
   ];
+  // A viewer sees only the read-only wallet in this group.
+  const visibleFuelInvoiceLinks = isViewer ? FUEL_INVOICE_LINKS.filter(l => l.key === "fuel-invoice-wallet") : FUEL_INVOICE_LINKS;
   const isOnFuelInvoicePage = FUEL_INVOICE_LINKS.some(l => location.pathname === l.to);
   const [fiOpen, setFiOpen] = useState(isOnFuelInvoicePage);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
@@ -211,7 +214,7 @@ export default function Layout() {
             </div>
           )}
 
-          {(isAdmin || isFleetManager) && (
+          {(isAdmin || isFleetManager || isViewer) && (
             <div>
               <button type="button" className="side-link side-group-toggle" onClick={() => setFiOpen(o => !o)}>
                 <span className="ic"><Receipt size={17} /></span> <span className="side-label">Fuel & Invoice Management</span>
@@ -219,7 +222,7 @@ export default function Layout() {
               </button>
               {fiOpen && (
                 <div className="side-subgroup">
-                  {FUEL_INVOICE_LINKS.map(link => (
+                  {visibleFuelInvoiceLinks.map(link => (
                     <TransitionNavLink key={link.key} to={{ pathname: link.to, search }} className={({ isActive }) => "side-link side-sublink" + (isActive ? " active" : "")}>
                       <span className="ic">{link.icon}</span> <span className="side-label">{link.label}</span>
                     </TransitionNavLink>
