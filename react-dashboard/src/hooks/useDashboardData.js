@@ -13,7 +13,7 @@ const PAGE_SIZE = 1000;
 // used to have, so a bigger fixed number would only postpone the same bug.
 // `buildQuery` must return a FRESH query builder each call (so a distinct
 // .range() can be layered on per page) — pass a function, not a built query.
-async function fetchAllPages(buildQuery, pageSize = PAGE_SIZE) {
+export async function fetchAllPages(buildQuery, pageSize = PAGE_SIZE) {
   const rows = [];
   let start = 0;
   for (;;) {
