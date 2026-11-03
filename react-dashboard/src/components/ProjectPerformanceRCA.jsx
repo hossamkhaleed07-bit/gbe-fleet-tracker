@@ -4,7 +4,9 @@ import { useAuth } from "../contexts/AuthContext";
 import { useLang } from "../contexts/LanguageContext";
 import DataTable from "../components/DataTable";
 import { sb } from "../lib/supabase";
-import { buildMissingRows } from "../lib/calc";
+import { buildDriverComparison } from "../lib/calc";
+import { buildRcaRows } from "../lib/rcaFollowup";
+import { useRcaShifts } from "../hooks/useRcaShifts";
 import { PROJECT_LIST, PROJECT_MANAGERS, SUBMISSION_REASON_OPTIONS, reasonColorKey } from "../lib/constants";
 
 function rowKey(row) {
@@ -62,10 +64,12 @@ function ReasonCell({ row, saved, canEdit, onSave }) {
 
 // The "RCA / Driver Follow-up" view inside Project Performance — an
 // Excel-style operational table of drivers needing follow-up (Start Only /
-// End Only / Non Submitted), built from the SAME allCompareGroups/allDrivers
-// source as the Statistics view's counts (never a separately-maintained
-// dataset), with an editable standardized Reason dropdown + free-text Notes
-// persisted to submission_reasons.
+// End Only / incomplete end-of-shift form / Non Submitted), with an editable
+// standardized Reason dropdown + free-text Notes persisted to
+// submission_reasons. Its shift_entries are loaded for its OWN from/to (see
+// useRcaShifts) rather than taken from the shared filter's allCompareGroups,
+// so the picked dates always match the rows shown; row rules live in
+// lib/rcaFollowup.js.
 //
 // `project`/`status`/`from`/`to` are owned by the parent (ProjectPerformance.jsx)
 // so clicking a Statistics badge can both switch tabs AND pre-filter this
@@ -80,7 +84,8 @@ function ReasonCell({ row, saved, canEdit, onSave }) {
 // /submission_reasons are already scoped server-side), this just avoids
 // showing a picker that would only ever show zero rows for every other project.
 export default function ProjectPerformanceRCA({ project, onProjectChange, status, onStatusChange, from, onFromChange, to, onToChange, lockedProject }) {
-  const { allCompareGroups, allDrivers, submissionReasonByKey, upsertSubmissionReason } = useDashboard();
+  const { allDrivers, submissionReasonByKey, upsertSubmissionReason } = useDashboard();
+  const { rows: shiftRows, loading, error } = useRcaShifts(from, to);
   const { canEditShiftEntries, session } = useAuth();
   const { t } = useLang();
 
@@ -93,33 +98,20 @@ export default function ProjectPerformanceRCA({ project, onProjectChange, status
     return map;
   }, [allDrivers]);
 
+  const groups = useMemo(() => {
+    const driverProjects = {};
+    for (const d of allDrivers) driverProjects[d.identity_number] = d.project;
+    return buildDriverComparison(shiftRows, driverProjects);
+  }, [shiftRows, allDrivers]);
+
   const rows = useMemo(() => {
-    const projectGroups = project ? allCompareGroups.filter(g => g.project === project) : allCompareGroups;
-    const projectDrivers = project ? allDrivers.filter(d => d.project === project) : allDrivers;
-    const missing = () => buildMissingRows(projectDrivers, projectGroups, from, to);
-    const hasReasonRecord = (g) => Boolean(submissionReasonByKey[rowKey(g)]);
-
-    let base;
-    if (status === "start_only") base = projectGroups.filter(g => g.start && !g.end);
-    else if (status === "end_only") base = projectGroups.filter(g => !g.start && g.end);
-    else if (status === "missing") base = missing();
-    else if (status === "all") base = [...projectGroups, ...missing()];
-    else if (status === "incomplete_or_missing") base = [...projectGroups.filter(g => !(g.start && g.end)), ...missing()];
-    else {
-      // "followup" (default): drivers who currently need follow-up, PLUS
-      // drivers who WERE flagged (have a submission_reasons record — set the
-      // moment someone picks a Reason/adds a Note) but have since become
-      // complete, either because the data was corrected or the driver
-      // submitted the missing entry late — these stay visible showing a
-      // "reviewed / now complete" badge instead of silently disappearing.
-      const stillIncomplete = projectGroups.filter(g => !(g.start && g.end));
-      const nowResolved = projectGroups.filter(g => g.start && g.end && hasReasonRecord(g));
-      base = [...stillIncomplete, ...nowResolved, ...missing()];
-    }
-
+    const base = buildRcaRows({
+      groups, drivers: allDrivers, from, to, status, project,
+      hasReason: (g) => Boolean(submissionReasonByKey[rowKey(g)]),
+    });
     let r = base.map(g => {
       const drv = driversByIdentity[g.identity_number];
-      return { ...g, job_id: drv?.job_id || "—", mobile_number: drv?.mobile_number || "—", reviewedComplete: g.start && g.end && hasReasonRecord(g) };
+      return { ...g, job_id: drv?.job_id || "—", mobile_number: drv?.mobile_number || "—" };
     });
 
     if (reasonFilter) r = r.filter(g => (submissionReasonByKey[rowKey(g)]?.reason || "") === reasonFilter);
@@ -133,7 +125,7 @@ export default function ProjectPerformanceRCA({ project, onProjectChange, status
       );
     }
     return [...r].sort((a, b) => b.day.localeCompare(a.day) || (a.full_name || "").localeCompare(b.full_name || ""));
-  }, [allCompareGroups, allDrivers, driversByIdentity, project, status, from, to, reasonFilter, search, submissionReasonByKey]);
+  }, [groups, allDrivers, driversByIdentity, project, status, from, to, reasonFilter, search, submissionReasonByKey]);
 
   const saveReasonNotes = useCallback(async (row, patch) => {
     const saved = submissionReasonByKey[rowKey(row)] || { reason: "", notes: "" };
@@ -170,10 +162,14 @@ export default function ProjectPerformanceRCA({ project, onProjectChange, status
       id: "status", header: t("common.status"), enableSorting: false,
       cell: ({ row }) => {
         const g = row.original;
-        if (g.start && g.end) {
+        if (g.formComplete) {
           return g.reviewedComplete
             ? <span className="badge complete">✓ {t("projectPerformanceRCA.reviewedComplete")}</span>
             : <span className="badge complete">{t("common.complete")}</span>;
+        }
+        if (g.start && g.end) {
+          const issues = g.issues.map(i => t(`projectPerformanceRCA.issue_${i}`));
+          return <span className="badge partial" title={issues.join("\n")}>{t("projectPerformanceRCA.formIncomplete")}: {issues.join("، ")}</span>;
         }
         const label = g.synthetic ? t("projectPerformance.colNonSubmitted") : (g.start ? t("detailModal.startOnly") : t("detailModal.endOnly"));
         return <span className={"badge " + (g.synthetic ? "critical" : "partial")}>{label}</span>;
@@ -203,7 +199,12 @@ export default function ProjectPerformanceRCA({ project, onProjectChange, status
         reasonFilter={reasonFilter} onReasonFilterChange={setReasonFilter}
         search={search} onSearchChange={setSearch}
       />
-      <DataTable columns={columns} data={rows} emptyMessage={t("driverPerformance.noMatchingDrivers")} pageSize={25} />
+      {error && !loading && (
+        <div role="alert" style={{ margin: "0 0 12px", padding: "10px 14px", borderRadius: 10, background: "#fde8e8", color: "#9b1c1c", fontWeight: 600 }}>
+          {t("projectPerformanceRCA.loadFailed")}: {error}
+        </div>
+      )}
+      <DataTable columns={columns} data={loading ? [] : rows} emptyMessage={loading ? t("common.loading") : t("driverPerformance.noMatchingDrivers")} pageSize={25} />
     </>
   );
 }

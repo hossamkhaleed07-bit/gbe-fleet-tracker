@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import { useLang } from "../contexts/LanguageContext";
 import ProjectPerformanceRCA from "../components/ProjectPerformanceRCA";
 import HeroPortal from "../components/HeroPortal";
-import { yesterday } from "../lib/calc";
+import { riyadhYesterday } from "../lib/rcaFollowup";
 
 // Its own nav destination (Project Performance > RCA / Driver Follow-up),
 // not portaled into the hero — reached either via the sidebar sub-link
@@ -17,12 +17,27 @@ import { yesterday } from "../lib/calc";
 export default function ProjectPerformanceRCAPage() {
   const { currentUserProject } = useAuth();
   const { t } = useLang();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [project, setProject] = useState(searchParams.get("project") || currentUserProject || "");
   const [status, setStatus] = useState(searchParams.get("status") || "followup");
-  const [from, setFrom] = useState(searchParams.get("rcaFrom") || yesterday());
-  const [to, setTo] = useState(searchParams.get("rcaTo") || yesterday());
+  // "Yesterday" in Saudi time, not the viewing device's timezone.
+  const [rawFrom, setFrom] = useState(searchParams.get("rcaFrom") || riyadhYesterday());
+  const [rawTo, setTo] = useState(searchParams.get("rcaTo") || riyadhYesterday());
+  // A cleared date input means "just the other end's day", never an unbounded range.
+  const from = rawFrom || rawTo || riyadhYesterday();
+  const to = rawTo || from;
+
+  // Keep the picked range in the URL so a refresh or a shared link shows the same days.
+  useEffect(() => {
+    setSearchParams(prev => {
+      if (prev.get("rcaFrom") === from && prev.get("rcaTo") === to) return prev;
+      const next = new URLSearchParams(prev);
+      next.set("rcaFrom", from);
+      next.set("rcaTo", to);
+      return next;
+    }, { replace: true });
+  }, [from, to, setSearchParams]);
 
   return (
     <>
