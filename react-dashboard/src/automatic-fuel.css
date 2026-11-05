@@ -1,0 +1,34 @@
+/* Automatic Fuel page (tabs, amounts, adjust dialog). Scoped under .af-* and only uses theme tokens. */
+.af-tabs { display: flex; gap: 0.3rem; margin: 0 0 0.9rem; padding: 0.25rem; border-radius: var(--radius-sm); background: var(--surface-1); border: 1px solid var(--border); width: fit-content; max-width: 100%; }
+.af-tab { font: inherit; font-size: 0.85rem; font-weight: 600; padding: 0.45rem 1rem; border-radius: 8px; border: 0; background: transparent; color: var(--ink-muted); cursor: pointer; }
+.af-tab:hover { color: var(--ink); }
+.af-tab[aria-selected="true"] { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+
+.af-amounts { display: flex; flex-direction: column; gap: 0.8rem; }
+.af-panel { padding: 1rem 1.2rem; border-radius: var(--radius-md); background: var(--surface-1); border: 1px solid var(--border); color: var(--ink); }
+.af-default { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; flex-wrap: wrap; }
+.af-label { font-size: 0.8rem; color: var(--ink-muted); font-weight: 600; }
+.af-default-value { font-size: 1.8rem; font-weight: 700; font-variant-numeric: tabular-nums; margin: 0.15rem 0; }
+.af-hint { margin: 0.2rem 0 0; font-size: 0.8rem; color: var(--ink-muted); }
+.af-section-head { display: flex; justify-content: space-between; align-items: center; gap: 0.8rem; flex-wrap: wrap; margin-top: 0.6rem; }
+.af-section-head h2 { margin: 0; font-size: 1rem; color: var(--ink); }
+.af-search { min-width: 0; width: 16rem; max-width: 100%; padding: 0.45rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); color: var(--ink); font: inherit; font-size: 0.85rem; }
+
+.af-amount { display: inline-flex; align-items: center; gap: 0.45rem; font-variant-numeric: tabular-nums; }
+.badge.af-badge-default { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+.badge.af-badge-own { background: var(--c-purple-bg); color: var(--c-purple-ink); }
+.badge.af-badge-kind { background: var(--c-blue-bg); color: var(--c-blue-ink); }
+.badge.af-badge-adjusted { background: var(--c-purple-bg); color: var(--c-purple-ink); margin-inline-start: 0.3rem; }
+.af-old-new { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+.af-actions { display: flex; gap: 0.4rem; flex-wrap: wrap; justify-content: flex-end; }
+.af-editor { display: inline-flex; align-items: center; gap: 0.4rem; flex-wrap: wrap; }
+.af-editor input { width: 7rem; padding: 0.4rem 0.55rem; border-radius: 8px; border: 1px solid var(--border); background: var(--surface-1); color: var(--ink); font: inherit; font-size: 0.85rem; }
+.af-save { background: var(--blue); border-color: var(--blue); color: var(--surface-1); }
+.af-error { width: 100%; font-size: 0.78rem; color: var(--critical); }
+.af-alert { margin: 0 0 0.8rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm); background: var(--c-red-bg); color: var(--c-red-ink); font-weight: 600; }
+
+.af-field { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.7rem; }
+.af-field span { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
+.af-field input, .af-field textarea { width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--plane); color: var(--ink); font: inherit; font-size: 0.85rem; resize: vertical; }
+.af-summary { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--ink-2); }

@@ -131,7 +131,7 @@ export function useDashboardData() {
     const reinforcementFactory = () => sb.from("reinforcement_requests")
       .select("identity_number,shift_date,amount,loan_adjustment,status,full_name")
       .order("shift_date", { ascending: false });
-    const automaticFuelFactory = () => sb.from("automatic_fuel_allocations").select("identity_number,allocation_date,amount,project")
+    const automaticFuelFactory = () => sb.from("automatic_fuel_allocations").select("*")
       .order("allocation_date", { ascending: false });
     const attendanceFactory = () => sb.from("driver_attendance").select("identity_number,attendance_date,status,project")
       .order("attendance_date", { ascending: false });
