@@ -8,17 +8,19 @@ import MetricBarList from "../components/MetricBarList";
 import DataTable from "../components/DataTable";
 import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
+import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "../lib/constants";
 import {
-  DRIVER_PERFORMANCE_PROJECTS, monthBounds, formatMonthLabel, buildDriverPerfRows, buildProjectSummary, topN,
+  monthBounds, formatMonthLabel, buildDriverPerfRows, buildProjectSummary, topN,
 } from "../lib/driverPerformance";
 
 const money = (v) => `${v.toFixed(0)} SAR`;
+const money2 = (v) => `${v.toFixed(2)} SAR`;
 
 export default function DriverPerformanceProject() {
   const { project } = useParams();
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
-    to, setMonthRange,
+    to, setMonthRange, loading,
   } = useDashboard();
   const { t, lang } = useLang();
   const navigate = useNavigate();
@@ -59,7 +61,7 @@ export default function DriverPerformanceProject() {
     navigate({ pathname: `/driver-performance/${project}/${row.identity_number}`, search: searchParams.toString() });
   }
 
-  if (!DRIVER_PERFORMANCE_PROJECTS.includes(project)) {
+  if (!PROJECT_LIST.includes(project)) {
     return <Navigate to="/driver-performance" replace />;
   }
 
@@ -82,7 +84,7 @@ export default function DriverPerformanceProject() {
       </HeroPortal>
 
       {!rows.length ? (
-        <div className="ov-empty">{t("driverPerformance.noDataForMonth")}</div>
+        <div className="ov-empty">{t(loading ? "common.loading" : "driverPerformance.noActiveDrivers")}</div>
       ) : (
         <>
           <div className="panel">
@@ -92,9 +94,12 @@ export default function DriverPerformanceProject() {
               <Field label={t("driverPerformance.colTotalDelivered")} val={summary.totalDelivered} />
               <Field label={t("driverPerformance.kpiDrivers")} val={summary.activeDrivers} />
               <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(summary.avgFuelPerDriver)} />
-              <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money(summary.avgFuelPerShipment)} />
+              <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(summary.avgFuelPerShipment)} />
               <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${summary.avgFuelPerKm.toFixed(2)} SAR/km`} />
             </div>
+            {summary.excludedDays > 0 && (
+              <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: summary.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>
+            )}
           </div>
 
           <div className="panel-grid" style={{ marginTop: "1.2rem", marginBottom: "1.2rem" }}>

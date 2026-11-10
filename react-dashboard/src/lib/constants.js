@@ -1,5 +1,11 @@
 export const PROJECT_LIST = ["FDP", "ADM", "LMS", "JDL", "MGF"];
 
+// A driver-day whose odometer moved backwards or by more than this is a wrong reading:
+// it is still shown as entered, but never counted in totals. Same value as the default
+// oil_settings.max_jump_km_per_day (migration 058), which only admin and fleet manager
+// can read, so it is kept here for every page.
+export const MAX_JUMP_KM_PER_DAY = 1500;
+
 export const PROJECT_MANAGERS = {
   FDP: "Mohammed Alfared",
   ADM: "Mahmoud Jamal",

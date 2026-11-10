@@ -7,6 +7,7 @@ import MonthPicker from "../components/MonthPicker";
 import DataTable from "../components/DataTable";
 import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
+import { MAX_JUMP_KM_PER_DAY } from "../lib/constants";
 import {
   monthBounds, formatMonthLabel, buildDriverPerfRows, buildDriverDailyRows, attachDailyFuel,
 } from "../lib/driverPerformance";
@@ -53,7 +54,12 @@ export default function DriverPerformanceDriver() {
     { accessorKey: "day", header: t("compare.colDate") },
     { accessorKey: "startOdo", header: t("common.startOdometer"), meta: { align: "end" }, cell: ({ getValue }) => getValue() ?? "—" },
     { accessorKey: "endOdo", header: t("common.endOdometer"), meta: { align: "end" }, cell: ({ getValue }) => getValue() ?? "—" },
-    { accessorKey: "dist", header: t("compare.colDistanceCovered"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(0) },
+    {
+      accessorKey: "dist", header: t("compare.colDistanceCovered"), meta: { align: "end" },
+      cell: ({ row, getValue }) => (row.original.distInvalid
+        ? <span className="badge critical" title={t("driverPerformance.wrongReading", { km: row.original.enteredDist })}>⚠ {row.original.enteredDist}</span>
+        : getValue().toFixed(0)),
+    },
     { accessorKey: "fuel", header: t("driverPerformance.colFuel"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
     { accessorKey: "delivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" } },
     { accessorKey: "fuelPerKm", header: t("driverPerformance.colFuelPerKm"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(2) },
@@ -93,6 +99,9 @@ export default function DriverPerformanceDriver() {
               <Field label={t("driverPerformance.colAvgKmPerDay")} val={`${summary.avgKmPerDay.toFixed(1)} km`} />
               <Field label={t("driverPerformance.colDaysOff")} val={<span className={"badge " + (summary.daysOff > 0 ? "critical" : "complete")}>{summary.daysOff}</span>} />
             </div>
+            {summary.excludedDays > 0 && (
+              <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: summary.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>
+            )}
           </div>
 
           <h3 style={{ marginBottom: "0.7rem" }}>{t("driverPerformance.dailyBreakdown")}</h3>
