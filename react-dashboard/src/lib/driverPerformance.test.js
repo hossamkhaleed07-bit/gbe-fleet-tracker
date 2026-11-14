@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDriverComparison, buildGroupMetrics, dailyDistance } from "./calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "./constants";
-import { buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm } from "./driverPerformance";
+import { attachDailyFuel, buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm } from "./driverPerformance";
 
 const CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
 const entry = (id, day, type, odo, at) => ({ identity_number: id, shift_date: day, shift_type: type, odo_reading: odo, created_at: `${day}T${at}:00Z` });
@@ -86,5 +86,36 @@ describe("daily Fuel/KM display", () => {
   });
   it("shows 2 decimals on a day with distance", () => {
     expect(formatDailyFuelPerKm(30 / 64, 64)).toBe("0.47");
+  });
+});
+
+describe("daily table rows for fuel on days without a shift", () => {
+  const from = "2026-11-01", to = "2026-11-30";
+  const shiftDay = { day: "2026-11-03", startOdo: 100, endOdo: 131, dist: 31, enteredDist: 31, distInvalid: false, delivered: 10 };
+  const reinforcement = [
+    { identity_number: "A", shift_date: "2026-11-03", status: "approved", amount: 40, loan_adjustment: -10 },
+    { identity_number: "A", shift_date: "2026-11-04", status: "pending", amount: 80, loan_adjustment: 0 },
+  ];
+  const automatic = [
+    { identity_number: "A", allocation_date: "2026-11-01", amount: 20 }, // day off, no shift
+    { identity_number: "A", allocation_date: "2026-11-03", amount: 20 },
+    { identity_number: "A", allocation_date: "2026-10-31", amount: 20 }, // outside the month
+    { identity_number: "B", allocation_date: "2026-11-02", amount: 20 }, // another driver
+  ];
+
+  const rows = attachDailyFuel([shiftDay], "A", reinforcement, automatic, from, to);
+
+  it("adds a no-shift row for a day that only has fuel, in date order", () => {
+    expect(rows.map(r => [r.day, r.noShift])).toEqual([["2026-11-01", true], ["2026-11-03", false]]);
+    expect(rows[0]).toMatchObject({ fuel: 20, dist: 0, delivered: 0, startOdo: null, endOdo: null });
+  });
+
+  it("keeps the shift day's fuel (approved amount + loan adjustment + automatic)", () => {
+    expect(rows[1].fuel).toBe(40 - 10 + 20);
+  });
+
+  it("makes the table add up to the driver's Total Fuel", () => {
+    const [summary] = buildDriverPerfRows([{ identity_number: "A", full_name: "x", project: "FDP" }], [], reinforcement, automatic, [], from, to);
+    expect(rows.reduce((s, r) => s + r.fuel, 0)).toBe(summary.totalFuel);
   });
 });

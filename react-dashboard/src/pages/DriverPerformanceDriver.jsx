@@ -47,21 +47,26 @@ export default function DriverPerformanceDriver() {
 
   const dailyRows = useMemo(() => {
     const base = buildDriverDailyRows(scopedCompareGroups, identityNumber, from, toVal);
-    return attachDailyFuel(base, identityNumber, scopedReinforcementRows, scopedAutomaticFuelRows);
+    return attachDailyFuel(base, identityNumber, scopedReinforcementRows, scopedAutomaticFuelRows, from, toVal);
   }, [scopedCompareGroups, identityNumber, from, toVal, scopedReinforcementRows, scopedAutomaticFuelRows]);
 
   const columns = useMemo(() => [
-    { accessorKey: "day", header: t("compare.colDate") },
+    {
+      accessorKey: "day", header: t("compare.colDate"),
+      cell: ({ row, getValue }) => (row.original.noShift
+        ? <>{getValue()} <span className="badge" title={t("driverPerformance.noShiftTitle")}>{t("driverPerformance.noShift")}</span></>
+        : getValue()),
+    },
     { accessorKey: "startOdo", header: t("common.startOdometer"), meta: { align: "end" }, cell: ({ getValue }) => getValue() ?? "—" },
     { accessorKey: "endOdo", header: t("common.endOdometer"), meta: { align: "end" }, cell: ({ getValue }) => getValue() ?? "—" },
     {
       accessorKey: "dist", header: t("compare.colDistanceCovered"), meta: { align: "end" },
-      cell: ({ row, getValue }) => (row.original.distInvalid
+      cell: ({ row, getValue }) => (row.original.noShift ? "—" : row.original.distInvalid
         ? <span className="badge critical" title={t("driverPerformance.wrongReading", { km: row.original.enteredDist })}>⚠ {row.original.enteredDist}</span>
         : getValue().toFixed(0)),
     },
     { accessorKey: "fuel", header: t("driverPerformance.colFuel"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
-    { accessorKey: "delivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" } },
+    { accessorKey: "delivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" }, cell: ({ row, getValue }) => (row.original.noShift ? "—" : getValue()) },
     { accessorKey: "fuelPerKm", header: t("driverPerformance.colFuelPerKm"), meta: { align: "end" }, cell: ({ row, getValue }) => formatDailyFuelPerKm(getValue(), row.original.dist) },
   ], [t]);
 

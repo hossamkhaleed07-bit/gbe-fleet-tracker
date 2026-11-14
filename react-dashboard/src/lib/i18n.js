@@ -323,6 +323,8 @@ export const translations = {
       excludedDays: "{n} يوم مستبعد لقراءة عداد غلط (بالسالب أو أكتر من {max} كم)",
       wrongReading: "قراءة غلط: {km} كم (مش محسوبة)",
       noActiveDrivers: "مفيش سائقين نشطين في المشروع ده.",
+      noShift: "بدون وردية",
+      noShiftTitle: "وقود متسجل في يوم مفيهوش وردية (زي الوقود الأوتوماتيك في يوم إجازة)",
     },
     stations: {
       breadcrumb: "تقرير المحطات",
@@ -875,6 +877,8 @@ export const translations = {
       excludedDays: "{n} day(s) excluded for a wrong odometer reading (negative or over {max} km)",
       wrongReading: "Wrong reading: {km} km (not counted)",
       noActiveDrivers: "No active drivers in this project.",
+      noShift: "No shift",
+      noShiftTitle: "Fuel recorded on a day with no shift (e.g. automatic fuel on a day off)",
     },
     stations: {
       breadcrumb: "Station Report",

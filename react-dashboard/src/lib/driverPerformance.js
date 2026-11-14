@@ -174,20 +174,35 @@ export function buildDriverDailyRows(compareGroups, identityNumber, from, to) {
 // Attaches each day's fuel cost (reinforcement + automatic) to the daily rows
 // above, and each day's fuel/km — called separately since fuel isn't part of
 // buildGroupMetrics's "cost" fields the way this feature defines fuel.
-export function attachDailyFuel(dailyRows, identityNumber, reinforcementRows, automaticFuelRows) {
+//
+// Fuel dated on a day with no shift entry (e.g. FDP automatic fuel on a day
+// off) gets a row of its own, marked noShift, so the table's fuel adds up to
+// the driver's Total Fuel (buildDriverPerfRows counts every fuel row in
+// [from, to], not only shift days). Uses the same filters as that function.
+export function attachDailyFuel(dailyRows, identityNumber, reinforcementRows, automaticFuelRows, from, to) {
   const feeByDay = {};
   for (const r of reinforcementRows) {
     if (r.status !== "approved" || r.identity_number !== identityNumber) continue;
+    if (!r.shift_date || !inRange(r.shift_date, from, to)) continue;
     feeByDay[r.shift_date] = (feeByDay[r.shift_date] || 0) + Number(r.amount || 0) + Number(r.loan_adjustment || 0);
   }
   for (const r of automaticFuelRows) {
     if (r.identity_number !== identityNumber) continue;
+    if (!r.allocation_date || !inRange(r.allocation_date, from, to)) continue;
     feeByDay[r.allocation_date] = (feeByDay[r.allocation_date] || 0) + Number(r.amount || 0);
   }
-  return dailyRows.map(row => {
-    const fuel = feeByDay[row.day] || 0;
-    return { ...row, fuel, fuelPerKm: safeDiv(fuel, row.dist) };
-  });
+  const shiftDays = new Set(dailyRows.map(r => r.day));
+  const fuelOnlyRows = Object.keys(feeByDay)
+    .filter(day => !shiftDays.has(day))
+    .map(day => ({
+      day, startOdo: null, endOdo: null, dist: 0, enteredDist: null, distInvalid: false, delivered: 0, noShift: true,
+    }));
+  return [...dailyRows, ...fuelOnlyRows]
+    .sort((a, b) => a.day.localeCompare(b.day))
+    .map(row => {
+      const fuel = feeByDay[row.day] || 0;
+      return { noShift: false, ...row, fuel, fuelPerKm: safeDiv(fuel, row.dist) };
+    });
 }
 
 // Fuel/KM for one day of the Driver Detail table. A day with no counted
