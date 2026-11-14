@@ -190,6 +190,13 @@ export function attachDailyFuel(dailyRows, identityNumber, reinforcementRows, au
   });
 }
 
+// Fuel/KM for one day of the Driver Detail table. A day with no counted
+// distance (no movement, or a wrong odometer reading counted as 0 km) has no
+// meaningful ratio, so it shows "—" rather than a misleading 0.00.
+export function formatDailyFuelPerKm(fuelPerKm, dist) {
+  return dist > 0 ? fuelPerKm.toFixed(2) : "—";
+}
+
 export function topN(rows, key, n = 5, ascending = false) {
   return rows.slice().sort((a, b) => ascending ? a[key] - b[key] : b[key] - a[key]).slice(0, n);
 }

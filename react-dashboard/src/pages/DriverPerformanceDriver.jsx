@@ -9,7 +9,7 @@ import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
 import { MAX_JUMP_KM_PER_DAY } from "../lib/constants";
 import {
-  monthBounds, formatMonthLabel, buildDriverPerfRows, buildDriverDailyRows, attachDailyFuel,
+  monthBounds, formatMonthLabel, buildDriverPerfRows, buildDriverDailyRows, attachDailyFuel, formatDailyFuelPerKm,
 } from "../lib/driverPerformance";
 
 const money = (v) => `${v.toFixed(0)} SAR`;
@@ -62,7 +62,7 @@ export default function DriverPerformanceDriver() {
     },
     { accessorKey: "fuel", header: t("driverPerformance.colFuel"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
     { accessorKey: "delivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" } },
-    { accessorKey: "fuelPerKm", header: t("driverPerformance.colFuelPerKm"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(2) },
+    { accessorKey: "fuelPerKm", header: t("driverPerformance.colFuelPerKm"), meta: { align: "end" }, cell: ({ row, getValue }) => formatDailyFuelPerKm(getValue(), row.original.dist) },
   ], [t]);
 
   return (

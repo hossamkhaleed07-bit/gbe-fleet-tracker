@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDriverComparison, buildGroupMetrics, dailyDistance } from "./calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "./constants";
-import { buildDriverPerfRows, buildProjectSummary } from "./driverPerformance";
+import { buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm } from "./driverPerformance";
 
 const CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
 const entry = (id, day, type, odo, at) => ({ identity_number: id, shift_date: day, shift_type: type, odo_reading: odo, created_at: `${day}T${at}:00Z` });
@@ -77,5 +77,14 @@ describe("driver performance totals", () => {
 
   it("a project with no active drivers summarises to zero drivers", () => {
     expect(buildProjectSummary([]).activeDrivers).toBe(0);
+  });
+});
+
+describe("daily Fuel/KM display", () => {
+  it("shows a dash on a day with no counted distance", () => {
+    expect(formatDailyFuelPerKm(0, 0)).toBe("—");
+  });
+  it("shows 2 decimals on a day with distance", () => {
+    expect(formatDailyFuelPerKm(30 / 64, 64)).toBe("0.47");
   });
 });
