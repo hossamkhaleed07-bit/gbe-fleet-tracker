@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import { useDashboardData } from "../hooks/useDashboardData";
 import { useAuth } from "./AuthContext";
 import { buildStationReport, summarizeReinforcement, sumAutomaticFuel } from "../lib/calc";
+import { sessionLoadKey } from "../lib/sessionLoadKey";
 
 const DataContext = createContext(null);
 
@@ -14,10 +15,14 @@ export function DataProvider({ children }) {
   const to = searchParams.get("to") || "";
   const [viewingProject, setViewingProject] = useState(null); // null = "Main account" (all projects)
 
+  // Keyed on who is signed in, not on the session object: supabase-js emits a
+  // new session on every tab refocus and token refresh, and reloading on each
+  // one restarted (and discarded) the in-flight load — see sessionLoadKey.js.
+  const loadKey = sessionLoadKey(session);
   useEffect(() => {
-    if (session) data.loadData(from, to);
+    if (loadKey) data.loadData(from, to);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [session]);
+  }, [loadKey]);
 
   function setFrom(value) {
     setSearchParams(prev => {
