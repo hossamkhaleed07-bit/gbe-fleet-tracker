@@ -9,9 +9,6 @@
 import { buildGroupMetrics, formatLocalDate } from "./calc";
 import { deriveAttendanceStatus, OFF_CODES } from "./attendanceCodes";
 
-// This feature is scoped to these 4 projects only (JDL is out of scope, per spec).
-export const DRIVER_PERFORMANCE_PROJECTS = ["ADM", "FDP", "LMS", "MGF"];
-
 export function monthBounds(monthStr) {
   const [y, m] = monthStr.split("-").map(Number);
   const from = `${monthStr}-01`;
@@ -58,6 +55,7 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       totalFuel: 0,
       totalDist: 0,
       totalDelivered: 0,
+      excludedDays: 0,
       workingDays: 0,
       daysOff: 0,
       startOdo: null,
@@ -101,7 +99,8 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       if (g.end?.odo_reading != null) readings.push(g.end.odo_reading);
       if (g.start || g.end) workingDaySet.add(g.day);
       const m = buildGroupMetrics(g, METRICS_CTX);
-      if (typeof m.dist === "number") row.totalDist += m.dist;
+      if (m.distCounted != null) row.totalDist += m.distCounted;
+      if (m.distInvalid) row.excludedDays++;
       if (m.delivered !== "—") row.totalDelivered += Number(m.delivered);
     }
     row.startOdo = readings.length ? readings[0] : null;
@@ -135,15 +134,16 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
 }
 
 // Aggregates a set of already-built driver rows (see above) into one
-// project-level summary — used both for the 4 overview cards and the top of
+// project-level summary — used both for the project overview cards and the top of
 // each project's detail page.
 export function buildProjectSummary(rows) {
   const totalFuel = rows.reduce((s, r) => s + r.totalFuel, 0);
   const totalDist = rows.reduce((s, r) => s + r.totalDist, 0);
   const totalDelivered = rows.reduce((s, r) => s + r.totalDelivered, 0);
+  const excludedDays = rows.reduce((s, r) => s + r.excludedDays, 0);
   const activeDrivers = rows.length;
   return {
-    totalFuel, totalDist, totalDelivered, activeDrivers,
+    totalFuel, totalDist, totalDelivered, excludedDays, activeDrivers,
     avgFuelPerDriver: safeDiv(totalFuel, activeDrivers),
     avgFuelPerShipment: safeDiv(totalFuel, totalDelivered),
     avgFuelPerKm: safeDiv(totalFuel, totalDist),
@@ -162,7 +162,10 @@ export function buildDriverDailyRows(compareGroups, identityNumber, from, to) {
         day: g.day,
         startOdo: g.start?.odo_reading ?? null,
         endOdo: g.end?.odo_reading ?? null,
-        dist: typeof m.dist === "number" ? m.dist : 0,
+        // a wrong reading counts as 0 km; the difference as entered is kept to show it
+        dist: m.distCounted ?? 0,
+        enteredDist: typeof m.dist === "number" ? m.dist : null,
+        distInvalid: m.distInvalid,
         delivered: m.delivered !== "—" ? Number(m.delivered) : 0,
       };
     });
@@ -171,20 +174,42 @@ export function buildDriverDailyRows(compareGroups, identityNumber, from, to) {
 // Attaches each day's fuel cost (reinforcement + automatic) to the daily rows
 // above, and each day's fuel/km — called separately since fuel isn't part of
 // buildGroupMetrics's "cost" fields the way this feature defines fuel.
-export function attachDailyFuel(dailyRows, identityNumber, reinforcementRows, automaticFuelRows) {
+//
+// Fuel dated on a day with no shift entry (e.g. FDP automatic fuel on a day
+// off) gets a row of its own, marked noShift, so the table's fuel adds up to
+// the driver's Total Fuel (buildDriverPerfRows counts every fuel row in
+// [from, to], not only shift days). Uses the same filters as that function.
+export function attachDailyFuel(dailyRows, identityNumber, reinforcementRows, automaticFuelRows, from, to) {
   const feeByDay = {};
   for (const r of reinforcementRows) {
     if (r.status !== "approved" || r.identity_number !== identityNumber) continue;
+    if (!r.shift_date || !inRange(r.shift_date, from, to)) continue;
     feeByDay[r.shift_date] = (feeByDay[r.shift_date] || 0) + Number(r.amount || 0) + Number(r.loan_adjustment || 0);
   }
   for (const r of automaticFuelRows) {
     if (r.identity_number !== identityNumber) continue;
+    if (!r.allocation_date || !inRange(r.allocation_date, from, to)) continue;
     feeByDay[r.allocation_date] = (feeByDay[r.allocation_date] || 0) + Number(r.amount || 0);
   }
-  return dailyRows.map(row => {
-    const fuel = feeByDay[row.day] || 0;
-    return { ...row, fuel, fuelPerKm: safeDiv(fuel, row.dist) };
-  });
+  const shiftDays = new Set(dailyRows.map(r => r.day));
+  const fuelOnlyRows = Object.keys(feeByDay)
+    .filter(day => !shiftDays.has(day))
+    .map(day => ({
+      day, startOdo: null, endOdo: null, dist: 0, enteredDist: null, distInvalid: false, delivered: 0, noShift: true,
+    }));
+  return [...dailyRows, ...fuelOnlyRows]
+    .sort((a, b) => a.day.localeCompare(b.day))
+    .map(row => {
+      const fuel = feeByDay[row.day] || 0;
+      return { noShift: false, ...row, fuel, fuelPerKm: safeDiv(fuel, row.dist) };
+    });
+}
+
+// Fuel/KM for one day of the Driver Detail table. A day with no counted
+// distance (no movement, or a wrong odometer reading counted as 0 km) has no
+// meaningful ratio, so it shows "—" rather than a misleading 0.00.
+export function formatDailyFuelPerKm(fuelPerKm, dist) {
+  return dist > 0 ? fuelPerKm.toFixed(2) : "—";
 }
 
 export function topN(rows, key, n = 5, ascending = false) {

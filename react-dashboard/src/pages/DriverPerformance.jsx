@@ -8,16 +8,18 @@ import MonthPicker from "../components/MonthPicker";
 import MetricBarList from "../components/MetricBarList";
 import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
+import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "../lib/constants";
 import {
-  DRIVER_PERFORMANCE_PROJECTS, monthBounds, buildDriverPerfRows, buildProjectSummary, topN,
+  monthBounds, buildDriverPerfRows, buildProjectSummary, topN,
 } from "../lib/driverPerformance";
 
 const money = (v) => `${v.toFixed(0)} SAR`;
+const money2 = (v) => `${v.toFixed(2)} SAR`;
 
 export default function DriverPerformance() {
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
-    to, setMonthRange,
+    to, setMonthRange, loading,
   } = useDashboard();
   const { t } = useLang();
   const navigate = useNavigate();
@@ -33,16 +35,16 @@ export default function DriverPerformance() {
 
   const { from, to: toVal } = monthBounds(month);
 
-  // One driver-performance row per active driver across all 4 projects, then
+  // One driver-performance row per active driver across every project, then
   // grouped by project — this is the single computation everything else
   // (cards, charts, top consumers) reads from.
   const allRows = useMemo(() => {
-    const drivers = scopedDrivers.filter(d => d.is_active && DRIVER_PERFORMANCE_PROJECTS.includes(d.project));
+    const drivers = scopedDrivers.filter(d => d.is_active && PROJECT_LIST.includes(d.project));
     return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
   }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal]);
 
   const projectSummaries = useMemo(() => {
-    return DRIVER_PERFORMANCE_PROJECTS.map(p => ({
+    return PROJECT_LIST.map(p => ({
       project: p,
       rows: allRows.filter(r => r.project === p),
     })).map(({ project, rows }) => ({ project, ...buildProjectSummary(rows) }));
@@ -72,7 +74,7 @@ export default function DriverPerformance() {
         <MonthPicker month={month} onChange={setMonth} />
       </HeroPortal>
 
-      {/* 4 clickable project cards, each with the 7 established KPIs */}
+      {/* one clickable card per project, each with the 7 established KPIs */}
       <div className="cards-grid" style={{ gridTemplateColumns: "repeat(auto-fit, minmax(300px, 1fr))" }}>
         {projectSummaries.map(s => (
           <div key={s.project} className="panel driver-perf-card" style={{ cursor: "pointer" }} onClick={() => goToProject(s.project)}>
@@ -82,15 +84,26 @@ export default function DriverPerformance() {
                 <span className="ov-block-sub">{t("driverPerformance.viewDetails")}</span>
               </div>
             </div>
-            <div className="compare-field-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
-              <Field label={t("compare.colTotalFuelCost")} val={money(s.totalFuel)} />
-              <Field label={t("driverPerformance.colTotalDistance")} val={`${s.totalDist.toFixed(0)} km`} />
-              <Field label={t("driverPerformance.colTotalDelivered")} val={s.totalDelivered} />
-              <Field label={t("driverPerformance.kpiDrivers")} val={s.activeDrivers} />
-              <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(s.avgFuelPerDriver)} />
-              <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money(s.avgFuelPerShipment)} />
-              <Field label={t("driverPerformance.kpiFuelPerKm")} val={money(s.avgFuelPerKm)} />
-            </div>
+            {loading && !s.activeDrivers ? (
+              <div className="ov-empty">{t("common.loading")}</div>
+            ) : !s.activeDrivers ? (
+              <div className="ov-empty">{t("driverPerformance.noActiveDrivers")}</div>
+            ) : (
+              <>
+                <div className="compare-field-grid" style={{ gridTemplateColumns: "repeat(2, 1fr)" }}>
+                  <Field label={t("compare.colTotalFuelCost")} val={money(s.totalFuel)} />
+                  <Field label={t("driverPerformance.colTotalDistance")} val={`${s.totalDist.toFixed(0)} km`} />
+                  <Field label={t("driverPerformance.colTotalDelivered")} val={s.totalDelivered} />
+                  <Field label={t("driverPerformance.kpiDrivers")} val={s.activeDrivers} />
+                  <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(s.avgFuelPerDriver)} />
+                  <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(s.avgFuelPerShipment)} />
+                  <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${s.avgFuelPerKm.toFixed(2)} SAR/km`} />
+                </div>
+                {s.excludedDays > 0 && (
+                  <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: s.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>
+                )}
+              </>
+            )}
           </div>
         ))}
       </div>

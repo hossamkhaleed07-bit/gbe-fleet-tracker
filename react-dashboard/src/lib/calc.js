@@ -1,4 +1,5 @@
 import { deriveAttendanceStatus, OFF_CODES } from "./attendanceCodes";
+import { MAX_JUMP_KM_PER_DAY } from "./constants";
 
 export function localToday() {
   const d = new Date();
@@ -56,8 +57,10 @@ export function buildDriverComparison(rows, driverProjects) {
     const g = groups[key];
     if (r.full_name) g.full_name = r.full_name;
     if (r.vehicle_plate) g.vehicle_plate = r.vehicle_plate;
-    if (r.shift_type === "start" && !g.start) g.start = r;
-    if (r.shift_type === "end") g.end = r;
+    // A driver who submits twice in one day: the day runs from the EARLIEST start to
+    // the LATEST end, whatever order the rows arrive in.
+    if (r.shift_type === "start" && (!g.start || r.created_at < g.start.created_at)) g.start = r;
+    if (r.shift_type === "end" && (!g.end || r.created_at > g.end.created_at)) g.end = r;
   }
   return Object.values(groups).sort((a, b) => b.day.localeCompare(a.day) || (a.full_name || "").localeCompare(b.full_name || ""));
 }
@@ -326,7 +329,7 @@ export function buildDriverMonthlySummary(drivers, compareGroups, attendanceRows
       if (g.start?.odo_reading != null) readings.push({ day: g.day, odo: g.start.odo_reading });
       if (g.end?.odo_reading != null) readings.push({ day: g.day, odo: g.end.odo_reading });
       const m = buildGroupMetrics(g, ctx);
-      if (typeof m.dist === "number") totalDist += m.dist;
+      if (m.distCounted != null) totalDist += m.distCounted;
       if (m.fuelLiters !== "—") totalLiters += Number(m.fuelLiters);
       if (m.delivered !== "—") totalDelivered += Number(m.delivered);
     }
@@ -362,18 +365,35 @@ export function buildDriverMonthlySummary(drivers, compareGroups, attendanceRows
   });
 }
 
+// A driver-day's distance from its start and end odometer readings.  km is the
+// difference as entered (null if a reading is missing); valid is false when it is
+// negative or above MAX_JUMP_KM_PER_DAY, a wrong reading that is never counted.
+export function dailyDistance(startOdo, endOdo) {
+  if (startOdo == null || endOdo == null) return { km: null, valid: false, reason: "missing" };
+  const km = Number(endOdo) - Number(startOdo);
+  if (km < 0) return { km, valid: false, reason: "negative" };
+  if (km > MAX_JUMP_KM_PER_DAY) return { km, valid: false, reason: "tooLarge" };
+  return { km, valid: true, reason: null };
+}
+
 // Single source of truth for the odometer/fuel/delivery figures shown for a
 // driver-day group (used by Compare, FuelApprover, DetailModal and CSV export)
 // so every place that displays a group shows the same numbers.
+// dist is shown as entered; distCounted (null for a wrong reading) is what totals
+// and the expected-fuel estimate use.
 export function buildGroupMetrics(g, { vehicleRates, vehicleFuelTypes, stationRates, vehicleEndHistory, approvedFuelByKey, automaticFuelByKey }) {
-  const dist = (g.start?.odo_reading != null && g.end?.odo_reading != null) ? (g.end.odo_reading - g.start.odo_reading) : null;
-  const fuelLiters = expectedFuelLiters(g.vehicle_plate, dist, vehicleRates);
+  const d = dailyDistance(g.start?.odo_reading, g.end?.odo_reading);
+  const dist = d.km;
+  const distCounted = d.valid ? d.km : null;
+  const fuelLiters = expectedFuelLiters(g.vehicle_plate, distCounted, vehicleRates);
   const stationName = g.end?.station_name || g.start?.station_name;
   const fuelCost = expectedFuelCost(g.vehicle_plate, fuelLiters, vehicleFuelTypes, stationName, stationRates);
   const actualCost = actualFuelCost(g.identity_number, g.day, approvedFuelByKey);
   const automaticCost = automaticFuelCost(g.identity_number, g.day, automaticFuelByKey);
   return {
     dist: dist ?? "—",
+    distCounted,
+    distInvalid: dist != null && !d.valid,
     fuelLiters,
     fuelCost,
     actualFuelCost: actualCost,

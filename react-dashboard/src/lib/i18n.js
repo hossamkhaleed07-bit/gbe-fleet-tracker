@@ -320,6 +320,11 @@ export const translations = {
       backToOverview: "أداء المندوبين",
       projectMonthly: "أداء {project} — {month}",
       noDataForMonth: "لا توجد بيانات لهذا المشروع في الشهر المحدد.",
+      excludedDays: "{n} يوم مستبعد لقراءة عداد غلط (بالسالب أو أكتر من {max} كم)",
+      wrongReading: "قراءة غلط: {km} كم (مش محسوبة)",
+      noActiveDrivers: "مفيش سائقين نشطين في المشروع ده.",
+      noShift: "بدون وردية",
+      noShiftTitle: "وقود متسجل في يوم مفيهوش وردية (زي الوقود الأوتوماتيك في يوم إجازة)",
     },
     stations: {
       breadcrumb: "تقرير المحطات",
@@ -869,6 +874,11 @@ export const translations = {
       backToOverview: "Driver Performance",
       projectMonthly: "{project} Performance — {month}",
       noDataForMonth: "No data for this project in the selected month.",
+      excludedDays: "{n} day(s) excluded for a wrong odometer reading (negative or over {max} km)",
+      wrongReading: "Wrong reading: {km} km (not counted)",
+      noActiveDrivers: "No active drivers in this project.",
+      noShift: "No shift",
+      noShiftTitle: "Fuel recorded on a day with no shift (e.g. automatic fuel on a day off)",
     },
     stations: {
       breadcrumb: "Station Report",
