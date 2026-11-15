@@ -3,7 +3,7 @@
 import { describe, expect, it } from "vitest";
 import { buildDriverComparison, buildGroupMetrics, dailyDistance } from "./calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "./constants";
-import { attachDailyFuel, buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm, isFuelDiffHigh } from "./driverPerformance";
+import { attachDailyFuel, buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm, hasEnoughFuelData, isFuelDiffHigh } from "./driverPerformance";
 import { expectedFuelCost } from "./calc";
 
 const CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
@@ -165,6 +165,26 @@ describe("expected fuel, measured days only", () => {
   it("has no % when nothing is expected (no rates)", () => {
     const [noRates] = buildDriverPerfRows(driver, groups, fuel, automatic, [], from, to);
     expect([noRates.expectedFuel, noRates.measuredFuel, noRates.fuelDiffPct]).toEqual([0, 0, null]);
+  });
+
+  it("counts measured days and km, and flags too little data", () => {
+    expect([r.workingDays, r.measuredDays, r.measuredKm]).toEqual([3, 1, 100]);
+    expect(r.coverage).toBeCloseTo(1 / 3);
+    expect(r.enoughData).toBe(false);
+  });
+
+  it("needs at least 80% of shift days measured and 300 km", () => {
+    expect(hasEnoughFuelData(8, 10, 300)).toBe(true);
+    expect(hasEnoughFuelData(7, 10, 5000)).toBe(false); // 70% measured
+    expect(hasEnoughFuelData(10, 10, 299)).toBe(false); // too few km
+    expect(hasEnoughFuelData(0, 0, 0)).toBe(false);     // no shift days
+  });
+
+  it("applies the same rule to the project total", () => {
+    const full = { ...r, workingDays: 10, measuredDays: 9, measuredKm: 400 };
+    expect(buildProjectSummary([full]).enoughData).toBe(true);
+    expect(buildProjectSummary([full, r]).coverage).toBeCloseTo(10 / 13);
+    expect(buildProjectSummary([full, r]).enoughData).toBe(false);
   });
 
   it("alerts only above +20%", () => {

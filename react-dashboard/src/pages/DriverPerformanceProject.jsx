@@ -55,12 +55,12 @@ export default function DriverPerformanceProject() {
     { accessorKey: "expectedFuel", header: t("driverPerformance.colExpectedFuel"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
     {
       accessorKey: "fuelDiff", header: t("driverPerformance.colFuelDiff"), meta: { align: "end" },
-      cell: ({ row }) => <FuelDiff diff={row.original.fuelDiff} pct={row.original.fuelDiffPct} show="sar" />,
+      cell: ({ row }) => <FuelDiff data={row.original} show="sar" />,
     },
     {
       accessorKey: "fuelDiffPct", header: t("driverPerformance.colFuelDiffPct"), meta: { align: "end" },
       sortingFn: (a, b) => (a.original.fuelDiffPct ?? -Infinity) - (b.original.fuelDiffPct ?? -Infinity),
-      cell: ({ row }) => <FuelDiff diff={row.original.fuelDiff} pct={row.original.fuelDiffPct} show="pct" />,
+      cell: ({ row }) => <FuelDiff data={row.original} show="pct" />,
     },
     { accessorKey: "totalDist", header: t("driverPerformance.colTotalDistance"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(0) },
     { accessorKey: "totalDelivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" } },
@@ -110,7 +110,7 @@ export default function DriverPerformanceProject() {
               <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(summary.avgFuelPerShipment)} />
               <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${summary.avgFuelPerKm.toFixed(2)} SAR/km`} />
               <Field label={t("driverPerformance.kpiExpectedFuel")} val={money(summary.expectedFuel)} />
-              <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff diff={summary.fuelDiff} pct={summary.fuelDiffPct} />} />
+              <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff data={summary} />} />
             </div>
             {summary.excludedDays > 0 && (
               <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: summary.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>

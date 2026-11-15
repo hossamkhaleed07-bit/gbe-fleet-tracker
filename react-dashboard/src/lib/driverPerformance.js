@@ -50,6 +50,17 @@ export function isFuelDiffHigh(pct) {
   return pct != null && pct > FUEL_DIFF_ALERT_PCT;
 }
 
+// The Difference is only trusted (and can turn red) when enough of the month
+// was measured: at least this share of shift days with a valid distance and an
+// expected cost, and at least this many measured km. Otherwise "not enough data".
+// Checked on Sep–Oct 2026: median Difference 0% for driver-months that pass.
+export const MIN_MEASURED_COVERAGE = 0.8;
+export const MIN_MEASURED_KM = 300;
+
+export function hasEnoughFuelData(measuredDays, shiftDays, measuredKm) {
+  return shiftDays > 0 && measuredDays / shiftDays >= MIN_MEASURED_COVERAGE && measuredKm >= MIN_MEASURED_KM;
+}
+
 // Difference (actual − expected) as a % of expected; null when nothing is expected.
 function diffPct(actual, expected) {
   return expected > 0 ? ((actual - expected) / expected) * 100 : null;
@@ -83,6 +94,8 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       excludedDays: 0,
       expectedFuel: 0,
       measuredFuel: 0,
+      measuredDays: 0,
+      measuredKm: 0,
       workingDays: 0,
       daysOff: 0,
       startOdo: null,
@@ -135,6 +148,7 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       if (m.distCounted != null) row.totalDist += m.distCounted;
       if (m.distCounted != null && m.fuelCost !== "—") {
         row.expectedFuel += Number(m.fuelCost);
+        row.measuredKm += m.distCounted;
         measuredDays.add(g.day);
       }
       if (m.distInvalid) row.excludedDays++;
@@ -143,6 +157,7 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
     row.startOdo = readings.length ? readings[0] : null;
     row.endOdo = readings.length ? readings[readings.length - 1] : null;
     row.workingDays = workingDaySet.size;
+    row.measuredDays = measuredDays.size;
     for (const day of measuredDays) row.measuredFuel += fuelByKey[`${identity_number}|${day}`] || 0;
 
     if (from && to) {
@@ -171,6 +186,8 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
     unmeasuredFuel: row.totalFuel - row.measuredFuel,
     fuelDiff: row.measuredFuel - row.expectedFuel,
     fuelDiffPct: diffPct(row.measuredFuel, row.expectedFuel),
+    coverage: safeDiv(row.measuredDays, row.workingDays),
+    enoughData: hasEnoughFuelData(row.measuredDays, row.workingDays, row.measuredKm),
   }));
 }
 
@@ -184,6 +201,9 @@ export function buildProjectSummary(rows) {
   const excludedDays = rows.reduce((s, r) => s + r.excludedDays, 0);
   const expectedFuel = rows.reduce((s, r) => s + (r.expectedFuel || 0), 0);
   const measuredFuel = rows.reduce((s, r) => s + (r.measuredFuel || 0), 0);
+  const measuredDays = rows.reduce((s, r) => s + (r.measuredDays || 0), 0);
+  const measuredKm = rows.reduce((s, r) => s + (r.measuredKm || 0), 0);
+  const shiftDays = rows.reduce((s, r) => s + (r.workingDays || 0), 0);
   const activeDrivers = rows.length;
   return {
     totalFuel, totalDist, totalDelivered, excludedDays, activeDrivers,
@@ -191,6 +211,9 @@ export function buildProjectSummary(rows) {
     unmeasuredFuel: totalFuel - measuredFuel,
     fuelDiff: measuredFuel - expectedFuel,
     fuelDiffPct: diffPct(measuredFuel, expectedFuel),
+    measuredDays, measuredKm,
+    coverage: safeDiv(measuredDays, shiftDays),
+    enoughData: hasEnoughFuelData(measuredDays, shiftDays, measuredKm),
     avgFuelPerDriver: safeDiv(totalFuel, activeDrivers),
     avgFuelPerShipment: safeDiv(totalFuel, totalDelivered),
     avgFuelPerKm: safeDiv(totalFuel, totalDist),

@@ -102,7 +102,7 @@ export default function DriverPerformance() {
                   <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(s.avgFuelPerShipment)} />
                   <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${s.avgFuelPerKm.toFixed(2)} SAR/km`} />
                   <Field label={t("driverPerformance.kpiExpectedFuel")} val={money(s.expectedFuel)} />
-                  <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff diff={s.fuelDiff} pct={s.fuelDiffPct} />} />
+                  <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff data={s} />} />
                 </div>
                 {s.excludedDays > 0 && (
                   <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: s.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>

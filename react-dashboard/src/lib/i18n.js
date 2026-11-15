@@ -330,6 +330,8 @@ export const translations = {
       colExpectedFuel: "الوقود المتوقع",
       colFuelDiff: "الفرق (ريال)",
       colFuelDiffPct: "الفرق %",
+      notEnoughData: "بيانات مش كفاية",
+      notEnoughDataTitle: "{diff}. اتقاس {cov}% من أيام الوردية و{km} كم بس (لازم {minCov}% و{minKm} كم على الأقل).",
       unmeasuredFuel: "{sar} ريال وقود في أيام مفيهاش مسافة صحيحة (قراءة عداد غلط أو ناقصة، أو مفيش وردية) مش داخلين في المقارنة بالمتوقع.",
     },
     stations: {
@@ -890,6 +892,8 @@ export const translations = {
       colExpectedFuel: "Expected Fuel",
       colFuelDiff: "Difference (SAR)",
       colFuelDiffPct: "Difference %",
+      notEnoughData: "Not enough data",
+      notEnoughDataTitle: "{diff}. Only {cov}% of shift days and {km} km were measured (needs at least {minCov}% and {minKm} km).",
       unmeasuredFuel: "{sar} SAR of fuel on days without a valid distance (wrong or missing odometer reading, or no shift) is not compared with expected.",
     },
     stations: {

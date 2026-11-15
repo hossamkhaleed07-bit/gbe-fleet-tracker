@@ -404,6 +404,7 @@
   .badge.complete { background: var(--c-green-bg); color: var(--c-green-ink); }
   .badge.partial { background: var(--c-orange-bg); color: var(--c-orange-ink); }
   .badge.critical { background: color-mix(in srgb, var(--critical) 12%, transparent); color: var(--critical); }
+  .badge.muted { background: color-mix(in srgb, var(--ink-muted) 16%, transparent); color: var(--ink-muted); }
   select.badge { border: none; appearance: none; cursor: pointer; }
   select.badge:disabled { opacity: 0.6; cursor: default; }
 
