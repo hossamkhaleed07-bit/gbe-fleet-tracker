@@ -7,6 +7,7 @@ import MonthPicker from "../components/MonthPicker";
 import MetricBarList from "../components/MetricBarList";
 import DataTable from "../components/DataTable";
 import HeroPortal from "../components/HeroPortal";
+import FuelDiff from "../components/FuelDiff";
 import { localToday } from "../lib/calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "../lib/constants";
 import {
@@ -20,6 +21,7 @@ export default function DriverPerformanceProject() {
   const { project } = useParams();
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
+    vehicleRates, vehicleFuelTypes, stationRates,
     to, setMonthRange, loading,
   } = useDashboard();
   const { t, lang } = useLang();
@@ -38,8 +40,9 @@ export default function DriverPerformanceProject() {
 
   const rows = useMemo(() => {
     const drivers = scopedDrivers.filter(d => d.is_active && d.project === project);
-    return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
-  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, project, from, toVal]);
+    return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal,
+      { vehicleRates, vehicleFuelTypes, stationRates });
+  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, vehicleRates, vehicleFuelTypes, stationRates, project, from, toVal]);
 
   const summary = useMemo(() => buildProjectSummary(rows), [rows]);
   const totalFuel = summary.totalFuel || 1;
@@ -49,6 +52,16 @@ export default function DriverPerformanceProject() {
     { accessorKey: "full_name", header: t("driverPerformance.colDriver") },
     { accessorKey: "identity_number", header: t("compare.colIdNumber") },
     { accessorKey: "totalFuel", header: t("compare.colTotalFuelCost"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
+    { accessorKey: "expectedFuel", header: t("driverPerformance.colExpectedFuel"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
+    {
+      accessorKey: "fuelDiff", header: t("driverPerformance.colFuelDiff"), meta: { align: "end" },
+      cell: ({ row }) => <FuelDiff diff={row.original.fuelDiff} pct={row.original.fuelDiffPct} show="sar" />,
+    },
+    {
+      accessorKey: "fuelDiffPct", header: t("driverPerformance.colFuelDiffPct"), meta: { align: "end" },
+      sortingFn: (a, b) => (a.original.fuelDiffPct ?? -Infinity) - (b.original.fuelDiffPct ?? -Infinity),
+      cell: ({ row }) => <FuelDiff diff={row.original.fuelDiff} pct={row.original.fuelDiffPct} show="pct" />,
+    },
     { accessorKey: "totalDist", header: t("driverPerformance.colTotalDistance"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(0) },
     { accessorKey: "totalDelivered", header: t("driverPerformance.colTotalDelivered"), meta: { align: "end" } },
     { accessorKey: "fuelPerKm", header: t("driverPerformance.colFuelPerKm"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(2) },
@@ -96,9 +109,14 @@ export default function DriverPerformanceProject() {
               <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(summary.avgFuelPerDriver)} />
               <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(summary.avgFuelPerShipment)} />
               <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${summary.avgFuelPerKm.toFixed(2)} SAR/km`} />
+              <Field label={t("driverPerformance.kpiExpectedFuel")} val={money(summary.expectedFuel)} />
+              <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff diff={summary.fuelDiff} pct={summary.fuelDiffPct} />} />
             </div>
             {summary.excludedDays > 0 && (
               <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: summary.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>
+            )}
+            {summary.unmeasuredFuel > 0 && (
+              <div className="ov-block-sub" style={{ marginTop: "0.3rem" }}>{t("driverPerformance.unmeasuredFuel", { sar: summary.unmeasuredFuel.toFixed(0) })}</div>
             )}
           </div>
 

@@ -37,15 +37,40 @@ function safeDiv(a, b) {
   return b > 0 ? a / b : 0;
 }
 
-// buildGroupMetrics() needs a vehicle-rates/station-rates ctx to compute its
-// "expected fuel" estimate — we only ever read .dist/.delivered from it here
-// (this feature's own fuel figures come from reinforcement/automatic rows
-// directly, not that estimate), so an all-empty ctx is safe and correct.
+// buildGroupMetrics() needs a vehicle-rates/station-rates ctx for its
+// "expected fuel" estimate. The daily table only reads .dist/.delivered from
+// it, so an all-empty ctx is enough there; the driver totals pass the real
+// rates (see buildDriverPerfRows) to add up Expected Fuel.
 const METRICS_CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
+
+// Actual fuel more than this % above expected is shown as an alert.
+export const FUEL_DIFF_ALERT_PCT = 20;
+
+export function isFuelDiffHigh(pct) {
+  return pct != null && pct > FUEL_DIFF_ALERT_PCT;
+}
+
+// Difference (actual − expected) as a % of expected; null when nothing is expected.
+function diffPct(actual, expected) {
+  return expected > 0 ? ((actual - expected) / expected) * 100 : null;
+}
 
 // One row per driver: total fuel cost, distance, deliveries, working/off days
 // and the efficiency ratios derived from them, all scoped to [from, to].
-export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, automaticFuelRows, attendanceRows, from, to) {
+//
+// Expected Fuel (rates = { vehicleRates, vehicleFuelTypes, stationRates }) is
+// compared on MEASURED DAYS only: driver-days with a counted distance and a
+// known expected cost. A day with a wrong odometer reading, a missing start or
+// end reading, or fuel but no shift has no expected fuel, so its actual fuel is
+// left out of the comparison too (measuredFuel) and reported as unmeasuredFuel.
+// totalFuel stays every fuel row in [from, to].
+export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, automaticFuelRows, attendanceRows, from, to, rates = {}) {
+  const metricsCtx = { ...METRICS_CTX, ...rates };
+  const fuelByKey = {};
+  const addFuel = (id, day, amount) => {
+    const k = `${id}|${day}`;
+    fuelByKey[k] = (fuelByKey[k] || 0) + amount;
+  };
   const byDriver = {};
   for (const d of drivers) {
     byDriver[d.identity_number] = {
@@ -56,6 +81,8 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       totalDist: 0,
       totalDelivered: 0,
       excludedDays: 0,
+      expectedFuel: 0,
+      measuredFuel: 0,
       workingDays: 0,
       daysOff: 0,
       startOdo: null,
@@ -67,12 +94,17 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
     if (r.status !== "approved") continue;
     if (!inRange(r.shift_date, from, to)) continue;
     const row = byDriver[r.identity_number];
-    if (row) row.totalFuel += Number(r.amount || 0) + Number(r.loan_adjustment || 0);
+    if (!row) continue;
+    const amount = Number(r.amount || 0) + Number(r.loan_adjustment || 0);
+    row.totalFuel += amount;
+    addFuel(r.identity_number, r.shift_date, amount);
   }
   for (const r of automaticFuelRows) {
     if (!inRange(r.allocation_date, from, to)) continue;
     const row = byDriver[r.identity_number];
-    if (row) row.totalFuel += Number(r.amount || 0);
+    if (!row) continue;
+    row.totalFuel += Number(r.amount || 0);
+    addFuel(r.identity_number, r.allocation_date, Number(r.amount || 0));
   }
 
   const groupsByDriver = {};
@@ -94,18 +126,24 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
 
     const readings = [];
     const workingDaySet = new Set();
+    const measuredDays = new Set();
     for (const g of groups) {
       if (g.start?.odo_reading != null) readings.push(g.start.odo_reading);
       if (g.end?.odo_reading != null) readings.push(g.end.odo_reading);
       if (g.start || g.end) workingDaySet.add(g.day);
-      const m = buildGroupMetrics(g, METRICS_CTX);
+      const m = buildGroupMetrics(g, metricsCtx);
       if (m.distCounted != null) row.totalDist += m.distCounted;
+      if (m.distCounted != null && m.fuelCost !== "—") {
+        row.expectedFuel += Number(m.fuelCost);
+        measuredDays.add(g.day);
+      }
       if (m.distInvalid) row.excludedDays++;
       if (m.delivered !== "—") row.totalDelivered += Number(m.delivered);
     }
     row.startOdo = readings.length ? readings[0] : null;
     row.endOdo = readings.length ? readings[readings.length - 1] : null;
     row.workingDays = workingDaySet.size;
+    for (const day of measuredDays) row.measuredFuel += fuelByKey[`${identity_number}|${day}`] || 0;
 
     if (from && to) {
       const d = new Date(from + "T00:00:00Z");
@@ -130,6 +168,9 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
     fuelPerKm: safeDiv(row.totalFuel, row.totalDist),
     fuelPerShipment: safeDiv(row.totalFuel, row.totalDelivered),
     avgKmPerDay: safeDiv(row.totalDist, row.workingDays),
+    unmeasuredFuel: row.totalFuel - row.measuredFuel,
+    fuelDiff: row.measuredFuel - row.expectedFuel,
+    fuelDiffPct: diffPct(row.measuredFuel, row.expectedFuel),
   }));
 }
 
@@ -141,9 +182,15 @@ export function buildProjectSummary(rows) {
   const totalDist = rows.reduce((s, r) => s + r.totalDist, 0);
   const totalDelivered = rows.reduce((s, r) => s + r.totalDelivered, 0);
   const excludedDays = rows.reduce((s, r) => s + r.excludedDays, 0);
+  const expectedFuel = rows.reduce((s, r) => s + (r.expectedFuel || 0), 0);
+  const measuredFuel = rows.reduce((s, r) => s + (r.measuredFuel || 0), 0);
   const activeDrivers = rows.length;
   return {
     totalFuel, totalDist, totalDelivered, excludedDays, activeDrivers,
+    expectedFuel, measuredFuel,
+    unmeasuredFuel: totalFuel - measuredFuel,
+    fuelDiff: measuredFuel - expectedFuel,
+    fuelDiffPct: diffPct(measuredFuel, expectedFuel),
     avgFuelPerDriver: safeDiv(totalFuel, activeDrivers),
     avgFuelPerShipment: safeDiv(totalFuel, totalDelivered),
     avgFuelPerKm: safeDiv(totalFuel, totalDist),

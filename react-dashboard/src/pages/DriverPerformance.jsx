@@ -7,6 +7,7 @@ import Field from "../components/Field";
 import MonthPicker from "../components/MonthPicker";
 import MetricBarList from "../components/MetricBarList";
 import HeroPortal from "../components/HeroPortal";
+import FuelDiff from "../components/FuelDiff";
 import { localToday } from "../lib/calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "../lib/constants";
 import {
@@ -19,6 +20,7 @@ const money2 = (v) => `${v.toFixed(2)} SAR`;
 export default function DriverPerformance() {
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
+    vehicleRates, vehicleFuelTypes, stationRates,
     to, setMonthRange, loading,
   } = useDashboard();
   const { t } = useLang();
@@ -40,8 +42,9 @@ export default function DriverPerformance() {
   // (cards, charts, top consumers) reads from.
   const allRows = useMemo(() => {
     const drivers = scopedDrivers.filter(d => d.is_active && PROJECT_LIST.includes(d.project));
-    return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
-  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal]);
+    return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal,
+      { vehicleRates, vehicleFuelTypes, stationRates });
+  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, vehicleRates, vehicleFuelTypes, stationRates, from, toVal]);
 
   const projectSummaries = useMemo(() => {
     return PROJECT_LIST.map(p => ({
@@ -98,9 +101,14 @@ export default function DriverPerformance() {
                   <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(s.avgFuelPerDriver)} />
                   <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(s.avgFuelPerShipment)} />
                   <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${s.avgFuelPerKm.toFixed(2)} SAR/km`} />
+                  <Field label={t("driverPerformance.kpiExpectedFuel")} val={money(s.expectedFuel)} />
+                  <Field label={t("driverPerformance.kpiFuelDiff")} val={<FuelDiff diff={s.fuelDiff} pct={s.fuelDiffPct} />} />
                 </div>
                 {s.excludedDays > 0 && (
                   <div className="ov-block-sub" style={{ marginTop: "0.6rem" }}>⚠ {t("driverPerformance.excludedDays", { n: s.excludedDays, max: MAX_JUMP_KM_PER_DAY })}</div>
+                )}
+                {s.unmeasuredFuel > 0 && (
+                  <div className="ov-block-sub" style={{ marginTop: "0.3rem" }}>{t("driverPerformance.unmeasuredFuel", { sar: s.unmeasuredFuel.toFixed(0) })}</div>
                 )}
               </>
             )}

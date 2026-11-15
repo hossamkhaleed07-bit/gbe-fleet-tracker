@@ -162,7 +162,8 @@ export function expectedFuelCost(vehiclePlate, liters, vehicleFuelTypes, station
   const fuelType = vehicleFuelTypes[vehiclePlate];
   const prices = stationRates[stationName];
   if (!fuelType || !prices) return "—";
-  const price = fuelType === "Diesel" ? prices.diesel : prices.petrol;
+  // fuel_type is free text in vehicles ("Diesel", "diesel", "91")
+  const price = String(fuelType).trim().toLowerCase() === "diesel" ? prices.diesel : prices.petrol;
   if (price == null) return "—";
   return (Number(liters) * price).toFixed(2);
 }

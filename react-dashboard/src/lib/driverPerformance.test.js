@@ -3,7 +3,8 @@
 import { describe, expect, it } from "vitest";
 import { buildDriverComparison, buildGroupMetrics, dailyDistance } from "./calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "./constants";
-import { attachDailyFuel, buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm } from "./driverPerformance";
+import { attachDailyFuel, buildDriverPerfRows, buildProjectSummary, formatDailyFuelPerKm, isFuelDiffHigh } from "./driverPerformance";
+import { expectedFuelCost } from "./calc";
 
 const CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
 const entry = (id, day, type, odo, at) => ({ identity_number: id, shift_date: day, shift_type: type, odo_reading: odo, created_at: `${day}T${at}:00Z` });
@@ -11,7 +12,7 @@ const entry = (id, day, type, odo, at) => ({ identity_number: id, shift_date: da
 describe("project list", () => {
   it("Driver Performance uses the shared list, which includes JDL", () => {
     expect(PROJECT_LIST).toContain("JDL");
-    expect(PROJECT_LIST).toEqual(expect.arrayContaining(["ADM", "FDP", "LMS", "MGF"]));
+    expect([...PROJECT_LIST].sort()).toEqual(["ADM", "FDP", "JDL", "LMS", "MGF"]);
   });
 });
 
@@ -117,5 +118,62 @@ describe("daily table rows for fuel on days without a shift", () => {
   it("makes the table add up to the driver's Total Fuel", () => {
     const [summary] = buildDriverPerfRows([{ identity_number: "A", full_name: "x", project: "FDP" }], [], reinforcement, automatic, [], from, to);
     expect(rows.reduce((s, r) => s + r.fuel, 0)).toBe(summary.totalFuel);
+  });
+});
+
+describe("expected fuel, measured days only", () => {
+  const from = "2026-11-01", to = "2026-11-30";
+  // 10 km per litre, diesel at 2 SAR/L: 100 km = 10 L = 20 SAR expected
+  const rates = { vehicleRates: { V1: 10 }, vehicleFuelTypes: { V1: "Diesel" }, stationRates: { S1: { diesel: 2, petrol: 3 } } };
+  const e = (day, type, odo, at) => ({ ...entry("A", day, type, odo, at), vehicle_plate: "V1", station_name: "S1" });
+  const rows = [
+    e("2026-11-03", "start", 1000, "06:00"), e("2026-11-03", "end", 1100, "18:00"),     // 100 km: measured
+    e("2026-11-04", "start", 1100, "06:00"), e("2026-11-04", "end", 11000, "18:00"),    // wrong reading
+    e("2026-11-05", "start", 11000, "06:00"),                                         // no end reading
+  ];
+  const groups = buildDriverComparison(rows, { A: "FDP" });
+  const fuel = [
+    { identity_number: "A", shift_date: "2026-11-03", status: "approved", amount: 25, loan_adjustment: 0 },
+    { identity_number: "A", shift_date: "2026-11-04", status: "approved", amount: 50, loan_adjustment: 0 },
+    { identity_number: "A", shift_date: "2026-11-05", status: "approved", amount: 30, loan_adjustment: 0 },
+  ];
+  const automatic = [{ identity_number: "A", allocation_date: "2026-11-06", amount: 20 }]; // day off
+  const driver = [{ identity_number: "A", full_name: "x", project: "FDP" }];
+  const [r] = buildDriverPerfRows(driver, groups, fuel, automatic, [], from, to, rates);
+
+  it("adds expected fuel only for days with a counted distance", () => {
+    expect(r.expectedFuel).toBeCloseTo(20);
+    expect(r.excludedDays).toBe(1);
+  });
+
+  it("compares only the actual fuel of those same days", () => {
+    expect(r.totalFuel).toBe(25 + 50 + 30 + 20);
+    expect(r.measuredFuel).toBe(25);
+    expect(r.unmeasuredFuel).toBe(50 + 30 + 20);
+    expect(r.fuelDiff).toBeCloseTo(5);
+    expect(r.fuelDiffPct).toBeCloseTo(25);
+  });
+
+  it("adds up per project", () => {
+    const s = buildProjectSummary([r, { ...r, expectedFuel: 30, measuredFuel: 30, totalFuel: 30 }]);
+    expect(s.expectedFuel).toBeCloseTo(50);
+    expect(s.measuredFuel).toBe(55);
+    expect(s.unmeasuredFuel).toBe(155 - 55);
+    expect(s.fuelDiffPct).toBeCloseTo(10);
+  });
+
+  it("has no % when nothing is expected (no rates)", () => {
+    const [noRates] = buildDriverPerfRows(driver, groups, fuel, automatic, [], from, to);
+    expect([noRates.expectedFuel, noRates.measuredFuel, noRates.fuelDiffPct]).toEqual([0, 0, null]);
+  });
+
+  it("alerts only above +20%", () => {
+    expect([isFuelDiffHigh(20), isFuelDiffHigh(20.5), isFuelDiffHigh(-40), isFuelDiffHigh(null)]).toEqual([false, true, false, false]);
+  });
+
+  it("prices a lowercase 'diesel' vehicle as diesel", () => {
+    const prices = { S1: { diesel: 2, petrol: 3 } };
+    expect(expectedFuelCost("V", "10", { V: "diesel" }, "S1", prices)).toBe("20.00");
+    expect(expectedFuelCost("V", "10", { V: "91" }, "S1", prices)).toBe("30.00");
   });
 });
