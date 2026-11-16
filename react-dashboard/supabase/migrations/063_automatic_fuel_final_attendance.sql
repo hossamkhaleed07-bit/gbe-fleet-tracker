@@ -28,8 +28,9 @@ begin;
 --     final code for p_date is P.  Amounts are unchanged from 061 (the driver's
 --     own amount, else the default).
 --   * the cron job daily-fdp-automatic-fuel moves from 09:00 UTC (12:00 Riyadh,
---     allocating TODAY) to 21:30 UTC (00:30 Riyadh, allocating the day that just
---     ended).
+--     allocating TODAY) to 03:30 UTC (06:30 Riyadh, allocating the PREVIOUS day).
+--     Running at 06:30 rather than just after midnight leaves the night for a
+--     manager to enter a code (WO, AL, ...) for the day before fuel is given.
 --
 -- Allocations already made are NOT touched (see the past-records proposal).
 -- No double allocation on the switch-over day: the old job already made today's
@@ -114,7 +115,7 @@ revoke all on function private.riyadh_today(), private.auto_fuel_final_attendanc
 
 
 -- ---------------------------------------------------------------------
--- 3) Cron: 21:30 UTC = 00:30 Riyadh, for the day that just ended
+-- 3) Cron: 03:30 UTC = 06:30 Riyadh, for the previous Riyadh day
 -- ---------------------------------------------------------------------
 
 do $$
@@ -126,7 +127,7 @@ end $$;
 
 select cron.schedule(
   'daily-fdp-automatic-fuel',
-  '30 21 * * *',
+  '30 3 * * *',
   $$select public.allocate_daily_automatic_fuel();$$
 );
 

@@ -11,7 +11,7 @@ select to_regprocedure('private.riyadh_today()') is not null                    
        position('auto_fuel_final_attendance' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as checks_attendance,
        position('AUTO_FUEL_DAY_NOT_FINAL' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as refuses_open_day;
 
--- 2) The cron job: expect one row, schedule '30 21 * * *', active = true.
+-- 2) The cron job: expect one row, schedule '30 3 * * *' (06:30 Riyadh), active = true.
 select jobname, schedule, command, active
 from cron.job where jobname = 'daily-fdp-automatic-fuel';
 
@@ -27,7 +27,7 @@ from public.drivers d
 where d.project = 'FDP' and d.is_active = true
 group by 1 order by 1;
 
--- 5) After the first 00:30 run (next day): yesterday's allocations should all be P days.
+-- 5) After the first 06:30 Riyadh run: yesterday's allocations should all be P days.
 --    Expect: non_p_rows = 0
 select count(*) as rows_for_yesterday,
        count(*) filter (where private.auto_fuel_final_attendance(a.identity_number, a.allocation_date) <> 'P') as non_p_rows

@@ -12,6 +12,7 @@ const M061 = read("../migrations/061_automatic_fuel_amounts.sql");
 const M063 = read("../migrations/063_automatic_fuel_final_attendance.sql");
 const R063 = read("../migrations/063_rollback.sql");
 const REPORT = read("../migrations/063_report_non_p_by_month.sql");
+const REPORT_INV = read("../migrations/063_report_non_p_with_invoices.sql");
 
 // Tables as 004/008/033/036/038/042 left them, plus a stand-in for pg_cron
 // (not available in PGlite) holding the 036 schedule.
@@ -167,9 +168,9 @@ describe("daily allocation", () => {
 });
 
 describe("cron and access", () => {
-  it("moves the job to 21:30 UTC (00:30 Riyadh), calling the function with no date", async () => {
+  it("moves the job to 03:30 UTC (06:30 Riyadh), calling the function with no date", async () => {
     const { rows } = await db.query("select schedule, command from cron.job where jobname = 'daily-fdp-automatic-fuel'");
-    expect(rows).toEqual([{ schedule: "30 21 * * *", command: "select public.allocate_daily_automatic_fuel();" }]);
+    expect(rows).toEqual([{ schedule: "30 3 * * *", command: "select public.allocate_daily_automatic_fuel();" }]);
   });
 
   it("nobody signed in can run the job or the attendance helper", async () => {
@@ -211,5 +212,34 @@ describe("report of fuel already given on non-P days", () => {
       // 7 active FDP drivers; P = 1001, 1005, 1007; non-P = 1002 A, 1004 WO, 1006 VM, 1008 A
       month: yesterday.slice(0, 7), allocations: 7, total_sar: "140", p_days: 3, p_sar: "60", non_p_days: 4, non_p_sar: "80",
     }]);
+  });
+});
+
+describe("report of non-P days with invoices (Sep–Nov 2026)", () => {
+  it("splits the codes and matches PetroApp/Futurehub invoices by driver and day", async () => {
+    const day = "2026-10-05";
+    await seedDay(day);
+    await db.query(`
+      insert into public.automatic_fuel_allocations (identity_number, project, allocation_date, amount)
+      select identity_number, 'FDP', $1::date, 20 from public.drivers where project = 'FDP' and is_active`, [day]);
+    await db.exec(`
+      insert into public.fuel_invoice_records (data_source, cost, entry_date, use_type, nid) values
+        ('PetroApp',  30, '${day}', 'FDP use', '1004'),     -- WO day: fuel filled anyway
+        ('Futurehub', 10, '${day}', 'DA Use',  ' 1008 '),   -- NM day, NID with spaces
+        ('Other',     99, '${day}', 'FDP use', '1006'),     -- not PetroApp/Futurehub
+        ('PetroApp',  50, '${day}', 'FDP use', '1001'),     -- a P day: not reported
+        ('PetroApp',  40, '2026-10-06', 'FDP use', '1002'); -- another day
+    `);
+    const [a, b] = await db.exec(REPORT_INV);
+    const codes = Object.fromEntries(
+      a.rows.filter(r => r.month && r.final_code).map(r => [r.final_code, [r.days, Number(r.automatic_fuel_sar)]]),
+    );
+    // 1002: no row, no form; 1004 WO; 1006 VM; 1008 NM stored, no form
+    expect(codes).toEqual({ WO: [1, 20], VM: [1, 20], "NM (past day)": [1, 20], "no code (past day)": [1, 20] });
+    const total = b.rows.find(r => r.month === null);
+    expect([
+      Number(total.non_p_days), Number(total.days_with_invoice), Number(total.automatic_fuel_sar_on_those_days),
+      Number(total.invoices), Number(total.invoice_sar), Number(total.invoice_sar_fdp_use),
+    ]).toEqual([4, 2, 40, 2, 40, 30]);
   });
 });
