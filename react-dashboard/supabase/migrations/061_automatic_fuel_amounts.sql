@@ -146,7 +146,8 @@ begin
   select default_amount into v_old from public.automatic_fuel_settings for update;
   if v_old = p_amount then return p_amount; end if;
   update public.automatic_fuel_settings
-     set default_amount = p_amount, updated_by = private.auto_fuel_actor(), updated_at = now();
+     set default_amount = p_amount, updated_by = private.auto_fuel_actor(), updated_at = now()
+   where id;  -- the single row; Supabase rejects an UPDATE without WHERE
   insert into public.automatic_fuel_amount_changes (kind, old_amount, new_amount, changed_by)
   values ('default', v_old, p_amount, private.auto_fuel_actor());
   return p_amount;
@@ -257,5 +258,7 @@ grant execute on function public.auto_fuel_set_default(numeric), public.auto_fue
 
 -- The daily job only: nobody signed in can trigger an allocation.
 revoke all on function public.allocate_daily_automatic_fuel(date) from public, anon, authenticated;
+
+notify pgrst, 'reload schema';
 
 commit;

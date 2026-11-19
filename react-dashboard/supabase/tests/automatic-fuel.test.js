@@ -9,6 +9,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const STUB = readFileSync(here("./supabase-stub.sql"), "utf8");
 const MIGRATION = readFileSync(here("../migrations/061_automatic_fuel_amounts.sql"), "utf8");
+const FIX_062 = readFileSync(here("../migrations/062_automatic_fuel_default_fix.sql"), "utf8");
 
 // drivers and automatic_fuel_allocations as 004/011/036/038 left them (no cron or
 // realtime in PGlite), plus the project-supervisor helpers of 050/053.
@@ -84,6 +85,17 @@ beforeEach(async () => {
   await db.exec(STUB);
   await db.exec(BASE);
   await db.exec(MIGRATION);
+  await db.exec(FIX_062);
+});
+
+// Supabase rejects UPDATE/DELETE without WHERE on API calls (safeupdate); PGlite
+// does not, so check the SQL itself.
+it("every UPDATE and DELETE in 061/062 has a WHERE (Supabase rejects them otherwise)", () => {
+  for (const sql of [MIGRATION, FIX_062]) {
+    const statements = [...sql.matchAll(/\b(?:update|delete\s+from)\s+public\.[^;]*;/gi)].map(m => m[0]);
+    expect(statements.length).toBeGreaterThan(0);
+    expect(statements.filter(s => !/\bwhere\b/i.test(s))).toEqual([]);
+  }
 });
 
 describe("daily allocation amounts", () => {
@@ -104,6 +116,21 @@ describe("daily allocation amounts", () => {
     await admin("select public.auto_fuel_set_driver_amount('1001', null)");
     await allocate("2026-11-03");
     expect(await amounts("2026-11-03")).toEqual({ 1001: 20, 1002: 20 });
+  });
+
+  it("default to 30, then drivers whose own amount is 30 back on the default: still 30, logged, past days unchanged", async () => {
+    await admin("select public.auto_fuel_set_driver_amount('1001', 30)");
+    await allocate("2026-11-01");
+    await admin("select public.auto_fuel_set_default(30)");
+    await admin(`select public.auto_fuel_set_driver_amount(a.identity_number, null)
+                 from public.automatic_fuel_driver_amounts a, public.automatic_fuel_settings s
+                 where a.amount = s.default_amount`);
+    expect((await db.query("select count(*)::int as n from public.automatic_fuel_driver_amounts")).rows[0].n).toBe(0);
+    await allocate("2026-11-02");
+    expect(await amounts("2026-11-01")).toEqual({ 1001: 30, 1002: 20 });
+    expect(await amounts("2026-11-02")).toEqual({ 1001: 30, 1002: 30 });
+    const log = (await changes()).map(c => [c.kind, c.identity_number, c.old_amount && Number(c.old_amount), c.new_amount && Number(c.new_amount)]);
+    expect(log.slice(1)).toEqual([["default", null, 20, 30], ["driver", "1001", 30, null]]);
   });
 
   it("changing amounts does not change allocations already made", async () => {
