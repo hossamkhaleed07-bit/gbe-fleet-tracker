@@ -51,4 +51,6 @@ alter table public.automatic_fuel_allocations
   drop column if exists adjusted_at,
   drop column if exists adjusted_by;
 
+notify pgrst, 'reload schema';
+
 commit;
