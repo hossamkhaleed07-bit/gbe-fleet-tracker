@@ -5,6 +5,7 @@
 -- Works before or after 063 is installed (it does not use the 063 helpers):
 -- same rule as 063 — a stored code wins (NM counts as no code); else a shift
 -- form that day = P; else a finished day = A; else NM (today, not final).
+-- Days voided with 064 are left out (works with or without 064 installed).
 -- =====================================================================
 
 with final as (
@@ -20,6 +21,7 @@ with final as (
   from public.automatic_fuel_allocations a
   left join public.driver_attendance att
     on att.identity_number = a.identity_number and att.attendance_date = a.allocation_date
+  where (to_jsonb(a) ->> 'voided_at') is null   -- 064: voided days are not counted
 )
 -- A) per month: all, P, non-P
 select to_char(allocation_date, 'YYYY-MM')                          as month,
@@ -47,6 +49,7 @@ with final as (
   from public.automatic_fuel_allocations a
   left join public.driver_attendance att
     on att.identity_number = a.identity_number and att.attendance_date = a.allocation_date
+  where (to_jsonb(a) ->> 'voided_at') is null   -- 064: voided days are not counted
 )
 select to_char(allocation_date, 'YYYY-MM') as month, final_code, count(*) as days, sum(amount) as sar
 from final

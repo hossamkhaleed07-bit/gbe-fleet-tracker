@@ -15,6 +15,7 @@
 --   'no code (past day)' - no attendance row at all
 -- Today and later are not final and are left out.
 -- An invoice is matched on its NID = the driver's ID number and its date.
+-- Days voided with 064 are left out (works with or without 064 installed).
 -- =====================================================================
 
 -- A) Automatic Fuel on non-P days, per month and code
@@ -32,6 +33,7 @@ with final as (
     on att.identity_number = a.identity_number and att.attendance_date = a.allocation_date
   where a.allocation_date >= date '2026-09-01' and a.allocation_date < date '2026-12-01'
     and a.allocation_date < (now() at time zone 'Asia/Riyadh')::date
+    and (to_jsonb(a) ->> 'voided_at') is null   -- 064: voided days are not counted
 )
 select to_char(allocation_date, 'YYYY-MM') as month, final_code,
        count(*) as days, sum(amount) as automatic_fuel_sar
@@ -55,6 +57,7 @@ with final as (
     on att.identity_number = a.identity_number and att.attendance_date = a.allocation_date
   where a.allocation_date >= date '2026-09-01' and a.allocation_date < date '2026-12-01'
     and a.allocation_date < (now() at time zone 'Asia/Riyadh')::date
+    and (to_jsonb(a) ->> 'voided_at') is null   -- 064: voided days are not counted
 ),
 inv as (
   select trim(nid) as nid, entry_date,
