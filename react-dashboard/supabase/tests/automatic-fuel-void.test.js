@@ -416,11 +416,24 @@ describe("list B: PetroApp fills with no automatic fuel and no approved reinforc
     expect(Number((await worked("1001", D)).rows[0].amount)).toBe(20);
     expect(await attendance("1001", D)).toBe("P");
     expect(await allocOn("1001", D)).toEqual({ amount: 20, source: "admin", voided: false });
-    expect(brief(await listB()).map(r => r[0])).not.toContain("1001");
+    expect(brief(await listB()).find(r => r[0] === "1001")[2]).toBe("worked_marked");
     const log = await one("select kind, old_amount::float as old, new_amount::float as new, reason from public.automatic_fuel_amount_changes where kind = 'forgot_form'");
     expect(log).toEqual({ kind: "forgot_form", old: 0, new: 20, reason: "Driver worked, forgot the form [attendance none -> P]" });
     // never twice
     await rejects(worked("1001", D), "AUTO_FUEL_ALREADY_MARKED");
+  });
+
+  it("a marked day stays in list B with its undo, also after the fuel is given", async () => {
+    await worked("1001", D);                       // old day: fuel given at once
+    const row = (await listB()).find(r => r.identity_number === "1001");
+    expect([row.status, row.note, Number(row.invoice_sar)]).toEqual(["worked_marked", "Driver worked, forgot the form", 30]);
+    const d5 = await daysAgo(5);                    // recent day: no invoice, fuel by the 06:30 job
+    await worked("1002", d5);
+    await db.query("select public.allocate_recent_automatic_fuel()");
+    const recent = (await listB(d5, d5)).find(r => r.identity_number === "1002");
+    expect([recent.status, Number(recent.invoice_sar)]).toEqual(["worked_marked", 0]);
+    await undoWorked("1001", D);                   // after undo: back as a voided day
+    expect((await listB()).find(r => r.identity_number === "1001").status).toBe("voided_day");
   });
 
   it("undo puts the old code back and voids the fuel it gave", async () => {

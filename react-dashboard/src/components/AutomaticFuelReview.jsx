@@ -197,11 +197,6 @@ function NoInvoiceList({ from, to, onChanged }) {
           </label>
         </div>
         <p className="af-hint">{t("automaticFuel.reviewHint")}</p>
-        <p className="af-hint">
-          {summary.lastInvoiceDate
-            ? t("automaticFuel.invoicesLoadedUntil", { date: summary.lastInvoiceDate })
-            : t("automaticFuel.noInvoicesLoaded")}
-        </p>
         <div className="af-review-chips">
           {REVIEW_STATUSES.map(s => (
             <button key={s} type="button" className="af-chip" aria-pressed={status === s} onClick={() => setStatus(status === s ? "" : s)}>

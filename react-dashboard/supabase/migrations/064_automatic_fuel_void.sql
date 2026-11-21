@@ -618,7 +618,8 @@ $$;
 -- PetroApp / Futurehub invoices, no active automatic fuel and no approved
 -- reinforcement.  Status, checked in this order:
 --   unentitled     already marked "Didn't work"                  (undo possible)
---   worked_marked  already marked "Worked, forgot the form"      (fuel coming / undo)
+--   worked_marked  already marked "Worked, forgot the form"      (undo; listed even
+--                  after its fuel is given, so the undo stays reachable)
 --   voided_day     that day's automatic fuel was voided           (Restore, or "Didn't work")
 --   fuel_coming    final code P and inside the next 06:30 run's window: nothing to do
 --   nearby_auto    the day before or after has automatic fuel whose own invoices
@@ -662,16 +663,24 @@ begin
     where f.data_source in ('PetroApp', 'Futurehub')
       and f.entry_date between p_from - 1 and p_to + 1
     group by 1, 2
+  ), marked as (
+    select w.identity_number as idn, w.work_date as d from public.automatic_fuel_forgot_form w
+    where w.undone_at is null and w.work_date between p_from and p_to
   ), fills as (
-    select i.idn, i.d, i.sar, i.n, dr.full_name, dr.assigned_vehicle_plate, dr.is_active
-    from inv i
-    join public.drivers dr on dr.identity_number = i.idn and dr.project = 'FDP'
-    where i.d between p_from and p_to
-      and i.d < private.riyadh_today()
-      and i.sar > 0
-      and not exists (select 1 from public.automatic_fuel_allocations a
-                      where a.identity_number = i.idn and a.allocation_date = i.d and a.voided_at is null)
-      and private.auto_fuel_reinforcement_sar(i.idn, i.d) = 0
+    -- an open fill, OR a day marked "Worked, forgot the form" (kept after its fuel
+    -- is given, so the admin can still undo it)
+    select k.idn, k.d, coalesce(i.sar, 0) as sar, coalesce(i.n, 0) as n,
+           dr.full_name, dr.assigned_vehicle_plate, dr.is_active
+    from (select inv.idn, inv.d from inv union select marked.idn, marked.d from marked) k
+    join public.drivers dr on dr.identity_number = k.idn and dr.project = 'FDP'
+    left join inv i on i.idn = k.idn and i.d = k.d
+    where k.d between p_from and p_to
+      and k.d < private.riyadh_today()
+      and (exists (select 1 from marked m where m.idn = k.idn and m.d = k.d)
+           or (coalesce(i.sar, 0) > 0
+               and not exists (select 1 from public.automatic_fuel_allocations a
+                               where a.identity_number = k.idn and a.allocation_date = k.d and a.voided_at is null)
+               and private.auto_fuel_reinforcement_sar(k.idn, k.d) = 0))
   ), nb as (
     select f.*,
       (select a.amount from public.automatic_fuel_allocations a
