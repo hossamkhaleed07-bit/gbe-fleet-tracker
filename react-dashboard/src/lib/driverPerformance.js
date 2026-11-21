@@ -43,6 +43,57 @@ function safeDiv(a, b) {
 // directly, not that estimate), so an all-empty ctx is safe and correct.
 const METRICS_CTX = { vehicleRates: {}, vehicleFuelTypes: {}, stationRates: {}, vehicleEndHistory: {}, approvedFuelByKey: {}, automaticFuelByKey: {} };
 
+// Project key for activity under an ID that is not in the drivers list and has
+// no project saved on any of its rows: shown on its own card so no money is lost.
+export const UNLISTED_PROJECT = "__unlisted";
+
+// The last day with any activity per driver: shift forms, approved
+// reinforcement, automatic fuel (not voided).  Used as "last working day" for
+// a driver who left (no deactivation date is stored yet).
+export function buildLastActivityByDriver({ shiftRows = [], reinforcementRows = [], automaticFuelRows = [] }) {
+  const last = {};
+  const see = (idn, day) => { if (idn && day && (!last[idn] || day > last[idn])) last[idn] = day; };
+  for (const r of shiftRows) see(r.identity_number, r.shift_date);
+  for (const r of reinforcementRows) if (r.status === "approved") see(r.identity_number, r.shift_date);
+  for (const r of automaticFuelRows) see(r.identity_number, r.allocation_date);
+  return last;
+}
+
+// Who is in a month's report: every ACTIVE driver of the listed projects (as
+// before), plus every driver with activity in [from, to] (a shift form, approved
+// reinforcement or automatic fuel), active or not, plus activity under an ID
+// that is not in the drivers list.  Project = the driver's current project; an
+// unlisted ID takes the project saved on its automatic fuel rows, else
+// UNLISTED_PROJECT (listed only when `projects` includes it).  Each entry carries left / lastWorkingDay / notInList.
+export function selectPerfDrivers(drivers, compareGroups, reinforcementRows, automaticFuelRows, from, to, { projects, lastActivityByDriver = {} } = {}) {
+  const active = new Map();     // idn -> true (activity in range)
+  const savedProject = {};      // unlisted ID -> project on its automatic fuel rows
+  for (const g of compareGroups) if (inRange(g.day, from, to) && (g.start || g.end)) active.set(g.identity_number, true);
+  for (const r of reinforcementRows) if (r.status === "approved" && r.shift_date && inRange(r.shift_date, from, to)) active.set(r.identity_number, true);
+  for (const r of automaticFuelRows) {
+    if (!r.allocation_date || !inRange(r.allocation_date, from, to)) continue;
+    active.set(r.identity_number, true);
+    if (r.project && !savedProject[r.identity_number]) savedProject[r.identity_number] = r.project;
+  }
+  const inProjects = (p) => !projects || projects.includes(p);
+  const out = [];
+  const known = new Set();
+  for (const d of drivers) {
+    known.add(d.identity_number);
+    if (!inProjects(d.project)) continue;
+    if (d.is_active) { out.push({ ...d, left: false, notInList: false, lastWorkingDay: null }); continue; }
+    if (!active.has(d.identity_number)) continue;   // left, and nothing this month
+    out.push({ ...d, left: true, notInList: false, lastWorkingDay: lastActivityByDriver[d.identity_number] || null });
+  }
+  for (const idn of active.keys()) {
+    if (!idn || known.has(idn)) continue;
+    const project = savedProject[idn] || UNLISTED_PROJECT;
+    if (!inProjects(project)) continue;   // UNLISTED_PROJECT only where asked for (the overview)
+    out.push({ identity_number: idn, full_name: null, project, is_active: false, left: false, notInList: true, lastWorkingDay: null });
+  }
+  return out;
+}
+
 // One row per driver: total fuel cost, distance, deliveries, working/off days
 // and the efficiency ratios derived from them, all scoped to [from, to].
 export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, automaticFuelRows, attendanceRows, from, to) {
@@ -52,6 +103,9 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       identity_number: d.identity_number,
       full_name: d.full_name,
       project: d.project,
+      left: !!d.left,
+      notInList: !!d.notInList,
+      lastWorkingDay: d.lastWorkingDay || null,
       totalFuel: 0,
       totalDist: 0,
       totalDelivered: 0,
@@ -107,9 +161,12 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
     row.endOdo = readings.length ? readings[readings.length - 1] : null;
     row.workingDays = workingDaySet.size;
 
-    if (from && to) {
+    // Days off: not for an unlisted ID (it has no attendance), and for a driver
+    // who left only up to the last working day (later days are not "off").
+    const offTo = row.left && row.lastWorkingDay && row.lastWorkingDay < to ? row.lastWorkingDay : to;
+    if (from && to && !row.notInList) {
       const d = new Date(from + "T00:00:00Z");
-      const endD = new Date(to + "T00:00:00Z");
+      const endD = new Date(offTo + "T00:00:00Z");
       let count = 0;
       while (d <= endD && count < 62) {
         const day = d.toISOString().slice(0, 10);
@@ -127,6 +184,7 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
 
   return Object.values(byDriver).map(row => ({
     ...row,
+    hasActivity: row.workingDays > 0 || row.totalFuel !== 0 || row.totalDelivered > 0,
     fuelPerKm: safeDiv(row.totalFuel, row.totalDist),
     fuelPerShipment: safeDiv(row.totalFuel, row.totalDelivered),
     avgKmPerDay: safeDiv(row.totalDist, row.workingDays),
@@ -141,9 +199,14 @@ export function buildProjectSummary(rows) {
   const totalDist = rows.reduce((s, r) => s + r.totalDist, 0);
   const totalDelivered = rows.reduce((s, r) => s + r.totalDelivered, 0);
   const excludedDays = rows.reduce((s, r) => s + r.excludedDays, 0);
-  const activeDrivers = rows.length;
+  // Drivers with activity in the period (a form, fuel or shipments), and of
+  // those, how many have left.  Active drivers with no activity are not counted.
+  const withActivity = rows.filter(r => r.hasActivity ?? true);
+  const activeDrivers = withActivity.length;
+  const leftDrivers = withActivity.filter(r => r.left).length;
+  const notInListDrivers = withActivity.filter(r => r.notInList).length;
   return {
-    totalFuel, totalDist, totalDelivered, excludedDays, activeDrivers,
+    totalFuel, totalDist, totalDelivered, excludedDays, activeDrivers, leftDrivers, notInListDrivers,
     avgFuelPerDriver: safeDiv(totalFuel, activeDrivers),
     avgFuelPerShipment: safeDiv(totalFuel, totalDelivered),
     avgFuelPerKm: safeDiv(totalFuel, totalDist),
@@ -214,4 +277,29 @@ export function formatDailyFuelPerKm(fuelPerKm, dist) {
 
 export function topN(rows, key, n = 5, ascending = false) {
   return rows.slice().sort((a, b) => ascending ? a[key] - b[key] : b[key] - a[key]).slice(0, n);
+}
+
+// Display name: the driver's name, or a label for activity under an unknown ID.
+export const perfDriverName = (row, t) => (row?.notInList ? t("driverPerformance.notInList") : row?.full_name || row?.identity_number || "—");
+
+// CSV of a project's driver rows (Driver Performance project page).
+export const PERF_CSV_KEYS = [
+  "full_name", "identity_number", "status", "last_working_day", "total_fuel_sar", "total_km", "shipments",
+  "fuel_per_km", "fuel_per_shipment", "avg_km_per_day", "working_days", "days_off",
+];
+export function perfCsvRows(rows) {
+  return rows.map(r => ({
+    full_name: r.notInList ? "" : (r.full_name || ""),
+    identity_number: r.identity_number,
+    status: r.notInList ? "not in driver list" : r.left ? "left" : "active",
+    last_working_day: r.left ? (r.lastWorkingDay || "") : "",
+    total_fuel_sar: r.totalFuel.toFixed(2),
+    total_km: r.totalDist.toFixed(0),
+    shipments: r.totalDelivered,
+    fuel_per_km: r.fuelPerKm.toFixed(2),
+    fuel_per_shipment: r.fuelPerShipment.toFixed(2),
+    avg_km_per_day: r.avgKmPerDay.toFixed(1),
+    working_days: r.workingDays,
+    days_off: r.daysOff,
+  }));
 }

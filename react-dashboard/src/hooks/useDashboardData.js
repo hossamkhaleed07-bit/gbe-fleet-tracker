@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from "react";
 import { sb } from "../lib/supabase";
 import { buildDriverComparison, buildStationReport, buildVehicleEndHistory, summarizeReinforcement, sumAutomaticFuel } from "../lib/calc";
 import { splitVoided } from "../lib/automaticFuel";
+import { buildLastActivityByDriver } from "../lib/driverPerformance";
 import { PROJECT_LIST } from "../lib/constants";
 
 const PAGE_SIZE = 1000;
@@ -43,6 +44,9 @@ export function useDashboardData() {
   const [automaticFuelByKey, setAutomaticFuelByKey] = useState({});
   const [automaticFuelRows, setAutomaticFuelRows] = useState([]);
   const [voidedAutomaticFuelRows, setVoidedAutomaticFuelRows] = useState([]);
+  // Last day with any activity per driver, over ALL loaded history (Driver
+  // Performance's "last working day" for a driver who left).
+  const [lastActivityByDriver, setLastActivityByDriver] = useState({});
   const [automaticFuelTotal, setAutomaticFuelTotal] = useState(0);
   const [reinforcementRows, setReinforcementRows] = useState([]);
   const [reinforcementSummary, setReinforcementSummary] = useState({ pending: 0, approved: 0, rejected: 0, total: 0, totalCost: 0 });
@@ -114,7 +118,7 @@ export function useDashboardData() {
     };
 
     const endHistoryFactory = () => sb.from("shift_entries")
-      .select("id,vehicle_plate,shift_date,odo_reading,created_at")
+      .select("id,identity_number,vehicle_plate,shift_date,odo_reading,created_at")
       .eq("shift_type", "end")
       .not("vehicle_plate", "is", null)
       .not("odo_reading", "is", null)
@@ -264,6 +268,14 @@ export function useDashboardData() {
 
     setAttendanceRows(attendanceData || []);
 
+    // End forms are loaded for all time (endHistory); the range's shift rows add
+    // start-only days.  Reinforcement and automatic fuel are unbounded.
+    setLastActivityByDriver(buildLastActivityByDriver({
+      shiftRows: [...(endHistoryData || []), ...(rows || [])],
+      reinforcementRows: allReinforcement,
+      automaticFuelRows: allAutomaticFuel,
+    }));
+
     const srByKey = {};
     for (const r of submissionReasonsData || []) {
       if (!r.identity_number || !r.shift_date) continue;
@@ -366,7 +378,7 @@ export function useDashboardData() {
 
   return {
     allRows, allCompareGroups, stationRows, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates,
-    driverProjects, vehicleDriverMap, allDrivers, allVehicles, approvedFuelByKey, automaticFuelByKey, automaticFuelRows, automaticFuelTotal, voidedAutomaticFuelRows,
+    driverProjects, vehicleDriverMap, allDrivers, allVehicles, approvedFuelByKey, automaticFuelByKey, automaticFuelRows, automaticFuelTotal, voidedAutomaticFuelRows, lastActivityByDriver,
     reinforcementRows, reinforcementSummary, attendanceRows, submissionReasonByKey, loading, error, lastUpdated,
     loadData, patchShiftEntries, removeShiftEntries, addShiftEntries, upsertDriver, removeDriver, upsertVehicle, upsertSubmissionReason,
     PROJECT_LIST,

@@ -9,8 +9,9 @@ import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
 import { MAX_JUMP_KM_PER_DAY } from "../lib/constants";
 import {
-  monthBounds, formatMonthLabel, buildDriverPerfRows, buildDriverDailyRows, attachDailyFuel, formatDailyFuelPerKm,
+  monthBounds, formatMonthLabel, buildDriverPerfRows, buildDriverDailyRows, attachDailyFuel, formatDailyFuelPerKm, perfDriverName,
 } from "../lib/driverPerformance";
+import { LeftBadge } from "../components/PerfDriverLabel";
 
 const money = (v) => `${v.toFixed(0)} SAR`;
 
@@ -18,7 +19,7 @@ export default function DriverPerformanceDriver() {
   const { project, identityNumber } = useParams();
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
-    to, setMonthRange,
+    lastActivityByDriver, to, setMonthRange,
   } = useDashboard();
   const { t, lang } = useLang();
   const navigate = useNavigate();
@@ -39,11 +40,18 @@ export default function DriverPerformanceDriver() {
     [scopedDrivers, identityNumber]
   );
 
+  // A driver who left gets "Left — last working day"; an ID that is not in the
+  // drivers list is shown as "Not in driver list" (same as the project page).
+  const perfDriver = useMemo(() => (driver
+    ? { ...driver, left: !driver.is_active, notInList: false, lastWorkingDay: driver.is_active ? null : (lastActivityByDriver?.[identityNumber] || null) }
+    : { identity_number: identityNumber, full_name: null, project, left: false, notInList: true, lastWorkingDay: null }),
+  [driver, identityNumber, project, lastActivityByDriver]);
+
   const summary = useMemo(() => {
-    const drivers = driver ? [driver] : [{ identity_number: identityNumber, full_name: identityNumber, project }];
-    const rows = buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
+    const rows = buildDriverPerfRows([perfDriver], scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
     return rows[0];
-  }, [driver, identityNumber, project, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal]);
+  }, [perfDriver, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal]);
+  const name = perfDriverName(perfDriver, t);
 
   const dailyRows = useMemo(() => {
     const base = buildDriverDailyRows(scopedCompareGroups, identityNumber, from, toVal);
@@ -79,9 +87,9 @@ export default function DriverPerformanceDriver() {
             <span className="badge-link" onClick={() => navigate({ pathname: "/driver-performance", search: searchParams.toString() })}>{t("driverPerformance.backToOverview")}</span>
             {" > "}
             <span className="badge-link" onClick={() => navigate({ pathname: `/driver-performance/${project}`, search: searchParams.toString() })}>{project}</span>
-            {" > "}<b>{driver?.full_name || identityNumber}</b>
+            {" > "}<b>{name}</b>
           </div>
-          <h1 className="page-title">{driver?.full_name || identityNumber}</h1>
+          <h1 className="page-title">{name}{perfDriver.left && <> <LeftBadge row={perfDriver} /></>}</h1>
         </div>
       </div>
       <HeroPortal className="pill-bar">
