@@ -11,6 +11,7 @@ export function LeftBadge({ row }) {
   return (
     <span className="badge critical">
       {row.lastWorkingDay ? t("driverPerformance.leftLastDay", { date: row.lastWorkingDay }) : t("driverPerformance.left")}
+      {row.activityAfterLeaving && <> · {t("driverPerformance.activityAfterLeaving")}</>}
     </span>
   );
 }

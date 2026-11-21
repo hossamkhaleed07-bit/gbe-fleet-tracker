@@ -1035,3 +1035,7 @@
   .notif-item-title { font-size: 0.82rem; font-weight: 700; }
   .notif-item-subtitle { font-size: 0.78rem; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .notif-item-time { font-size: 0.7rem; color: var(--ink-muted); }
+
+/* Driver deactivation: activity after the last working day (migration 065). */
+.leaving-warning { margin-top: 0.7rem; padding: 0.6rem 0.8rem; border-radius: 8px; background: var(--c-orange-bg); color: var(--c-orange-ink); font-size: 0.82rem; }
+.leaving-warning ul { margin: 0.3rem 0; padding-inline-start: 1.1rem; }

@@ -14,6 +14,7 @@ import HeroPortal from "../components/HeroPortal";
 import { useClearFilters } from "../hooks/useClearFilters";
 import { useAuth } from "../contexts/AuthContext";
 import ActiveStatusModal from "../components/ActiveStatusModal";
+import DriverLeavingModal from "../components/DriverLeavingModal";
 import { setActiveStatus, activeStatusErrorKey } from "../lib/activeStatus";
 
 const AVATAR_BG = ["c-blue", "c-green", "c-purple", "c-orange", "c-cyan", "c-pink"];
@@ -30,7 +31,8 @@ export default function Drivers() {
   // Only an admin deletes a driver for good. A fleet manager can only deactivate /
   // reactivate (with a reason), which the database records and notifies admins about.
   const { isAdmin } = useAuth();
-  const [statusTarget, setStatusTarget] = useState(null); // { item, activate }
+  const [statusTarget, setStatusTarget] = useState(null); // { item, activate }  (reactivate)
+  const [leavingTarget, setLeavingTarget] = useState(null); // { driver, mode: "deactivate" | "edit" }
   const [statusSaving, setStatusSaving] = useState(false);
   const [statusError, setStatusError] = useState("");
   const [searchParams] = useSearchParams();
@@ -96,12 +98,13 @@ export default function Drivers() {
         : "—",
     },
     { id: "shift_status", header: t("drivers.shiftStatus"), accessorFn: shiftStatusOf, cell: ({ row }) => <StatusBadge status={shiftStatusOf(row.original)} /> },
-    { accessorKey: "is_active", header: t("common.status"), cell: ({ getValue }) => <span className={`badge ${getValue() ? "complete" : "partial"}`}>{getValue() ? t("common.active") : t("common.inactive")}</span> },
+    { accessorKey: "is_active", header: t("common.status"), cell: ({ row }) => <DriverStatus d={row.original} t={t} /> },
     {
       id: "actions", header: t("drivers.colActions"), enableSorting: false,
       cell: ({ row }) => (
         <div className="row-actions" onClick={e => e.stopPropagation()}>
           <button className="btn" onClick={() => toggleActive(row.original)}>{row.original.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
+          {isAdmin && !row.original.is_active && <button className="btn" onClick={() => setLeavingTarget({ driver: row.original, mode: "edit" })}>{t("activeStatus.leavingDetails")}</button>}
           <button className="btn" onClick={() => openEdit(row.original)}>{t("common.edit")}</button>
           {isAdmin && <button className="btn btn-danger" onClick={() => handleDelete(row.original)}>{t("common.delete")}</button>}
         </div>
@@ -176,9 +179,12 @@ export default function Drivers() {
     upsertDriver({ ...payload, identity_number: isNew ? payload.identity_number : editingIdentity });
   }
 
+  // Deactivating asks for the last working day and the reason (migration 065);
+  // reactivating is a plain confirmation.
   function toggleActive(d) {
     setStatusError("");
-    setStatusTarget({ item: d, activate: !d.is_active });
+    if (d.is_active) setLeavingTarget({ driver: d, mode: "deactivate" });
+    else setStatusTarget({ item: d, activate: true });
   }
 
   async function confirmSetActive(reason) {
@@ -189,7 +195,10 @@ export default function Drivers() {
     setStatusSaving(false);
     if (!res.ok) { setStatusError(t(activeStatusErrorKey(res.code))); return; }
     setStatusTarget(null);
-    upsertDriver({ ...item, is_active: activate });
+    // the database clears the leaving details on reactivation (history keeps them)
+    upsertDriver(activate
+      ? { ...item, is_active: true, last_working_day: null, deactivation_reason: null, deactivation_note: null, deactivated_at: null, deactivated_by: null }
+      : { ...item, is_active: false });
   }
 
   async function handleDelete(d) {
@@ -212,6 +221,7 @@ export default function Drivers() {
       "identity_number", "full_name", "nationality", "mobile_number", "project", "is_active",
       "assigned_vehicle_plate", "job_id", "vendor_name", "city_name", "employee_type",
       "contract_type", "vehicle_type", "job_title", "pns_status", "date_of_hiring", "petro_app_link", "shift_status",
+      "last_working_day", "deactivation_reason", "deactivation_note",
     ];
     const csvRows = rows.map(d => ({ ...d, shift_status: shiftStatusOf(d) }));
     downloadCsv(`drivers_${new Date().toISOString().slice(0, 10)}.csv`, keys, csvRows);
@@ -290,10 +300,11 @@ export default function Drivers() {
                 <div className="driver-card-field"><label>{t("common.pnsStatus")}</label><div className="val">{d.pns_status || "—"}</div></div>
                 <div className="driver-card-field"><label>{t("common.petroAppLink")}</label><div className="val">{d.petro_app_link ? <a className="media-link" href={d.petro_app_link} target="_blank" rel="noreferrer">{t("common.petroAppLink")}</a> : "—"}</div></div>
                 <div className="driver-card-field"><label>{t("drivers.shiftStatus")}</label><div className="val"><StatusBadge status={shiftStatusOf(d)} /></div></div>
-                <div className="driver-card-field"><label>{t("common.status")}</label><div className="val"><span className={`badge ${d.is_active ? "complete" : "partial"}`}>{d.is_active ? t("common.active") : t("common.inactive")}</span></div></div>
+                <div className="driver-card-field"><label>{t("common.status")}</label><div className="val"><DriverStatus d={d} t={t} /></div></div>
               </div>
               <div className="driver-card-actions">
                 <button onClick={() => toggleActive(d)}>{d.is_active ? t("drivers.deactivate") : t("drivers.activate")}</button>
+                {isAdmin && !d.is_active && <button onClick={() => setLeavingTarget({ driver: d, mode: "edit" })}>{t("activeStatus.leavingDetails")}</button>}
                 <button onClick={() => openEdit(d)}>{t("common.edit")}</button>
                 {isAdmin && <button className="danger" onClick={() => handleDelete(d)}>{t("common.delete")}</button>}
               </div>
@@ -345,6 +356,16 @@ export default function Drivers() {
         </div>
       )}
 
+      {leavingTarget && (
+        <DriverLeavingModal
+          driver={leavingTarget.driver}
+          mode={leavingTarget.mode}
+          notifyAdmins={!isAdmin}
+          onCancel={() => setLeavingTarget(null)}
+          onDone={(fields) => { upsertDriver({ ...leavingTarget.driver, ...fields }); setLeavingTarget(null); }}
+        />
+      )}
+
       {statusTarget && (
         <ActiveStatusModal
           kind="driver"
@@ -356,6 +377,22 @@ export default function Drivers() {
           onCancel={() => setStatusTarget(null)}
           onConfirm={confirmSetActive}
         />
+      )}
+    </>
+  );
+}
+
+// Active / Inactive badge; an inactive driver also shows the reason and the
+// last working day when they were recorded (migration 065).
+function DriverStatus({ d, t }) {
+  if (d.is_active) return <span className="badge complete">{t("common.active")}</span>;
+  return (
+    <>
+      <span className="badge partial">{t("common.inactive")}</span>
+      {(d.deactivation_reason || d.last_working_day) && (
+        <div className="ov-block-sub" title={d.deactivation_note || undefined}>
+          {[d.deactivation_reason && t(`activeStatus.reason_${d.deactivation_reason}`), d.last_working_day].filter(Boolean).join(" · ")}
+        </div>
       )}
     </>
   );

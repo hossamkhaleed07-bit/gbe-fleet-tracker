@@ -210,3 +210,34 @@ describe("drivers who left and IDs not in the driver list", () => {
     expect(csv.find(r => r.status === "left").total_fuel_sar).toBe("65.00");
   });
 });
+
+describe("the recorded last working day (migration 065)", () => {
+  const last = { L1: "2026-10-12", L2: "2026-10-05" };
+  const drivers = [
+    { identity_number: "L1", full_name: "Left, recorded day", project: "FDP", is_active: false, last_working_day: "2026-10-08" },
+    { identity_number: "L2", full_name: "Left, nothing after", project: "FDP", is_active: false, last_working_day: "2026-10-05" },
+    { identity_number: "L3", full_name: "Left, not recorded", project: "FDP", is_active: false, last_working_day: null },
+  ];
+  const automatic = [
+    { identity_number: "L1", allocation_date: "2026-10-12", amount: 30, project: "FDP" },
+    { identity_number: "L2", allocation_date: "2026-10-05", amount: 30, project: "FDP" },
+    { identity_number: "L3", allocation_date: "2026-10-03", amount: 30, project: "FDP" },
+  ];
+
+  it("uses the recorded day when set, else the last activity, and flags activity after it", () => {
+    const got = selectPerfDrivers(drivers, [], [], automatic, "2026-10-01", "2026-10-31", { projects: ["FDP"], lastActivityByDriver: { ...last, L3: "2026-10-03" } })
+      .map(d => [d.identity_number, d.lastWorkingDay, d.activityAfterLeaving]);
+    expect(got).toEqual([
+      ["L1", "2026-10-08", true],     // fuel on the 12th, after the recorded 8th
+      ["L2", "2026-10-05", false],
+      ["L3", "2026-10-03", false],    // no recorded day: last activity
+    ]);
+  });
+
+  it("a driver whose recorded day is in September but who still got fuel in October appears in October", () => {
+    const d = [{ identity_number: "L9", full_name: "x", project: "FDP", is_active: false, last_working_day: "2026-09-28" }];
+    const a = [{ identity_number: "L9", allocation_date: "2026-10-02", amount: 30, project: "FDP" }];
+    const got = selectPerfDrivers(d, [], [], a, "2026-10-01", "2026-10-31", { projects: ["FDP"], lastActivityByDriver: { L9: "2026-10-02" } });
+    expect(got.map(x => [x.identity_number, x.activityAfterLeaving])).toEqual([["L9", true]]);
+  });
+});
