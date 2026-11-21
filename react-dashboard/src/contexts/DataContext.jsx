@@ -81,6 +81,7 @@ export function DataProvider({ children }) {
         scopedReinforcementSummary: data.reinforcementSummary,
         scopedAutomaticFuelRows: data.automaticFuelRows,
         scopedAutomaticFuelTotal: data.automaticFuelTotal,
+        scopedVoidedAutomaticFuelRows: data.voidedAutomaticFuelRows,
         scopedAttendanceRows: data.attendanceRows,
       };
     }
@@ -104,12 +105,13 @@ export function DataProvider({ children }) {
       scopedReinforcementSummary: summarizeReinforcement(reinforcementRows),
       scopedAutomaticFuelRows: automaticFuelRows,
       scopedAutomaticFuelTotal: sumAutomaticFuel(automaticFuelRows),
+      scopedVoidedAutomaticFuelRows: data.voidedAutomaticFuelRows.filter(r => r.project === viewingProject),
       scopedAttendanceRows: attendanceRows,
     };
   }, [
     viewingProject, data.allRows, data.allCompareGroups, data.stationRows, data.allDrivers, data.allVehicles,
     data.driverProjects, data.vehicleDriverMap, data.reinforcementRows, data.reinforcementSummary,
-    data.automaticFuelRows, data.automaticFuelTotal, data.attendanceRows,
+    data.automaticFuelRows, data.automaticFuelTotal, data.voidedAutomaticFuelRows, data.attendanceRows,
   ]);
 
   return (

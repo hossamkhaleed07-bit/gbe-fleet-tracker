@@ -32,3 +32,25 @@
 .af-field span { font-size: 0.8rem; font-weight: 600; color: var(--ink-2); }
 .af-field input, .af-field textarea { width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--plane); color: var(--ink); font: inherit; font-size: 0.85rem; resize: vertical; }
 .af-summary { margin: 0.4rem 0 0; font-size: 0.85rem; color: var(--ink-2); }
+
+/* Void / restore and the invoice review tab (migration 064). */
+.af-danger { background: var(--critical); border-color: var(--critical); color: var(--surface-1); }
+.af-danger:disabled { opacity: 0.5; }
+.af-voided-amount { text-decoration: line-through; color: var(--ink-muted); }
+.badge.af-badge-voided { margin-inline-start: 0.3rem; }
+.badge.af-badge-muted { background: var(--plane); color: var(--ink-muted); border: 1px solid var(--border); }
+.badge.af-badge-code { background: var(--c-orange-bg); color: var(--c-orange-ink); }
+.af-void-list { margin: 0.5rem 0 0; padding-inline-start: 1.1rem; font-size: 0.8rem; color: var(--ink-2); max-height: 10rem; overflow-y: auto; }
+.af-review-head { display: flex; gap: 0.8rem; flex-wrap: wrap; align-items: flex-end; }
+.af-field.af-inline { margin-top: 0; min-width: 9rem; }
+.af-field select { width: 100%; padding: 0.55rem 0.7rem; border-radius: 8px; border: 1px solid var(--border); background: var(--plane); color: var(--ink); font: inherit; font-size: 0.85rem; }
+.af-review-chips { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.7rem; }
+.af-chip { display: inline-flex; align-items: center; gap: 0.45rem; font: inherit; font-size: 0.8rem; padding: 0.35rem 0.6rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
+.af-chip[aria-pressed="true"] { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.af-invoices { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* List B and the reconciliation line (migration 064). */
+.af-recon { margin-top: 0.8rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm); background: var(--c-orange-bg); color: var(--c-orange-ink); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.af-recon.af-recon-ok { background: var(--c-green-bg, var(--plane)); color: var(--c-green-ink, var(--ink)); }
+.af-recon .af-hint { margin: 0.3rem 0 0; }
+.af-subtabs { margin-top: 0.8rem; margin-bottom: 0; }

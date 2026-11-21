@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 import { sb } from "../lib/supabase";
 import { buildDriverComparison, buildStationReport, buildVehicleEndHistory, summarizeReinforcement, sumAutomaticFuel } from "../lib/calc";
+import { splitVoided } from "../lib/automaticFuel";
 import { PROJECT_LIST } from "../lib/constants";
 
 const PAGE_SIZE = 1000;
@@ -41,6 +42,7 @@ export function useDashboardData() {
   const [approvedFuelByKey, setApprovedFuelByKey] = useState({});
   const [automaticFuelByKey, setAutomaticFuelByKey] = useState({});
   const [automaticFuelRows, setAutomaticFuelRows] = useState([]);
+  const [voidedAutomaticFuelRows, setVoidedAutomaticFuelRows] = useState([]);
   const [automaticFuelTotal, setAutomaticFuelTotal] = useState(0);
   const [reinforcementRows, setReinforcementRows] = useState([]);
   const [reinforcementSummary, setReinforcementSummary] = useState({ pending: 0, approved: 0, rejected: 0, total: 0, totalCost: 0 });
@@ -235,7 +237,9 @@ export function useDashboardData() {
     }
     setApprovedFuelByKey(fuelByKey);
 
-    const allAutomaticFuel = automaticFuelData || [];
+    // Voided days (migration 064) are kept apart: every total, lookup and
+    // chart uses the active rows only; the Automatic Fuel page shows both.
+    const { active: allAutomaticFuel, voided: allVoidedAutomaticFuel } = splitVoided(automaticFuelData || []);
     const autoFuelByKey = {};
     for (const r of allAutomaticFuel) {
       if (!r.identity_number || !r.allocation_date || r.amount == null) continue;
@@ -256,6 +260,7 @@ export function useDashboardData() {
     const rangedAutomaticFuel = allAutomaticFuel.filter(r => r.allocation_date && inRange(r.allocation_date));
     setAutomaticFuelRows(rangedAutomaticFuel);
     setAutomaticFuelTotal(sumAutomaticFuel(rangedAutomaticFuel));
+    setVoidedAutomaticFuelRows(allVoidedAutomaticFuel.filter(r => r.allocation_date && inRange(r.allocation_date)));
 
     setAttendanceRows(attendanceData || []);
 
@@ -361,7 +366,7 @@ export function useDashboardData() {
 
   return {
     allRows, allCompareGroups, stationRows, vehicleEndHistory, vehicleRates, vehicleFuelTypes, stationRates,
-    driverProjects, vehicleDriverMap, allDrivers, allVehicles, approvedFuelByKey, automaticFuelByKey, automaticFuelRows, automaticFuelTotal,
+    driverProjects, vehicleDriverMap, allDrivers, allVehicles, approvedFuelByKey, automaticFuelByKey, automaticFuelRows, automaticFuelTotal, voidedAutomaticFuelRows,
     reinforcementRows, reinforcementSummary, attendanceRows, submissionReasonByKey, loading, error, lastUpdated,
     loadData, patchShiftEntries, removeShiftEntries, addShiftEntries, upsertDriver, removeDriver, upsertVehicle, upsertSubmissionReason,
     PROJECT_LIST,

@@ -4,11 +4,19 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { translate, translations } from "./i18n";
-import { buildDriverAmountRows, ERROR_CODES, parseAmount, STATUSES } from "./automaticFuel";
+import {
+  buildDriverAmountRows, canVoidDay, ERROR_CODES, isVoided, parseAmount, reasonOk, REVIEW_STATUSES, splitVoided, STATUSES,
+  summarizeReview, VOIDABLE_REVIEW_STATUSES, FILL_STATUSES, OPEN_FILL_STATUSES, fillActions, givesFuelNow, summarizeFills,
+  monthRange,
+} from "./automaticFuel";
+import { sumAutomaticFuel } from "./calc";
 
 const SRC = fileURLToPath(new URL("..", import.meta.url));
 const read = (p) => readFileSync(SRC + p, "utf8");
-const SOURCES = ["pages/AutomaticFuel.jsx", "components/AutomaticFuelAmounts.jsx", "lib/automaticFuel.js", "automatic-fuel.css"];
+const SOURCES = [
+  "pages/AutomaticFuel.jsx", "components/AutomaticFuelAmounts.jsx", "components/AutomaticFuelVoid.jsx",
+  "components/AutomaticFuelReview.jsx", "components/AutomaticFuelFills.jsx", "lib/automaticFuel.js", "automatic-fuel.css",
+];
 const leaves = (obj, prefix = "") => Object.entries(obj).flatMap(([k, v]) =>
   v && typeof v === "object" ? leaves(v, `${prefix}${k}.`) : [`${prefix}${k}`]);
 
@@ -54,14 +62,20 @@ describe("automatic fuel translations and styles", () => {
     }
     for (const c of ERROR_CODES) used.add(`automaticFuel.errors.${c}`);
     for (const s of STATUSES) used.add(`automaticFuel.status_${s}`);
-    for (const k of ["default", "driver", "allocation"]) used.add(`automaticFuel.kind_${k}`);
-    for (const k of ["allocations", "amounts"]) used.add(`automaticFuel.tab_${k}`);
+    for (const k of ["default", "driver", "allocation", "void", "restore", "forgot_form", "forgot_form_undo", "unentitled", "unentitled_clear"]) used.add(`automaticFuel.kind_${k}`);
+    for (const k of ["allocations", "amounts", "review"]) used.add(`automaticFuel.tab_${k}`);
+    for (const k of ["active", "voided", "all"]) used.add(`automaticFuel.view_${k}`);
+    for (const k of REVIEW_STATUSES) used.add(`automaticFuel.review_${k}`);
+    for (const k of FILL_STATUSES) used.add(`automaticFuel.fill_${k}`);
+    for (const k of ["worked", "unentitled", "restore", "undoWorked", "clearUnentitled"]) used.add(`automaticFuel.fillAction_${k}`);
+    for (const k of ["a", "b"]) used.add(`automaticFuel.reviewList_${k}`);
     const missing = [...used].filter(k => ["ar", "en"].some(lang => translate(lang, k) === k));
     expect(missing).toEqual([]);
   });
 
-  it("every AUTO_FUEL_* code the migration raises has a message", () => {
-    const sql = readFileSync(fileURLToPath(new URL("../../supabase/migrations/061_automatic_fuel_amounts.sql", import.meta.url)), "utf8");
+  it("every AUTO_FUEL_* code the migrations raise has a message", () => {
+    const sql = ["061_automatic_fuel_amounts.sql", "064_automatic_fuel_void.sql"]
+      .map(f => readFileSync(fileURLToPath(new URL(`../../supabase/migrations/${f}`, import.meta.url)), "utf8")).join(" ");
     const raised = new Set([...sql.matchAll(/raise exception '(AUTO_FUEL_[A-Z_]+)/g)].map(m => m[1]));
     raised.delete("AUTO_FUEL_APPEND_ONLY"); // a guard on the log table, never reached from the page
     expect([...raised].filter(c => !ERROR_CODES.includes(c))).toEqual([]);
@@ -78,5 +92,101 @@ describe("automatic fuel translations and styles", () => {
       }
     }
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("void and the invoice review (064)", () => {
+  const rows = [
+    { id: "a", amount: 30, allocation_date: "2026-10-01", voided_at: null },
+    { id: "b", amount: 25, allocation_date: "2026-10-02", voided_at: "2026-11-19T08:00:00Z" },
+    { id: "c", amount: "20", allocation_date: "2026-10-03" },
+  ];
+
+  it("voided rows are kept apart, so totals count active rows only", () => {
+    const { active, voided } = splitVoided(rows);
+    expect(active.map(r => r.id)).toEqual(["a", "c"]);
+    expect(voided.map(r => r.id)).toEqual(["b"]);
+    expect(sumAutomaticFuel(active)).toBe(50);
+    expect([isVoided(rows[1]), isVoided(rows[0]), isVoided(null)]).toEqual([true, false, false]);
+    expect(splitVoided(null)).toEqual({ active: [], voided: [] });
+  });
+
+  it("only a past day (Riyadh) can be voided", () => {
+    expect(canVoidDay("2026-11-18", "2026-11-19")).toBe(true);
+    expect(canVoidDay("2026-11-19", "2026-11-19")).toBe(false);
+    expect(canVoidDay("2026-11-20", "2026-11-19")).toBe(false);
+    expect(canVoidDay(null, "2026-11-19")).toBe(false);
+  });
+
+  it("a reason needs 10 characters after trimming", () => {
+    expect(reasonOk("Not withdrawn")).toBe(true);
+    expect(reasonOk("  123456789  ")).toBe(false);
+    expect(reasonOk(null)).toBe(false);
+  });
+
+  it("combined fills and days without loaded invoices cannot be bulk voided", () => {
+    expect(VOIDABLE_REVIEW_STATUSES).toEqual(["no_invoice", "partial_invoice"]);
+    expect(VOIDABLE_REVIEW_STATUSES.every(s => REVIEW_STATUSES.includes(s))).toBe(true);
+  });
+
+  it("summarizes the review per status with the last loaded invoice day", () => {
+    const sum = summarizeReview([
+      { status: "no_invoice", automatic_fuel: "30", last_invoice_date: "2026-10-28" },
+      { status: "no_invoice", automatic_fuel: 20, last_invoice_date: "2026-10-28" },
+      { status: "not_loaded", automatic_fuel: 30, last_invoice_date: "2026-10-28" },
+    ]);
+    expect(sum.byStatus.no_invoice).toEqual({ days: 2, sar: 50 });
+    expect(sum.byStatus.not_loaded).toEqual({ days: 1, sar: 30 });
+    expect(sum.byStatus.combined_fill).toEqual({ days: 0, sar: 0 });
+    expect(sum.lastInvoiceDate).toBe("2026-10-28");
+    expect(summarizeReview([]).lastInvoiceDate).toBeNull();
+  });
+
+  it("the review statuses match the ones the database returns", () => {
+    const sql = readFileSync(fileURLToPath(new URL("../../supabase/migrations/064_automatic_fuel_void.sql", import.meta.url)), "utf8");
+    const start = sql.indexOf("create function public.auto_fuel_invoice_review");
+    const body = sql.slice(start, sql.indexOf("\n$$;", start));
+    const returned = new Set([...body.matchAll(/(?:then|else) '([a-z_]+)'/g)].map(m => m[1]));
+    returned.delete("matched");
+    expect([...returned].sort()).toEqual([...REVIEW_STATUSES].sort());
+  });
+});
+
+describe("list B and the reconciliation (064)", () => {
+  it("the statuses match the database, and 'unentitled' is hidden by default", () => {
+    const sql = readFileSync(fileURLToPath(new URL("../../supabase/migrations/064_automatic_fuel_void.sql", import.meta.url)), "utf8");
+    const fn = sql.slice(sql.indexOf("create function public.auto_fuel_unexplained_fills"), sql.indexOf("create function public.auto_fuel_reconciliation"));
+    const body = fn.slice(fn.indexOf("select j.idn"));
+    const fromSql = [...body.matchAll(/(?:then|else) '([a-z_]+)'/g)].map(m => m[1]);
+    expect([...new Set(fromSql)].sort()).toEqual([...FILL_STATUSES].sort());
+    expect(OPEN_FILL_STATUSES).not.toContain("unentitled");
+  });
+
+  it("each status gets the right buttons; an inactive driver cannot be marked worked", () => {
+    expect(fillActions({ status: "unexplained", is_active: true })).toEqual(["worked", "unentitled"]);
+    expect(fillActions({ status: "nearby_auto", is_active: false })).toEqual(["unentitled"]);
+    expect(fillActions({ status: "voided_day", is_active: true })).toEqual(["restore", "unentitled"]);
+    expect(fillActions({ status: "fuel_coming", is_active: true })).toEqual([]);
+    expect(fillActions({ status: "worked_marked" })).toEqual(["undoWorked"]);
+    expect(fillActions({ status: "unentitled" })).toEqual(["clearUnentitled"]);
+  });
+
+  it("fuel is given at once only for a day the next 06:30 run will not see", () => {
+    const today = "2026-11-21";
+    expect(givesFuelNow("2026-11-14", today)).toBe(true);    // 7 days ago
+    expect(givesFuelNow("2026-11-15", today)).toBe(false);   // 6 days ago: the job
+    expect(givesFuelNow("2026-10-10", today)).toBe(true);
+    expect(givesFuelNow(null, today)).toBe(false);
+  });
+
+  it("sums days and invoice SAR per status; month ranges", () => {
+    const s = summarizeFills([
+      { status: "unexplained", invoice_sar: "30" }, { status: "unexplained", invoice_sar: 25.5 }, { status: "unentitled", invoice_sar: 30 },
+    ]);
+    expect(s.unexplained).toEqual({ days: 2, sar: 55.5 });
+    expect(s.unentitled).toEqual({ days: 1, sar: 30 });
+    expect(monthRange("2026-02")).toEqual({ from: "2026-02-01", to: "2026-02-28" });
+    expect(monthRange("2026-10")).toEqual({ from: "2026-10-01", to: "2026-10-31" });
+    expect(monthRange("")).toBeNull();
   });
 });

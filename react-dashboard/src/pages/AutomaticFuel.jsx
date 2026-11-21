@@ -8,16 +8,21 @@ import ProjectBadge from "../components/ProjectBadge";
 import GlobalFilters from "../components/GlobalFilters";
 import DataTable from "../components/DataTable";
 import AutomaticFuelAmounts from "../components/AutomaticFuelAmounts";
+import AutomaticFuelReview from "../components/AutomaticFuelReview";
+import { RestoreDialog, VoidDialog } from "../components/AutomaticFuelVoid";
 import { downloadCsv } from "../lib/csv";
 import { PROJECT_LIST } from "../lib/constants";
 import { formatLocalDateTime } from "../lib/calc";
-import { adjustAllocation, autoFuelErrorMessage, parseAmount, STATUSES } from "../lib/automaticFuel";
+import { adjustAllocation, autoFuelErrorMessage, canVoidDay, isVoided, parseAmount, STATUSES } from "../lib/automaticFuel";
 import HeroPortal from "../components/HeroPortal";
 import { useClearFilters } from "../hooks/useClearFilters";
 import "../automatic-fuel.css";
 
-const CSV_KEYS = ["allocation_date", "full_name", "identity_number", "project", "vehicle_plate", "amount", "source", "status"];
-const TABS = ["allocations", "amounts"];
+const CSV_KEYS = ["allocation_date", "full_name", "identity_number", "project", "vehicle_plate", "amount", "source", "status", "voided_at", "voided_by", "void_reason"];
+const TABS = ["allocations", "amounts", "review"];
+// Which allocations the first tab lists: voided days (migration 064) are never
+// in any total, but can be looked at and restored here.
+const VIEWS = ["active", "voided", "all"];
 
 // Corrects one allocation already made (admin only); the reason is required and
 // the database logs old and new amounts (migration 061).
@@ -69,14 +74,23 @@ function AdjustAllocationModal({ row, onCancel, onDone }) {
 }
 
 export default function AutomaticFuel() {
-  const { scopedAutomaticFuelRows: rows, applyFilter } = useDashboard();
+  const { scopedAutomaticFuelRows: activeRows, scopedVoidedAutomaticFuelRows: voidedRows, applyFilter } = useDashboard();
   const { isAdmin } = useAuth();
   const { t } = useLang();
   const [searchParams, setSearchParams] = useSearchParams();
   const [search, setSearch] = useState("");
   const [project, setProject] = useState(() => searchParams.get("project") || "");
   const [adjusting, setAdjusting] = useState(null);
-  const tab = TABS.includes(searchParams.get("tab")) ? searchParams.get("tab") : "allocations";
+  const [voiding, setVoiding] = useState(null);
+  const [restoring, setRestoring] = useState(null);
+  const [view, setView] = useState("active");
+  const tabs = isAdmin ? TABS : TABS.filter(k => k !== "review");
+  const tab = tabs.includes(searchParams.get("tab")) ? searchParams.get("tab") : "allocations";
+  const rows = useMemo(() => {
+    if (view === "voided") return voidedRows || [];
+    if (view === "all") return [...activeRows, ...(voidedRows || [])];
+    return activeRows;
+  }, [view, activeRows, voidedRows]);
 
   function setTab(next) {
     setSearchParams(prev => {
@@ -96,11 +110,14 @@ export default function AutomaticFuel() {
     return [...r].sort((a, b) => (b.allocation_date || "").localeCompare(a.allocation_date || ""));
   }, [rows, project, search]);
 
-  const totalAmount = useMemo(() => filteredRows.reduce((sum, r) => sum + Number(r.amount || 0), 0), [filteredRows]);
+  // Voided days never count; their amount is shown on its own.
+  const totalAmount = useMemo(() => filteredRows.reduce((sum, r) => sum + (isVoided(r) ? 0 : Number(r.amount || 0)), 0), [filteredRows]);
+  const voidedAmount = useMemo(() => filteredRows.reduce((sum, r) => sum + (isVoided(r) ? Number(r.amount || 0) : 0), 0), [filteredRows]);
 
   function handleReset() {
     setSearch("");
     setProject("");
+    setView("active");
   }
   useClearFilters(handleReset);
 
@@ -115,7 +132,10 @@ export default function AutomaticFuel() {
     { accessorKey: "identity_number", header: t("fuel.colIdNumber") },
     { accessorKey: "project", header: t("common.project"), cell: ({ getValue }) => getValue() ? <ProjectBadge project={getValue()} /> : "—" },
     { accessorKey: "vehicle_plate", header: t("fuel.colPlate"), cell: ({ getValue }) => getValue() || "—" },
-    { accessorKey: "amount", header: t("fuel.colAmount"), meta: { align: "end" }, cell: ({ getValue }) => Number(getValue() || 0).toFixed(2) },
+    {
+      accessorKey: "amount", header: t("fuel.colAmount"), meta: { align: "end" },
+      cell: ({ row, getValue }) => <span className={isVoided(row.original) ? "af-voided-amount" : undefined}>{Number(getValue() || 0).toFixed(2)}</span>,
+    },
     {
       accessorKey: "status", header: t("fuel.colStatus"),
       cell: ({ row }) => {
@@ -126,6 +146,12 @@ export default function AutomaticFuel() {
             <span className={"badge " + (status === "failed" ? "critical" : "complete")}>
               {status ? t(`automaticFuel.status_${status}`) : (r.status || "—")}
             </span>
+            {isVoided(r) && (
+              <span className="badge critical af-badge-voided" title={`${formatLocalDateTime(r.voided_at)} · ${r.voided_by || "—"}`}>
+                {t("automaticFuel.voided")}
+              </span>
+            )}
+            {isVoided(r) && <div className="af-hint">{r.void_reason}</div>}
             {r.adjusted_at && (
               <span className="badge af-badge-adjusted" title={`${formatLocalDateTime(r.adjusted_at)} · ${r.adjusted_by || "—"}`}>
                 {t("automaticFuel.adjusted")}
@@ -137,9 +163,19 @@ export default function AutomaticFuel() {
     },
     ...(isAdmin ? [{
       id: "actions", header: "", enableSorting: false,
-      cell: ({ row }) => row.original.id
-        ? <button className="btn" onClick={() => setAdjusting(row.original)}>{t("automaticFuel.edit")}</button>
-        : null,
+      cell: ({ row }) => {
+        const r = row.original;
+        if (!r.id) return null;
+        if (isVoided(r)) return <button className="btn" onClick={() => setRestoring(r)}>{t("automaticFuel.restore")}</button>;
+        return (
+          <div className="af-actions">
+            <button className="btn" onClick={() => setAdjusting(r)}>{t("automaticFuel.edit")}</button>
+            {canVoidDay(r.allocation_date) && (
+              <button className="btn af-danger" onClick={() => setVoiding([r])}>{t("automaticFuel.void")}</button>
+            )}
+          </div>
+        );
+      },
     }] : []),
   ], [t, isAdmin]);
 
@@ -155,14 +191,14 @@ export default function AutomaticFuel() {
       <HeroPortal target="fx-hero-note" className="fx-hero-note">{t("automaticFuel.subtitle")}</HeroPortal>
 
       <div className="af-tabs" role="tablist" aria-label={t("automaticFuel.breadcrumb")}>
-        {TABS.map(k => (
+        {tabs.map(k => (
           <button key={k} type="button" role="tab" className="af-tab" aria-selected={tab === k} onClick={() => setTab(k)}>
             {t(`automaticFuel.tab_${k}`)}
           </button>
         ))}
       </div>
 
-      {tab === "amounts" ? <AutomaticFuelAmounts /> : (
+      {tab === "amounts" ? <AutomaticFuelAmounts /> : tab === "review" ? <AutomaticFuelReview /> : (
         <>
           <GlobalFilters />
           <HeroPortal className="local-filters">
@@ -177,9 +213,17 @@ export default function AutomaticFuel() {
                 {PROJECT_LIST.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
+            <div className="field">
+              <label>{t("automaticFuel.viewLabel")}</label>
+              <select value={view} onChange={e => setView(e.target.value)}>
+                {VIEWS.map(v => <option key={v} value={v}>{t(`automaticFuel.view_${v}`)}</option>)}
+              </select>
+            </div>
             <button className="btn local-clear-btn" onClick={handleReset}>{t("common.clearFilters")}</button>
           </HeroPortal>
-          <div className="cards-count">{t("automaticFuel.rowsCount", { n: filteredRows.length })} · {t("compare.colAutomaticFuelCost")}: {totalAmount.toFixed(2)}</div>
+          <div className="cards-count">{t("automaticFuel.rowsCount", { n: filteredRows.length })} · {t("compare.colAutomaticFuelCost")}: {totalAmount.toFixed(2)}
+            {voidedAmount > 0 && <> · {t("automaticFuel.voidedTotal")}: {voidedAmount.toFixed(2)}</>}
+          </div>
 
           <DataTable
             columns={columns}
@@ -195,6 +239,12 @@ export default function AutomaticFuel() {
           onCancel={() => setAdjusting(null)}
           onDone={() => { setAdjusting(null); applyFilter(); }}
         />
+      )}
+      {voiding && (
+        <VoidDialog rows={voiding} onCancel={() => setVoiding(null)} onDone={() => { setVoiding(null); applyFilter(); }} />
+      )}
+      {restoring && (
+        <RestoreDialog row={restoring} onCancel={() => setRestoring(null)} onDone={() => { setRestoring(null); applyFilter(); }} />
       )}
     </>
   );
