@@ -82,8 +82,15 @@ export function selectPerfDrivers(drivers, compareGroups, reinforcementRows, aut
     known.add(d.identity_number);
     if (!inProjects(d.project)) continue;
     if (d.is_active) { out.push({ ...d, left: false, notInList: false, lastWorkingDay: null }); continue; }
-    if (!active.has(d.identity_number)) continue;   // left, and nothing this month
-    out.push({ ...d, left: true, notInList: false, lastWorkingDay: lastActivityByDriver[d.identity_number] || null });
+    if (!active.has(d.identity_number)) continue;   // left, and nothing this month (incl. after leaving)
+    // last working day: the one recorded when the driver was deactivated
+    // (migration 065), else the last day with any activity
+    const lastActivity = lastActivityByDriver[d.identity_number] || null;
+    out.push({
+      ...d, left: true, notInList: false,
+      lastWorkingDay: d.last_working_day || lastActivity,
+      activityAfterLeaving: !!(d.last_working_day && lastActivity && lastActivity > d.last_working_day),
+    });
   }
   for (const idn of active.keys()) {
     if (!idn || known.has(idn)) continue;
@@ -106,6 +113,7 @@ export function buildDriverPerfRows(drivers, compareGroups, reinforcementRows, a
       left: !!d.left,
       notInList: !!d.notInList,
       lastWorkingDay: d.lastWorkingDay || null,
+      activityAfterLeaving: !!d.activityAfterLeaving,
       totalFuel: 0,
       totalDist: 0,
       totalDelivered: 0,

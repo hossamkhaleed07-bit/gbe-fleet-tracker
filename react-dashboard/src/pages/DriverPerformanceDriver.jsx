@@ -43,7 +43,11 @@ export default function DriverPerformanceDriver() {
   // A driver who left gets "Left — last working day"; an ID that is not in the
   // drivers list is shown as "Not in driver list" (same as the project page).
   const perfDriver = useMemo(() => (driver
-    ? { ...driver, left: !driver.is_active, notInList: false, lastWorkingDay: driver.is_active ? null : (lastActivityByDriver?.[identityNumber] || null) }
+    ? {
+      ...driver, left: !driver.is_active, notInList: false,
+      lastWorkingDay: driver.is_active ? null : (driver.last_working_day || lastActivityByDriver?.[identityNumber] || null),
+      activityAfterLeaving: !driver.is_active && !!driver.last_working_day && (lastActivityByDriver?.[identityNumber] || "") > driver.last_working_day,
+    }
     : { identity_number: identityNumber, full_name: null, project, left: false, notInList: true, lastWorkingDay: null }),
   [driver, identityNumber, project, lastActivityByDriver]);
 
