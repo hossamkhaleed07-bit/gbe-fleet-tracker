@@ -7,6 +7,11 @@ begin;
 -- that money back into every total.  Restore those days first (Automatic
 -- Fuel page, or auto_fuel_restore_allocation) or decide what to do with them.
 --
+-- Also REFUSES while any fill is marked "Didn't work" (unentitled withdrawal,
+-- still open): that follow-up list would be lost.  Clear them first.
+-- "Worked, forgot the form" marks are dropped, but what they did stays: the
+-- attendance P and any automatic fuel given (the change log keeps the history).
+--
 -- auto_fuel_adjust_allocation goes back to 061's version.  The change log
 -- keeps its 'void' / 'restore' rows (it is append-only), so its kind check
 -- keeps allowing those two kinds.
@@ -22,6 +27,10 @@ begin
   if exists (select 1 from public.automatic_fuel_allocations where voided_at is not null) then
     raise exception 'STOP: % day(s) are voided. Restore them first; rolling back would count them again.',
       (select count(*) from public.automatic_fuel_allocations where voided_at is not null);
+  end if;
+  if exists (select 1 from public.automatic_fuel_unentitled where cleared_at is null) then
+    raise exception 'STOP: % fill(s) are marked as unentitled withdrawals. Clear them first; the follow-up list would be lost.',
+      (select count(*) from public.automatic_fuel_unentitled where cleared_at is null);
   end if;
 end $$;
 
@@ -54,6 +63,16 @@ begin
 end;
 $$;
 
+drop function public.auto_fuel_reconciliation(date, date);
+drop function public.auto_fuel_unexplained_fills(date, date);
+drop function public.auto_fuel_clear_unentitled(text, date, text);
+drop function public.auto_fuel_mark_unentitled(text, date, text);
+drop function public.auto_fuel_undo_worked(text, date, text);
+drop function public.auto_fuel_mark_worked(text, date, text);
+drop function private.auto_fuel_reinforcement_sar(text, date);
+drop function private.auto_fuel_invoice_sar(text, date);
+drop table public.automatic_fuel_unentitled;
+drop table public.automatic_fuel_forgot_form;
 drop function public.auto_fuel_invoice_review(date, date);
 drop function public.auto_fuel_restore_allocation(uuid, text);
 drop function public.auto_fuel_void_allocations(uuid[], text);

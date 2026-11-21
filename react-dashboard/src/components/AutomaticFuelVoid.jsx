@@ -7,7 +7,7 @@ import { autoFuelErrorMessage, MIN_REASON_LENGTH, reasonOk, restoreAllocation, v
 // (admin only, migration 064). The database checks everything again: admin,
 // past days only, reason of at least 10 characters, all or nothing.
 
-function ReasonDialog({ title, summary, list, confirmLabel, danger, onSubmit, onCancel }) {
+export function ReasonDialog({ title, summary, list, confirmLabel, danger, onSubmit, onCancel }) {
   const { t } = useLang();
   const [reason, setReason] = useState("");
   const [error, setError] = useState("");

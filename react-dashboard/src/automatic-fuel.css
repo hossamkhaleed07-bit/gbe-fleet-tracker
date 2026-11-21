@@ -48,3 +48,9 @@
 .af-chip { display: inline-flex; align-items: center; gap: 0.45rem; font: inherit; font-size: 0.8rem; padding: 0.35rem 0.6rem; border-radius: 999px; border: 1px solid var(--border); background: var(--surface-1); color: var(--ink); cursor: pointer; font-variant-numeric: tabular-nums; }
 .af-chip[aria-pressed="true"] { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
 .af-invoices { font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* List B and the reconciliation line (migration 064). */
+.af-recon { margin-top: 0.8rem; padding: 0.6rem 0.9rem; border-radius: var(--radius-sm); background: var(--c-orange-bg); color: var(--c-orange-ink); font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+.af-recon.af-recon-ok { background: var(--c-green-bg, var(--plane)); color: var(--c-green-ink, var(--ink)); }
+.af-recon .af-hint { margin: 0.3rem 0 0; }
+.af-subtabs { margin-top: 0.8rem; margin-bottom: 0; }

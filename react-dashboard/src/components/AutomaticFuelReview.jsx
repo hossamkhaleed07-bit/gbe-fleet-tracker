@@ -3,26 +3,109 @@ import { useLang } from "../contexts/LanguageContext";
 import { useDashboard } from "../contexts/DataContext";
 import DataTable from "./DataTable";
 import { VoidDialog } from "./AutomaticFuelVoid";
+import AutomaticFuelFills from "./AutomaticFuelFills";
 import { addDays, riyadhYesterday } from "../lib/rcaFollowup";
 import {
-  autoFuelErrorMessage, canVoidDay, loadReview, REVIEW_STATUSES, SUGGESTED_REVIEW_STATUS, summarizeReview,
-  VOIDABLE_REVIEW_STATUSES,
+  autoFuelErrorMessage, canVoidDay, loadReconciliation, loadReview, monthRange, REVIEW_STATUSES,
+  SUGGESTED_REVIEW_STATUS, summarizeReview, VOIDABLE_REVIEW_STATUSES,
 } from "../lib/automaticFuel";
 
-// Admin only (migration 064): automatic fuel days whose PetroApp / Futurehub
-// invoices do not cover automatic fuel + approved reinforcement for that day.
-// The database decides the status; this tab shows it and voids in bulk.
+// Admin only (migration 064). One date range, the reconciliation line for it,
+// and two lists:
+//   A) automatic fuel days whose PetroApp / Futurehub invoices do not cover
+//      automatic fuel + approved reinforcement for that day (void in bulk)
+//   B) fills with no automatic fuel and no approved reinforcement
+//      (AutomaticFuelFills: "Worked, forgot the form" / "Didn't work")
+// The database decides every status.
 
 const STATUS_BADGE = {
   no_invoice: "critical", partial_invoice: "partial", combined_fill: "complete", not_loaded: "af-badge-muted",
 };
 const money = (v) => Number(v || 0).toFixed(2);
 
+function Reconciliation({ from, to, version }) {
+  const { t } = useLang();
+  const [state, setState] = useState({ loading: true, data: null, error: null });
+  useEffect(() => {
+    let live = true;
+    if (!from || !to || from > to) { setState({ loading: false, data: null, error: null }); return undefined; }
+    setState(s => ({ ...s, loading: true }));
+    loadReconciliation(from, to).then(r => { if (live) setState({ loading: false, ...r }); });
+    return () => { live = false; };
+  }, [from, to, version]);
+  const d = state.data;
+  if (state.error) return <div className="af-alert">{t("automaticFuel.reviewLoadFailed")}: {autoFuelErrorMessage(t, state.error)}</div>;
+  if (!d) return null;
+  return (
+    <div className={"af-recon" + (d.unexplained === 0 ? " af-recon-ok" : "")}>
+      <div>
+        {t("automaticFuel.reconLine", {
+          total: money(d.invoicesTotal), fuel: money(d.onFuelDays), unentitled: money(d.unentitled),
+          unexplained: money(d.unexplained), n: d.unexplainedDays,
+        })}
+        {" "}<b>{d.unexplained === 0 ? t("automaticFuel.reconMatches") : t("automaticFuel.reconOpen")}</b>
+      </div>
+      <div className="af-hint">
+        {t("automaticFuel.reconSystem", { auto: money(d.automaticFuel), reinf: money(d.reinforcement), voided: money(d.voidedAutomaticFuel) })}
+        {" · "}
+        {d.lastInvoiceDate ? t("automaticFuel.invoicesLoadedUntil", { date: d.lastInvoiceDate }) : t("automaticFuel.noInvoicesLoaded")}
+      </div>
+    </div>
+  );
+}
+
 export default function AutomaticFuelReview() {
   const { t } = useLang();
-  const { applyFilter } = useDashboard();
   const [from, setFrom] = useState(() => addDays(riyadhYesterday(), -60));
   const [to, setTo] = useState(() => riyadhYesterday());
+  const [month, setMonth] = useState("");
+  const [list, setList] = useState("a");
+  const [version, setVersion] = useState(0);
+  const changed = useCallback(() => setVersion(v => v + 1), []);
+
+  function pickMonth(value) {
+    setMonth(value);
+    const r = monthRange(value);
+    if (r) { setFrom(r.from); setTo(r.to < riyadhYesterday() ? r.to : riyadhYesterday()); }
+  }
+
+  return (
+    <div className="af-amounts">
+      <div className="af-panel">
+        <div className="af-review-head">
+          <label className="af-field af-inline">
+            <span>{t("automaticFuel.reviewMonth")}</span>
+            <input type="month" value={month} onChange={e => pickMonth(e.target.value)} />
+          </label>
+          <label className="af-field af-inline">
+            <span>{t("automaticFuel.reviewFrom")}</span>
+            <input type="date" value={from} max={to} onChange={e => { setFrom(e.target.value); setMonth(""); }} />
+          </label>
+          <label className="af-field af-inline">
+            <span>{t("automaticFuel.reviewTo")}</span>
+            <input type="date" value={to} min={from} onChange={e => { setTo(e.target.value); setMonth(""); }} />
+          </label>
+        </div>
+        <Reconciliation from={from} to={to} version={version} />
+        <div className="af-tabs af-subtabs" role="tablist">
+          {["a", "b"].map(k => (
+            <button key={k} type="button" role="tab" className="af-tab" aria-selected={list === k} onClick={() => setList(k)}>
+              {t(`automaticFuel.reviewList_${k}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      {list === "a"
+        ? <NoInvoiceList from={from} to={to} onChanged={changed} />
+        : <AutomaticFuelFills from={from} to={to} onChanged={changed} />}
+    </div>
+  );
+}
+
+// List A.
+function NoInvoiceList({ from, to, onChanged }) {
+  const { t } = useLang();
+  const { applyFilter } = useDashboard();
   const [state, setState] = useState({ loading: true, rows: [], error: null });
   const [status, setStatus] = useState("");
   const [selected, setSelected] = useState(() => new Set());
@@ -102,17 +185,9 @@ export default function AutomaticFuelReview() {
   ], [t, selected]);
 
   return (
-    <div className="af-amounts">
+    <>
       <div className="af-panel">
         <div className="af-review-head">
-          <label className="af-field af-inline">
-            <span>{t("automaticFuel.reviewFrom")}</span>
-            <input type="date" value={from} max={to} onChange={e => setFrom(e.target.value)} />
-          </label>
-          <label className="af-field af-inline">
-            <span>{t("automaticFuel.reviewTo")}</span>
-            <input type="date" value={to} min={from} onChange={e => setTo(e.target.value)} />
-          </label>
           <label className="af-field af-inline">
             <span>{t("fuel.colStatus")}</span>
             <select value={status} onChange={e => setStatus(e.target.value)}>
@@ -162,9 +237,9 @@ export default function AutomaticFuelReview() {
         <VoidDialog
           rows={voiding}
           onCancel={() => setVoiding(null)}
-          onDone={() => { setVoiding(null); load(); applyFilter(); }}
+          onDone={() => { setVoiding(null); load(); applyFilter(); onChanged?.(); }}
         />
       )}
-    </div>
+    </>
   );
 }
