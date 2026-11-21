@@ -9,6 +9,7 @@ const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 const read = (p) => readFileSync(here(p), "utf8");
 const STUB = read("./supabase-stub.sql");
 const M061 = read("../migrations/061_automatic_fuel_amounts.sql");
+const M062 = read("../migrations/062_automatic_fuel_default_fix.sql");
 const M063 = read("../migrations/063_automatic_fuel_final_attendance.sql");
 const R063 = read("../migrations/063_rollback.sql");
 const REPORT = read("../migrations/063_report_non_p_by_month.sql");
@@ -104,6 +105,7 @@ beforeEach(async () => {
   await db.exec(STUB);
   await db.exec(BASE);
   await db.exec(M061);
+  await db.exec(M062);
   await db.exec(M063);
   ({ today } = await one("select private.riyadh_today()::text as today"));
   ({ yesterday } = await one("select (private.riyadh_today() - 1)::text as yesterday"));
@@ -168,9 +170,9 @@ describe("daily allocation", () => {
 });
 
 describe("cron and access", () => {
-  it("moves the job to 03:30 UTC (06:30 Riyadh), calling the function with no date", async () => {
+  it("moves the job to 03:30 UTC (06:30 Riyadh), running the 7-day lookback", async () => {
     const { rows } = await db.query("select schedule, command from cron.job where jobname = 'daily-fdp-automatic-fuel'");
-    expect(rows).toEqual([{ schedule: "30 3 * * *", command: "select public.allocate_daily_automatic_fuel();" }]);
+    expect(rows).toEqual([{ schedule: "30 3 * * *", command: "select public.allocate_recent_automatic_fuel();" }]);
   });
 
   it("nobody signed in can run the job or the attendance helper", async () => {
@@ -178,6 +180,7 @@ describe("cron and access", () => {
     await db.exec("set role authenticated");
     try {
       await rejects(db.query("select public.allocate_daily_automatic_fuel($1::date)", [yesterday]), "permission denied");
+      await rejects(db.query("select public.allocate_recent_automatic_fuel()"), "permission denied");
       await rejects(db.query("select private.auto_fuel_final_attendance('1001', $1::date)", [yesterday]), "permission denied");
     } finally {
       await db.exec("reset role");
@@ -197,6 +200,9 @@ describe("rollback", () => {
     await db.query("select public.allocate_daily_automatic_fuel($1::date)", [today]);
     expect(await allocatedOn(today)).toEqual(["1001", "1002", "1004", "1005", "1006", "1007", "1008"]);
     expect((await one("select to_regprocedure('private.auto_fuel_final_attendance(text,date)') as f")).f).toBeNull();
+    expect((await one("select to_regprocedure('public.allocate_recent_automatic_fuel(integer)') as f")).f).toBeNull();
+    // the 062 fix to auto_fuel_set_default is left alone
+    expect((await one("select position('where id' in pg_get_functiondef('public.auto_fuel_set_default(numeric)'::regprocedure)) > 0 as ok")).ok).toBe(true);
   });
 });
 
@@ -241,5 +247,84 @@ describe("report of non-P days with invoices (Sep–Nov 2026)", () => {
       Number(total.non_p_days), Number(total.days_with_invoice), Number(total.automatic_fuel_sar_on_those_days),
       Number(total.invoices), Number(total.invoice_sar), Number(total.invoice_sar_fdp_use),
     ]).toEqual([4, 2, 40, 2, 40, 30]);
+  });
+});
+
+describe("amounts after 062: the default from settings, 20 only as a fallback", () => {
+  it("uses the default of 30 and a driver's own amount; 20 only if the settings row is missing", async () => {
+    await seedDay(yesterday);
+    await db.exec("update public.automatic_fuel_settings set default_amount = 30 where id");
+    await db.exec("insert into public.automatic_fuel_driver_amounts (identity_number, amount) values ('1005', 35)");
+    await allocate(yesterday);
+    const amountsOn = async (day) => Object.fromEntries((await db.query(
+      "select identity_number, amount::float as amount from public.automatic_fuel_allocations where allocation_date = $1::date", [day],
+    )).rows.map(r => [r.identity_number, r.amount]));
+    expect(await amountsOn(yesterday)).toEqual({ 1001: 30, 1005: 35, 1007: 30 });
+    const { d2 } = await one("select (private.riyadh_today() - 2)::text as d2");
+    await seedDay(d2);
+    await db.exec("delete from public.automatic_fuel_settings where id");
+    await allocate(d2);
+    expect(await amountsOn(d2)).toEqual({ 1001: 20, 1005: 35, 1007: 20 });
+  });
+});
+
+describe("7-day lookback (the 06:30 job)", () => {
+  const daysAgo = async (n) => (await one("select (private.riyadh_today() - $1::int)::text as d", [n])).d;
+  const run = async () => Number((await one("select public.allocate_recent_automatic_fuel() as n")).n);
+  const rowsFor = async (idn) => (await db.query(
+    "select allocation_date::text as day from public.automatic_fuel_allocations where identity_number = $1 order by 1", [idn],
+  )).rows.map(r => r.day);
+
+  it("a day corrected to P 3 days later is allocated on the next run", async () => {
+    const d3 = await daysAgo(3);
+    await db.exec(`insert into public.driver_attendance (identity_number, attendance_date, status) values ('1002', '${d3}', 'NM')`);
+    await run();                                   // no form, no code: A, nothing given
+    expect(await rowsFor("1002")).toEqual([]);
+    await db.exec(`update public.driver_attendance set status = 'P' where identity_number = '1002' and attendance_date = '${d3}'`);
+    expect(await run()).toBe(1);
+    expect(await rowsFor("1002")).toEqual([d3]);
+  });
+
+  it("covers today-7 .. yesterday, never today, and nothing older than 7 days", async () => {
+    const d = {};
+    for (const n of [0, 1, 7, 8]) d[n] = await daysAgo(n);
+    await db.exec(`insert into public.shift_entries (identity_number, shift_date) values
+      ('1001', '${d[0]}'), ('1001', '${d[1]}'), ('1001', '${d[7]}'), ('1001', '${d[8]}')`);
+    expect(await run()).toBe(2);
+    expect(await rowsFor("1001")).toEqual([d[7], d[1]]);
+  });
+
+  it("never gives the same driver-day twice", async () => {
+    for (const n of [1, 2, 5]) await seedDay(await daysAgo(n));
+    expect(await run()).toBe(9);                   // 1001, 1005, 1007 on 3 days
+    expect(await run()).toBe(0);
+    await allocate(await daysAgo(2));              // a manual single-day run too
+    expect((await one("select count(*)::int as n from public.automatic_fuel_allocations")).n).toBe(9);
+  });
+
+  it("a voided day (064) stays voided and is not given again", async () => {
+    await db.exec("alter table public.automatic_fuel_allocations add column voided_at timestamptz");
+    const d2 = await daysAgo(2);
+    await db.exec(`insert into public.shift_entries (identity_number, shift_date) values ('1001', '${d2}')`);
+    await db.exec(`insert into public.automatic_fuel_allocations (identity_number, project, allocation_date, amount, voided_at)
+      values ('1001', 'FDP', '${d2}', 30, now())`);
+    expect(await run()).toBe(0);
+    expect(await one("select count(*)::int as n, bool_and(voided_at is not null) as v from public.automatic_fuel_allocations"))
+      .toEqual({ n: 1, v: true });
+  });
+
+  it("switch-over day: rows the old 12:00 job already made are not given again", async () => {
+    // The old job gave every active FDP driver fuel for the day 063 was installed.
+    await db.query(`
+      insert into public.automatic_fuel_allocations (identity_number, project, allocation_date, amount)
+      select identity_number, 'FDP', $1::date, 20 from public.drivers where project = 'FDP' and is_active`, [yesterday]);
+    await seedDay(yesterday);
+    expect(await run()).toBe(0);
+    expect((await one("select count(*)::int as n from public.automatic_fuel_allocations where allocation_date = $1::date", [yesterday])).n).toBe(7);
+  });
+
+  it("refuses a bad window", async () => {
+    await rejects(db.query("select public.allocate_recent_automatic_fuel(0)"), "AUTO_FUEL_BAD_LOOKBACK");
+    await rejects(db.query("select public.allocate_recent_automatic_fuel(40)"), "AUTO_FUEL_BAD_LOOKBACK");
   });
 });

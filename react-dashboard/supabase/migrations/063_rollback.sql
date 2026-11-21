@@ -7,6 +7,8 @@ begin;
 -- for TODAY (no attendance check), and the cron job back to 09:00 UTC
 -- (12:00 Riyadh).  Allocations already made are not touched.
 -- Run it away from 12:00 Riyadh.  ONE transaction.
+-- It does NOT touch auto_fuel_set_default: the 062 fix (and the default of
+-- 30) stays as it is.
 -- =====================================================================
 
 do $$
@@ -36,6 +38,7 @@ $$;
 
 revoke all on function public.allocate_daily_automatic_fuel(date) from public, anon, authenticated;
 
+drop function if exists public.allocate_recent_automatic_fuel(integer);
 drop function if exists private.auto_fuel_final_attendance(text, date);
 drop function if exists private.riyadh_today();
 

@@ -25,10 +25,15 @@ begin;
 -- Changes:
 --   * allocate_daily_automatic_fuel(p_date) now defaults to YESTERDAY in Riyadh
 --     time, refuses a day that is not over yet, and only allocates drivers whose
---     final code for p_date is P.  Amounts are unchanged from 061 (the driver's
---     own amount, else the default).
+--     final code for p_date is P.  Amounts are read as in 061/062: the driver's
+--     own amount, else automatic_fuel_settings.default_amount (30 since 19 Nov);
+--     the 20 is only a fallback if the settings row were missing.
+--   * allocate_recent_automatic_fuel(7) runs that for each of the last 7
+--     finished days, so a day whose code became P later (attendance corrected
+--     because the driver forgot the form) still gets its fuel.  Never twice for
+--     a driver-day, never again for a voided day (064), nothing older than 7 days.
 --   * the cron job daily-fdp-automatic-fuel moves from 09:00 UTC (12:00 Riyadh,
---     allocating TODAY) to 03:30 UTC (06:30 Riyadh, allocating the PREVIOUS day).
+--     allocating TODAY) to 03:30 UTC (06:30 Riyadh, the last 7 finished days).
 --     Running at 06:30 rather than just after midnight leaves the night for a
 --     manager to enter a code (WO, AL, ...) for the day before fuel is given.
 --
@@ -106,16 +111,50 @@ begin
 end;
 $$;
 
+-- The daily job: the LAST 7 finished Riyadh days (today-7 .. yesterday), not
+-- only yesterday.  A driver whose final code for one of those days became P
+-- later (a manager corrected attendance because the form was forgotten) gets
+-- that day's fuel on the next run.  Never twice for the same driver-day: the
+-- insert above is "on conflict do nothing", and a voided day (064) keeps its
+-- row, so it is never given again.  Days older than 7 days are not looked at.
+-- Note: a late day is given at the driver's CURRENT amount, and only if the
+-- driver is still an active FDP driver.
+-- Returns how many driver-days were added.
+create function public.allocate_recent_automatic_fuel(p_days integer default 7)
+returns integer
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_first date;
+  v_before integer;
+  v_after integer;
+begin
+  if p_days is null or p_days < 1 or p_days > 31 then
+    raise exception 'AUTO_FUEL_BAD_LOOKBACK: % (1 to 31 days)', p_days using errcode = '22023';
+  end if;
+  v_first := private.riyadh_today() - p_days;
+  select count(*) into v_before from public.automatic_fuel_allocations where allocation_date >= v_first;
+  for d in 1 .. p_days loop
+    perform public.allocate_daily_automatic_fuel(private.riyadh_today() - d);
+  end loop;
+  select count(*) into v_after from public.automatic_fuel_allocations where allocation_date >= v_first;
+  return v_after - v_before;
+end;
+$$;
+
 -- The daily job only: nobody signed in can trigger an allocation (as in 061;
 -- repeated in case create or replace ever left a default grant behind).
 revoke all on function public.allocate_daily_automatic_fuel(date) from public, anon, authenticated;
+revoke all on function public.allocate_recent_automatic_fuel(integer) from public, anon, authenticated;
 -- Helpers: only the job (running as the owner, inside the SECURITY DEFINER
 -- function above) and the SQL Editor use them; nobody signed in needs them.
 revoke all on function private.riyadh_today(), private.auto_fuel_final_attendance(text, date) from public, anon, authenticated;
 
 
 -- ---------------------------------------------------------------------
--- 3) Cron: 03:30 UTC = 06:30 Riyadh, for the previous Riyadh day
+-- 3) Cron: 03:30 UTC = 06:30 Riyadh, the last 7 finished Riyadh days
 -- ---------------------------------------------------------------------
 
 do $$
@@ -128,7 +167,7 @@ end $$;
 select cron.schedule(
   'daily-fdp-automatic-fuel',
   '30 3 * * *',
-  $$select public.allocate_daily_automatic_fuel();$$
+  $$select public.allocate_recent_automatic_fuel();$$
 );
 
 commit;
