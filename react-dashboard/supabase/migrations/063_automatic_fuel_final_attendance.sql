@@ -25,9 +25,13 @@ begin;
 -- Changes:
 --   * allocate_daily_automatic_fuel(p_date) now defaults to YESTERDAY in Riyadh
 --     time, refuses a day that is not over yet, and only allocates drivers whose
---     final code for p_date is P.  Amounts are read as in 061/062: the driver's
---     own amount, else automatic_fuel_settings.default_amount (30 since 19 Nov);
---     the 20 is only a fallback if the settings row were missing.
+--     final code for p_date is P.
+--   * the amount is the one IN EFFECT ON THAT DAY (private.auto_fuel_amount_on),
+--     rebuilt from automatic_fuel_amount_changes: the driver's own amount if one
+--     was set on that date, else the default on that date.  A change counts
+--     from the Riyadh day it was made.  Example: a day in October gets 20 even
+--     though the default is 30 since 19 Nov.  The 20 in the code is only a
+--     fallback if the settings row were missing.
 --   * allocate_recent_automatic_fuel(7) runs that for each of the last 7
 --     finished days, so a day whose code became P later (attendance corrected
 --     because the driver forgot the form) still gets its fuel.  Never twice for
@@ -83,6 +87,43 @@ as $$
                 where da.identity_number = p_identity_number and da.attendance_date = p_date) as status) a
 $$;
 
+-- The amount in effect for a driver ON p_date, rebuilt from the change log
+-- (automatic_fuel_amount_changes, append-only since 061).  "On p_date" = after
+-- every change made up to the end of that Riyadh day.
+--   driver's own amount: the newest 'driver' change made by then (new_amount;
+--     null = removed); if none, the oldest later change (old_amount = what it
+--     was before); if the driver has no changes at all, the current own amount.
+--   default: the same with 'default' changes, then the current settings row.
+--   own amount if any, else the default, else 20 (settings row missing).
+-- The arrays tell "a change that set null" apart from "no change found".
+create function private.auto_fuel_amount_on(p_identity_number text, p_date date)
+returns numeric
+language sql stable
+set search_path = public
+as $$
+  with t as (select ((p_date + 1)::timestamp at time zone 'Asia/Riyadh') as cutoff)
+  select coalesce(
+    (coalesce(
+      (select array[c.new_amount] from public.automatic_fuel_amount_changes c, t
+        where c.kind = 'driver' and c.identity_number = p_identity_number and c.changed_at < t.cutoff
+        order by c.changed_at desc limit 1),
+      (select array[c.old_amount] from public.automatic_fuel_amount_changes c, t
+        where c.kind = 'driver' and c.identity_number = p_identity_number and c.changed_at >= t.cutoff
+        order by c.changed_at asc limit 1),
+      (select array[a.amount] from public.automatic_fuel_driver_amounts a where a.identity_number = p_identity_number)
+    ))[1],
+    (coalesce(
+      (select array[c.new_amount] from public.automatic_fuel_amount_changes c, t
+        where c.kind = 'default' and c.changed_at < t.cutoff
+        order by c.changed_at desc limit 1),
+      (select array[c.old_amount] from public.automatic_fuel_amount_changes c, t
+        where c.kind = 'default' and c.changed_at >= t.cutoff
+        order by c.changed_at asc limit 1),
+      (select array[s.default_amount] from public.automatic_fuel_settings s)
+    ))[1],
+    20)
+$$;
+
 
 -- ---------------------------------------------------------------------
 -- 2) Daily allocation: previous Riyadh day, final code P only
@@ -101,9 +142,8 @@ begin
   end if;
   insert into public.automatic_fuel_allocations (identity_number, full_name, project, vehicle_plate, allocation_date, amount)
   select d.identity_number, d.full_name, d.project, d.assigned_vehicle_plate, p_date,
-         coalesce(da.amount, (select s.default_amount from public.automatic_fuel_settings s), 20)
+         private.auto_fuel_amount_on(d.identity_number, p_date)
   from public.drivers d
-  left join public.automatic_fuel_driver_amounts da on da.identity_number = d.identity_number
   where d.project = 'FDP'
     and d.is_active = true
     and private.auto_fuel_final_attendance(d.identity_number, p_date) = 'P'
@@ -117,8 +157,8 @@ $$;
 -- that day's fuel on the next run.  Never twice for the same driver-day: the
 -- insert above is "on conflict do nothing", and a voided day (064) keeps its
 -- row, so it is never given again.  Days older than 7 days are not looked at.
--- Note: a late day is given at the driver's CURRENT amount, and only if the
--- driver is still an active FDP driver.
+-- Note: a late day is given at the amount in effect ON THAT DAY, and only if
+-- the driver is still an active FDP driver.
 -- Returns how many driver-days were added.
 create function public.allocate_recent_automatic_fuel(p_days integer default 7)
 returns integer
@@ -150,7 +190,8 @@ revoke all on function public.allocate_daily_automatic_fuel(date) from public, a
 revoke all on function public.allocate_recent_automatic_fuel(integer) from public, anon, authenticated;
 -- Helpers: only the job (running as the owner, inside the SECURITY DEFINER
 -- function above) and the SQL Editor use them; nobody signed in needs them.
-revoke all on function private.riyadh_today(), private.auto_fuel_final_attendance(text, date) from public, anon, authenticated;
+revoke all on function private.riyadh_today(), private.auto_fuel_final_attendance(text, date),
+  private.auto_fuel_amount_on(text, date) from public, anon, authenticated;
 
 
 -- ---------------------------------------------------------------------

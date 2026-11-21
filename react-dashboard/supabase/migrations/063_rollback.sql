@@ -40,6 +40,7 @@ revoke all on function public.allocate_daily_automatic_fuel(date) from public, a
 
 drop function if exists public.allocate_recent_automatic_fuel(integer);
 drop function if exists private.auto_fuel_final_attendance(text, date);
+drop function if exists private.auto_fuel_amount_on(text, date);
 drop function if exists private.riyadh_today();
 
 do $$

@@ -201,6 +201,7 @@ describe("rollback", () => {
     expect(await allocatedOn(today)).toEqual(["1001", "1002", "1004", "1005", "1006", "1007", "1008"]);
     expect((await one("select to_regprocedure('private.auto_fuel_final_attendance(text,date)') as f")).f).toBeNull();
     expect((await one("select to_regprocedure('public.allocate_recent_automatic_fuel(integer)') as f")).f).toBeNull();
+    expect((await one("select to_regprocedure('private.auto_fuel_amount_on(text,date)') as f")).f).toBeNull();
     // the 062 fix to auto_fuel_set_default is left alone
     expect((await one("select position('where id' in pg_get_functiondef('public.auto_fuel_set_default(numeric)'::regprocedure)) > 0 as ok")).ok).toBe(true);
   });
@@ -326,5 +327,57 @@ describe("7-day lookback (the 06:30 job)", () => {
   it("refuses a bad window", async () => {
     await rejects(db.query("select public.allocate_recent_automatic_fuel(0)"), "AUTO_FUEL_BAD_LOOKBACK");
     await rejects(db.query("select public.allocate_recent_automatic_fuel(40)"), "AUTO_FUEL_BAD_LOOKBACK");
+  });
+});
+
+describe("amount in effect ON THE DAY (rebuilt from the change log)", () => {
+  const daysAgo = async (n) => (await one("select (private.riyadh_today() - $1::int)::text as d", [n])).d;
+  // A change logged at 10:00 Riyadh, n days ago (as auto_fuel_set_default / _set_driver_amount log it).
+  const logChange = (kind, idn, oldA, newA, n) => db.query(`
+    insert into public.automatic_fuel_amount_changes (kind, identity_number, old_amount, new_amount, changed_by, changed_at)
+    values ($1, $2, $3, $4, 'test', ((private.riyadh_today() - $5::int) + time '10:00') at time zone 'Asia/Riyadh')`,
+  [kind, idn, oldA, newA, n]);
+  const amountsFor = async (idn) => Object.fromEntries((await db.query(
+    "select allocation_date::text as day, amount::float as amount from public.automatic_fuel_allocations where identity_number = $1", [idn],
+  )).rows.map(r => [r.day, r.amount]));
+
+  it("default 20 -> 30 three days ago: days before get 20, that day and after get 30", async () => {
+    await db.exec("update public.automatic_fuel_settings set default_amount = 30 where id");
+    await logChange("default", null, 20, 30, 3);
+    const d = {};
+    for (const n of [5, 4, 3, 2]) d[n] = await daysAgo(n);
+    for (const n of [5, 4, 3, 2]) await db.exec(`insert into public.shift_entries (identity_number, shift_date) values ('1001', '${d[n]}')`);
+    expect(await one("select public.allocate_recent_automatic_fuel() as n")).toEqual({ n: 4 });
+    expect(await amountsFor("1001")).toEqual({ [d[5]]: 20, [d[4]]: 20, [d[3]]: 30, [d[2]]: 30 });
+  });
+
+  it("a driver's own amount counts only while it was set", async () => {
+    await db.exec("update public.automatic_fuel_settings set default_amount = 30 where id");
+    await logChange("default", null, 20, 30, 6);
+    await logChange("driver", "1001", null, 40, 4);   // own 40 from 4 days ago
+    await logChange("driver", "1001", 40, null, 2);   // back to the default 2 days ago (no own amount now)
+    const d = {};
+    for (const n of [5, 4, 3, 2]) d[n] = await daysAgo(n);
+    for (const n of [5, 4, 3, 2]) await db.exec(`insert into public.shift_entries (identity_number, shift_date) values ('1001', '${d[n]}')`);
+    await one("select public.allocate_recent_automatic_fuel() as n");
+    expect(await amountsFor("1001")).toEqual({ [d[5]]: 30, [d[4]]: 40, [d[3]]: 40, [d[2]]: 30 });
+  });
+
+  it("a day in October gets 20 although the default is 30 now", async () => {
+    await db.exec("update public.automatic_fuel_settings set default_amount = 30 where id");
+    await logChange("default", null, 20, 30, 2);
+    await logChange("driver", "1005", null, 30, 3);   // set to 30, then reset: never set in October
+    await logChange("driver", "1005", 30, null, 2);
+    const oct = await daysAgo(40);
+    await seedDay(oct);
+    await allocate(oct);
+    expect((await db.query(
+      "select identity_number, amount::float as amount from public.automatic_fuel_allocations where allocation_date = $1::date order by 1", [oct],
+    )).rows).toEqual([{ identity_number: "1001", amount: 20 }, { identity_number: "1005", amount: 20 }, { identity_number: "1007", amount: 20 }]);
+  });
+
+  it("no change logged: the current amounts (as before)", async () => {
+    const { a } = await one("select private.auto_fuel_amount_on('1001', private.riyadh_today() - 1)::float as a");
+    expect(a).toBe(20);   // the settings row as 061 seeded it
   });
 });

@@ -5,12 +5,14 @@
 -- =====================================================================
 
 -- 1) Both helpers exist, the allocation function checks attendance, and the
---    7-day job exists.  Expect: true, true, true, true, true
+--    7-day job exists, and the amount is the one in effect on the day.
+--    Expect: true, true, true, true, true, true
 select to_regprocedure('private.riyadh_today()') is not null                         as has_riyadh_today,
        to_regprocedure('public.allocate_recent_automatic_fuel(integer)') is not null as has_7_day_job,
        to_regprocedure('private.auto_fuel_final_attendance(text,date)') is not null  as has_final_attendance,
        position('auto_fuel_final_attendance' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as checks_attendance,
-       position('AUTO_FUEL_DAY_NOT_FINAL' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as refuses_open_day;
+       position('AUTO_FUEL_DAY_NOT_FINAL' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as refuses_open_day,
+       position('auto_fuel_amount_on' in pg_get_functiondef('public.allocate_daily_automatic_fuel(date)'::regprocedure)) > 0 as amount_on_the_day;
 
 -- 2) The cron job: expect one row, schedule '30 3 * * *' (06:30 Riyadh),
 --    command 'select public.allocate_recent_automatic_fuel();', active = true.
@@ -31,6 +33,18 @@ select private.auto_fuel_final_attendance(d.identity_number, private.riyadh_toda
        count(*) as drivers
 from public.drivers d
 where d.project = 'FDP' and d.is_active = true
+group by 1 order by 1;
+
+-- 4b) The amount in effect on a past day, counted per amount (nothing is
+--     inserted).  15 Oct: expect every active FDP driver at 20 (the default
+--     then).  Yesterday: 30 for drivers without an own amount.
+select private.auto_fuel_amount_on(d.identity_number, date '2026-10-15') as amount_15_oct,
+       count(*) as drivers
+from public.drivers d where d.project = 'FDP' and d.is_active = true
+group by 1 order by 1;
+select private.auto_fuel_amount_on(d.identity_number, private.riyadh_today() - 1) as amount_yesterday,
+       count(*) as drivers
+from public.drivers d where d.project = 'FDP' and d.is_active = true
 group by 1 order by 1;
 
 -- 5) After the first 06:30 Riyadh run: rows the new job made (created between
