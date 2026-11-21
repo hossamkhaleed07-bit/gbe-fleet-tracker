@@ -10,8 +10,12 @@ import HeroPortal from "../components/HeroPortal";
 import { localToday } from "../lib/calc";
 import { MAX_JUMP_KM_PER_DAY, PROJECT_LIST } from "../lib/constants";
 import {
-  monthBounds, formatMonthLabel, buildDriverPerfRows, buildProjectSummary, topN,
+  monthBounds, formatMonthLabel, buildDriverPerfRows, buildProjectSummary, topN, selectPerfDrivers, perfDriverName,
+  perfCsvRows, PERF_CSV_KEYS,
 } from "../lib/driverPerformance";
+import { downloadCsv } from "../lib/csv";
+import DriversCount from "../components/DriversCount";
+import PerfDriverLabel from "../components/PerfDriverLabel";
 
 const money = (v) => `${v.toFixed(0)} SAR`;
 const money2 = (v) => `${v.toFixed(2)} SAR`;
@@ -20,7 +24,7 @@ export default function DriverPerformanceProject() {
   const { project } = useParams();
   const {
     scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows,
-    to, setMonthRange, loading,
+    lastActivityByDriver, to, setMonthRange, loading,
   } = useDashboard();
   const { t, lang } = useLang();
   const navigate = useNavigate();
@@ -37,16 +41,23 @@ export default function DriverPerformanceProject() {
   const { from, to: toVal } = monthBounds(month);
 
   const rows = useMemo(() => {
-    const drivers = scopedDrivers.filter(d => d.is_active && d.project === project);
+    // Every active driver of the project, plus drivers who left and IDs not in
+    // the drivers list that had activity this month (see selectPerfDrivers).
+    const drivers = selectPerfDrivers(scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, from, toVal,
+      { projects: [project], lastActivityByDriver });
     return buildDriverPerfRows(drivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, from, toVal);
-  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, project, from, toVal]);
+  }, [scopedDrivers, scopedCompareGroups, scopedReinforcementRows, scopedAutomaticFuelRows, scopedAttendanceRows, lastActivityByDriver, project, from, toVal]);
 
   const summary = useMemo(() => buildProjectSummary(rows), [rows]);
   const totalFuel = summary.totalFuel || 1;
   const topDrivers = useMemo(() => topN(rows, "totalFuel", 5), [rows]);
 
   const columns = useMemo(() => [
-    { accessorKey: "full_name", header: t("driverPerformance.colDriver") },
+    {
+      accessorKey: "full_name", header: t("driverPerformance.colDriver"),
+      sortingFn: (a, b) => perfDriverName(a.original, t).localeCompare(perfDriverName(b.original, t)),
+      cell: ({ row }) => <PerfDriverLabel row={row.original} />,
+    },
     { accessorKey: "identity_number", header: t("compare.colIdNumber") },
     { accessorKey: "totalFuel", header: t("compare.colTotalFuelCost"), meta: { align: "end" }, cell: ({ getValue }) => money(getValue()) },
     { accessorKey: "totalDist", header: t("driverPerformance.colTotalDistance"), meta: { align: "end" }, cell: ({ getValue }) => getValue().toFixed(0) },
@@ -92,7 +103,7 @@ export default function DriverPerformanceProject() {
               <Field label={t("compare.colTotalFuelCost")} val={money(summary.totalFuel)} />
               <Field label={t("driverPerformance.colTotalDistance")} val={`${summary.totalDist.toFixed(0)} km`} />
               <Field label={t("driverPerformance.colTotalDelivered")} val={summary.totalDelivered} />
-              <Field label={t("driverPerformance.kpiDrivers")} val={summary.activeDrivers} />
+              <Field label={t("driverPerformance.kpiDrivers")} val={<DriversCount summary={summary} />} />
               <Field label={t("driverPerformance.kpiAvgFuelPerDriver")} val={money(summary.avgFuelPerDriver)} />
               <Field label={t("driverPerformance.kpiAvgFuelPerShipment")} val={money2(summary.avgFuelPerShipment)} />
               <Field label={t("driverPerformance.kpiFuelPerKm")} val={`${summary.avgFuelPerKm.toFixed(2)} SAR/km`} />
@@ -106,7 +117,7 @@ export default function DriverPerformanceProject() {
             <div className="panel">
               <h3>{t("driverPerformance.topFuelConsumers")}</h3>
               <MetricBarList
-                items={topDrivers.map(r => ({ key: r.identity_number, label: r.full_name, value: r.totalFuel }))}
+                items={topDrivers.map(r => ({ key: r.identity_number, label: perfDriverName(r, t), value: r.totalFuel }))}
                 formatValue={money}
                 onItemClick={(item) => goToDriver({ identity_number: item.key })}
               />
@@ -114,7 +125,7 @@ export default function DriverPerformanceProject() {
             <div className="panel">
               <h3>{t("driverPerformance.driverFuelDistribution")}</h3>
               <MetricBarList
-                items={rows.map(r => ({ key: r.identity_number, label: r.full_name, value: r.totalFuel }))}
+                items={rows.map(r => ({ key: r.identity_number, label: perfDriverName(r, t), value: r.totalFuel }))}
                 maxValue={totalFuel}
                 formatValue={(v) => `${((v / totalFuel) * 100).toFixed(1)}%`}
                 onItemClick={(item) => goToDriver({ identity_number: item.key })}
@@ -122,6 +133,11 @@ export default function DriverPerformanceProject() {
             </div>
           </div>
 
+          <div className="af-section-head" style={{ display: "flex", justifyContent: "flex-end", marginBottom: "0.6rem" }}>
+            <button type="button" className="btn" onClick={() => downloadCsv(`driver_performance_${project}_${month}.csv`, PERF_CSV_KEYS, perfCsvRows(rows))}>
+              {t("common.exportCsv")}
+            </button>
+          </div>
           <DataTable columns={columns} data={rows} onRowClick={goToDriver} emptyMessage={t("driverPerformance.noMatchingDrivers")} />
         </>
       )}
